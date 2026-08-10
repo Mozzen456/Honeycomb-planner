@@ -159,31 +159,41 @@ The critic's verdict was that it would pick this out as the amateur in about two
 the tell is the top bar. It also found the app **unusable below 1088 px** — which matters, because
 the brief asked for it to work on a tablet.
 
-Fixed already: the canvas hierarchy (panel plate now drawn, seams quietened), theme repaint, and
-the clipped wall-size inputs.
+**Fixed since:**
 
-Still open, in the critic's severity order:
+1. **The top bar's buttons.** `base.css` strips every `<button>` and expects a `.button` component
+   that no file defined, so `Solve panels` was a 73 × 19.5 px unpadded block beside 32 px rounded
+   inputs. That component now exists in `App.css` and the bar consumes it. *(This was the critic's
+   "two seconds to spot it" tell.)*
+2. **The catalogue rendering no parts below 1088 px.** The shell capped the rail height but never
+   told the panel inside to fill it, so its scroll area collapsed to 37 px. The narrow layout now
+   sizes the panel to the rail and lays tiles out as horizontally-scrolling columns; a second
+   breakpoint at 46 rem stacks the parts list under the wall. **Caveat: the rules are verified
+   present and well-formed, but the display here would not resize below 3440 px, so the narrow
+   layout has not been seen rendered.**
+3. **Panel width owned twice.** The grid now uses the same `--panel-width-*` tokens the panels do,
+   and the shell slots no longer draw their own borders. Measured after: rail and panel are both
+   240 px, where they were 272 and 240 with two parallel rules between them.
+4. The colliding corner text — the shell-level hint is gone; each view owns its own.
+5. Focus ring and `.app__name:focus` → `:focus-visible` with the standard ring; the primary button
+   offsets its ring outward so it is not accent-on-accent.
+6. The wall dimension inputs and printer select now take `--text-primary` instead of inheriting
+   tertiary grey from their label.
+7. `--space-1-5`, which was referenced but never defined.
+8. Canvas hierarchy (the plate is now drawn, seams quietened), theme repaint, clipped wall inputs.
 
-1. **The top bar's buttons were never styled.** `base.css` strips every `<button>` to
-   `background:none; border:0; padding:0` and expects a `.button` component that no file defines.
-   `Solve panels` measures 73 × 19.5 px with zero padding and square corners, next to 32 px rounded
-   inputs; `Undo`/`Redo`/`Share` are bare 20 px text. Fix: one shared `.button` consumed by
-   `App.css`, `BomPanel.css` and `.app__import`, which each hand-roll it today.
-2. **Below 1088 px the catalogue renders no parts at all.** `App.css`'s media block caps the rail
-   at 12 rem while `CatalogPanel.css` still asserts `inline-size: 240px`, leaving a 37 px scroll
-   area. Fix both together.
-3. **Panel width is owned twice** — by the shell grid and by each panel — so both float in dead
-   gutters with doubled borders of different weights, and the parts list stops 47 px short of the
-   window edge.
-4. Two 11 px mono strings overlap in the bottom-left corner (`.app__hint` and the canvas readout).
-5. No canvas empty state: the largest surface in the product has no first-run guidance.
-6. Focus ring is accent-on-accent on the primary button; `.app__name` uses `:focus` with
-   `outline: none`, contradicting the token layer's "one ring for the whole app".
-7. The wall dimension inputs inherit `--text-tertiary` from their label.
-8. `--space-1-5` is referenced in `App.css` but never defined.
+**Still open:**
 
-None of these are token-layer failures — `tokens.css` is sound and its contrast is measured. They
-are all places where the shell was assembled without consuming it.
+- **No canvas empty state.** The largest surface in the product still has no first-run guidance;
+  the 3D view has a one-line hint in the corner and nothing else.
+- **`.catalog-panel__scroll` needs `contain: strict`** — without it the `100dvh; overflow:hidden`
+  shell reports `scrollHeight` 3339 and keeps a phantom scrollbar gutter.
+- `.bom-export` and `.app__import` still hand-roll button chrome instead of consuming the new
+  `.button`, and disagree with each other on font size (12 px vs 13 px).
+- `.visually-hidden` is defined twice, in `App.css` and `base.css`, with different bodies.
+
+None of these were token-layer failures — `tokens.css` is sound and its contrast is measured. They
+were all places where the shell had been assembled without consuming it.
 
 ---
 
