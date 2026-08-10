@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Garage wall — print list</title>
+<style>:root { color-scheme: only light; }
+* { box-sizing: border-box; }
+html, body { background: #fff; color: #000; }
+body {
+  margin: 0; padding: 16mm 14mm;
+  font: 11pt/1.45 "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+h1 { font-size: 18pt; margin: 0 0 2mm; letter-spacing: -0.01em; }
+h2 { font-size: 12pt; margin: 0 0 2mm; text-transform: uppercase; letter-spacing: 0.08em; }
+.meta { font-size: 9.5pt; margin: 0 0 6mm; }
+.totals { display: flex; flex-wrap: wrap; gap: 0 10mm; border-top: 1.5pt solid #000;
+          border-bottom: 1.5pt solid #000; padding: 3mm 0; margin: 0 0 8mm; }
+.totals div { min-width: 26mm; }
+.totals dt { font-size: 8pt; text-transform: uppercase; letter-spacing: 0.08em; }
+.totals dd { margin: 0; font-size: 13pt; font-weight: 700; }
+section { margin: 0 0 8mm; break-inside: auto; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 1.6mm 2mm; vertical-align: top;
+         border-bottom: 0.5pt solid #999; }
+thead th { font-size: 8pt; text-transform: uppercase; letter-spacing: 0.06em;
+           border-bottom: 1pt solid #000; }
+tr { break-inside: avoid; page-break-inside: avoid; }
+thead { display: table-header-group; }
+td.tick, th.tick { width: 7mm; }
+td.tick::before { content: ""; display: block; width: 4.5mm; height: 4.5mm;
+                  border: 1pt solid #000; margin-top: 0.6mm; }
+td.qty, th.qty { width: 12mm; font-weight: 700; }
+td.n, th.n { text-align: right; width: 22mm; white-space: nowrap; }
+td.name .file { display: block; font-size: 8pt; word-break: break-all; }
+td.name .flag { display: inline-block; margin-top: 0.5mm; font-size: 8pt;
+                border: 0.5pt solid #000; padding: 0 1mm; }
+tr.empty td { font-style: italic; }
+.issues { border: 1.5pt solid #000; padding: 3mm; margin: 0 0 8mm; }
+.issues ul { margin: 1mm 0 0; padding-left: 5mm; }
+.issues li { margin: 0.5mm 0; }
+.foot { margin-top: 10mm; font-size: 8pt; border-top: 0.5pt solid #999; padding-top: 2mm; }
+@page { margin: 12mm; }
+@media print {
+  body { padding: 0; font-size: 10pt; }
+  h1 { font-size: 16pt; }
+  section { break-inside: auto; }
+  .issues, .totals { break-inside: avoid; }
+  a[href]::after { content: ""; }
+}
+@media screen {
+  body { max-width: 210mm; margin: 0 auto; }
+}</style>
+</head>
+<body>
+<h1>Garage wall</h1>
+<p class="meta">Wall 2400 &times; 1200 mm &middot; bed bed256 &middot; 60 panels &middot; 30 placed parts</p>
+<dl class="totals">
+<div><dt>Parts</dt><dd>482</dd></div>
+<div><dt>Distinct</dt><dd>34</dd></div>
+<div><dt>Print time</dt><dd>687 h 43 min</dd></div>
+<div><dt>Filament</dt><dd>6206.4 g</dd></div>
+<div><dt>Length</dt><dd>2081.3 m</dd></div>
+</dl>
+
+<section>
+<h2>Panels</h2>
+<table>
+<thead><tr><th class="tick"></th><th class="qty">Qty</th><th>Part</th><th class="n">Time</th><th class="n">Filament</th><th class="n">Length</th></tr></thead>
+<tbody>
+<tr>
+  <td class="tick"></td>
+  <td class="qty">50</td>
+  <td class="name">wall-honeycomb-bambu-211x248-fixed<span class="file">models/wall-honeycomb-bambu-211x248-fixed.stl</span></td>
+  <td class="n">462 h 25 min</td>
+  <td class="n">4333.5 g</td>
+  <td class="n">1453 m</td>
+</tr>
+<tr>
+  <td class="tick"></td>
+  <td class="qty">10</td>
+  <td class="name">wall-honeycomb-k1-211x201<span class="file">models/wall-honeycomb-k1-211x201.stl</span></td>
+  <td class="n">74 h 1 min</td>
+  <td class="n">696 g</td>
+  <td class="n">233.4 m</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section>
+<h2>Accessories</h2>
+<table>
+<thead><tr><th class="tick"></th><th class="qty">Qty</th><th>Part</th><th class="n">Time</th><th class="n">Filament</th><th class="n">Length</th></tr></thead>
+<tbody>
+<tr>
+  <td class="tick"></td>
+  <td class="qty">1</td>
+  <td class="name">20-micro-sd-card-holder<span class="file">models/Hooks and holders/20-micro-sd-card-holder.stl</span><span class="flag">supports</span></td>
+  <td class="n">1 h 24 min</td>
+  <td class="n">12.7 g</td>
+  <td class="n">4.3 m</td>
+</tr>
+<tr>
+  <td class="tick"></td>
+  <td class="qty">1</td>
+  <td class="name">5-micro-sd-card-holder<span class="file">models/Hooks and holders/5-micro-sd-card-holder.stl</span><span class="flag">supports</span></td>
+  <td class="n">38 min</td>
+  <td class="n">6.2 g</td>
+  <td class="n">2.1 m</td>
+</tr>
+<tr>
+  <td class="tick"></td>
+  <td class="qty">1</td>
+  <td class="name">USB-holder<span class="file">models/Hooks and holders/USB-holder.stl</span><span class="flag">supports</span></td>
+  <td class="n">2 h 51 min</td>
+  <td class="n">28.6 g</td>
+  <td class="n">9.6 m</td>
+</tr>
+<tr>
+  <td class="tick"></td>
+  <td class="qty">1</td>
+  <td class="name">USB-holder-without-screw<span class="file">models/Hooks and holders/USB-holder-without-screw.stl</span><span class="flag">supports</span></td>
+  <td class="n">2 h 45 min</td>
+  <td class="n">28.3 g</td>
+  <td class="n">9.5 m</td>
+</tr>
+<tr>
+  <td class="tick"></td>
+  <td class="qty">1</td>
+  <td class="name">box<span class="file">models/Hooks and holders/box.stl</span></td>
+  <td class="n">1 h 50 min</td>
+  <td class="n">16.6 g</td>
+  <td class="n">5.6 m</td>
+</tr>
+<tr>
+  <td class="tick"></td>
+  <td class="qty">1</td>
+  <td class="name">box-and-usb-holder-cover<span class="file">models/Hooks and holders/box-and-usb-holder-cover.stl</span></td>
+  <td class="n">16 min</td>
+  <td class="n">2.2 g</td>
+  <td class="n">0.8 m</td>
+</tr>
+<tr>
+  <td class="tick"></td>
+  <td class="qty">1</td>
+  <td class="name">box-without-screw<span class="file">models/Hooks and holders/box-without-screw.stl</span></td>
+  <td class="n">1 h 54 min</td>
+  <td class="n">17.2 g</td>
+  <td class="n">5.8 m</td>
+</tr>
+<tr>
+  <td class="tick"></td>
+  <td class="qty">1</td>
+  <td class="name">caliper-mount<span class="file">models/Hooks and holders/caliper-mount.stl</span></td>
+  <td class="n">23 min</td>
+  <td class="n">3.1 g</td>
+  <td class="n">1 m</td>
+</tr>
+<tr>
+  <td class="tick"></td>
+  <td class="qty">1</td>
+  <td class="name">countersunk-to-holee<span class="file">models/Other parts/countersunk-to-holee.stl</span></td>
+  <td class="n">15 min</td>
+  <td class="n">1.5 g</td>
+  <td class="n">0.5 m</td>
+</tr>
+<tr>
+  <td class="tick"></td>
+  <td class="qty">1</td>
+  <td class="name">cover-contersunk<span class="file">models/Other parts/cover-contersunk.stl</span></td>
+  <td class="n">7 min</td>
+  <td class="n">0.7 g</td>
+  <td class="n">0.2 m</td>
+</tr>
+<tr>
+  <td class="tick"></td>
+  <td class="qty">1</td>
+  <td class="name">hook-12mm-for-M3<span class="file">models/Hooks and holders/hook-12mm-for-M3.stl</span><span class="flag">supports</span></td>
+  <td class="n">11 min</td>
+  <td class="n">1.1 g</td>
+  <td class="n">0.4 m</td>
+</tr>
+<tr>
+  <td class="tick"></td>
+  <td class="qty">1</td>
+  <td class="name">hook-25mm-for-M3<span class="file">models/Hooks and holders/hook-25mm-for-M3.stl</span><span class="flag">supports</span></td>
+  <td class="n">14 min</td>
+  <td class="n">1.6 g</td>
+  <td class="n">0.5 m</td>
+</tr>
+<tr>
+  <td class="tick"></td>
+  <td class="qty">1</td>
+  <td class="name">hook-bottom<span class="file">models/Hooks and holders/hook-bottom.stl</span></td>
+  <td class="n">17 min</td>
+  <td class="n">2.2 g</td>
+  <td class="n">0.7 m</td>
+</tr>
+<tr>
+  <td class="tick"></td>
+  <td class="qty">1</td>
+  <td class="name">hook-keyboard-bottom<span class="file">models/Hooks and holders/hook-keyboard-bottom.stl</span></td>
+  <td class="n">9 min</td>
+  <td class="n">1.5 g</td>
+  <td class="n">0.5 m</td>
+</tr>
+<tr>
+  <td class="tick"></td>
+  <td class="qty">1</td>
+  <td class="name">hook-keyboard-side<span class="file">models/Hooks and holders/hook-keyboard-side.stl</span></td>
+  <td class="n">11 min</td>
+  <td class="n">1.8 g</td>
+  <td class="n">0.6 m</td>
+</tr>
+<tr>
+  <td class="tick"></td>
+  <td class="qty">1</td>
+  <td class="name">hook-side<span class="file">models/Hooks and holders/hook-side.stl</span></td>
+  <td class="n">19 min</td>
+  <td class="n">2.3 g</td>
+  <td class="n">0.8 m</td>
+</tr>
+<tr>
+  <td class="tick"></td>
+  <td class="qty">1</td>
+  <td class="name">hook-to-empty<span class="file">models/Hooks and holders/hook-to-empty.stl</span><span class="flag">supports</span></td>
+  <td class="n">19 min</td>
+  <td class="n">3.1 g</td>
+  <td class="n">1 m</td>
+</tr>
+<tr>
+  <td class="tick"></td>
+  <td class="qty">1</td>
+  <td class="name">hook-to-empty-long<span class="file">models/Hooks and holders/hook-to-empty-long.stl</span></td>
+  <td class="n">40 min</td>
+  <td class="n">7.2 g</td>
+  <td class="n">2.4 m</td>
+</tr>
+<tr>
+  <td class="tick"></td>
+  <td class="qty">1</td>
+  <td class="name">insert-cable holder<span class="file">models/Hooks and holders/insert-cable holder.stl</span></td>
+  <td class="n">13 min</td>
+  <td class="n">2 g</td>
+  <td class="n">0.7 m</td>
+</tr>
+<tr>
+  <td class="tick"></td>
+  <td class="qty">1</td>
+  <td class="name">screw-holder<span class="file">models/Hooks and holders/screw-holder.stl</span></td>
+  <td class="n">23 min</td>
+  <td class="n">3 g</td>
+  <td class="n">1 m</td>
+</tr>
+<tr>
+  <td class="tick"></td>
+  <td class="qty">1</td>
+  <td class="name">sd-card-holder<span class="file">models/Hooks and holders/sd-card-holder.stl</span></td>
+  <td class="n">2 h 28 min</td>
+  <td class="n">22.4 g</td>
+  <td class="n">7.5 m</td>
+</tr>
+<tr>
+  <td class="tick"></td>
+  <td class="qty">1</td>
+  <td class="name">sd-card-holder-cover<span class="file">models/Hooks and holders/sd-card-holder-cover.stl</span></td>
+  <td class="n">11 min</td>
+  <td class="n">1.5 g</td>
+  <td class="n">0.5 m</td>
+</tr>
+<tr>
+  <td class="tick"></td>
+  <td class="qty">1</td>
+  <td class="name">sd-card-holder-without-screw<span class="file">models/Hooks and holders/sd-card-holder-without-screw.stl</span></td>
+  <td class="n">2 h 51 min</td>
+  <td class="n">25.9 g</td>
+  <td class="n">8.7 m</td>
+</tr>
+<tr>
+  <td class="tick"></td>
+  <td class="qty">1</td>
+  <td class="name">shelf-1<span class="file">models/shelves/shelf-1.stl</span></td>
+  <td class="n">55 min</td>
+  <td class="n">7.7 g</td>
+  <td class="n">2.6 m</td>
+</tr>
+<tr>
+  <td class="tick"></td>
+  <td class="qty">1</td>
+  <td class="name">shelf-2<span class="file">models/shelves/shelf-2.stl</span></td>
+  <td class="n">1 h 21 min</td>
+  <td class="n">11.4 g</td>
+  <td class="n">3.8 m</td>
+</tr>
+<tr>
+  <td class="tick"></td>
+  <td class="qty">1</td>
+  <td class="name">shelf-3<span class="file">models/shelves/shelf-3.stl</span></td>
+  <td class="n">1 h 46 min</td>
+  <td class="n">15 g</td>
+  <td class="n">5 m</td>
+</tr>
+<tr>
+  <td class="tick"></td>
+  <td class="qty">1</td>
+  <td class="name">shelf-4<span class="file">models/shelves/shelf-4.stl</span></td>
+  <td class="n">2 h 21 min</td>
+  <td class="n">19.8 g</td>
+  <td class="n">6.6 m</td>
+</tr>
+<tr>
+  <td class="tick"></td>
+  <td class="qty">1</td>
+  <td class="name">wranch-hoks-1<span class="file">models/Hooks and holders/wranch-hoks-1.stl</span></td>
+  <td class="n">1 h 55 min</td>
+  <td class="n">20.5 g</td>
+  <td class="n">6.9 m</td>
+</tr>
+<tr>
+  <td class="tick"></td>
+  <td class="qty">1</td>
+  <td class="name">wranch-hoks-2<span class="file">models/Hooks and holders/wranch-hoks-2.stl</span></td>
+  <td class="n">2 h 2 min</td>
+  <td class="n">22.1 g</td>
+  <td class="n">7.4 m</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section>
+<h2>Inserts &amp; fasteners</h2>
+<table>
+<thead><tr><th class="tick"></th><th class="qty">Qty</th><th>Part</th><th class="n">Time</th><th class="n">Filament</th><th class="n">Length</th></tr></thead>
+<tbody>
+<tr>
+  <td class="tick"></td>
+  <td class="qty">350</td>
+  <td class="name">Insert-countersunk<span class="file">models/Parts for attaching honeycombs to the wall/Insert-countersunk.stl</span><span class="flag">supports</span></td>
+  <td class="n">108 h 48 min</td>
+  <td class="n">801.5 g</td>
+  <td class="n">269 m</td>
+</tr>
+<tr>
+  <td class="tick"></td>
+  <td class="qty">1</td>
+  <td class="name">double M4<span class="file">models/Fasteners and parts for attaching hooks and objects/double M4.stl</span><span class="flag">supports</span></td>
+  <td class="n">37 min</td>
+  <td class="n">4.7 g</td>
+  <td class="n">1.6 m</td>
+</tr>
+<tr>
+  <td class="tick"></td>
+  <td class="qty">42</td>
+  <td class="name">insert-empty<span class="file">models/Fasteners and parts for attaching hooks and objects/insert-empty.stl</span><span class="flag">supports</span></td>
+  <td class="n">10 h 44 min</td>
+  <td class="n">81.9 g</td>
+  <td class="n">27.4 m</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section>
+<h2>Shopping list</h2>
+<table>
+<thead><tr><th class="tick"></th><th class="qty">Qty</th><th>Item</th></tr></thead>
+<tbody>
+<tr><td class="tick"></td><td class="qty">2</td><td>M4 bolt, 10-16 mm</td></tr>
+<tr><td class="tick"></td><td class="qty">2</td><td>M4 nut</td></tr>
+<tr><td class="tick"></td><td class="qty">350</td><td>Wall plug, 6 mm</td></tr>
+<tr><td class="tick"></td><td class="qty">350</td><td>Wall screw, 3.5 x 35 mm countersunk</td></tr>
+</tbody>
+</table>
+</section>
+<p class="foot">Honeycomb Planner print list. Times and filament are slicer estimates for the recorded profile.</p>
+</body>
+</html>
