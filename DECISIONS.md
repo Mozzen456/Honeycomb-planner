@@ -284,6 +284,32 @@ overlap produces no issue at all.
 
 ---
 
+## D20. The same double-count bug, twice — so the guard is now general
+
+D11 fixed a wall-screw double count: a panel and the insert it required both contributed the
+fixing, so 350 inserts asked for 700 screws. I added a regression test — and scoped it to the wall
+screw.
+
+The moment three-axis bore detection gave eight accessories their missing requirements, the *same
+class* walked straight back in one level down: `screw-holder` and the `insert-with-m3` it requires
+both emitted the identical shopping line `"M3 bolt, 10-16 mm"`. **One M3 hole, two M3 bolts.** Six
+parts were affected. The specific guard did not see it because it was watching one string.
+
+**Decision:** an accessory that successfully requires an insert lists no fixing of its own — the
+insert already carries the one that passes through the joint. If that insert is absent from the
+catalogue the accessory keeps the bolt, so the fix cannot turn an overcount into an undercount.
+
+And the regression test is now **general**: no part may claim a fixing that anything it requires
+also claims, for any thread size, anywhere in the catalogue. A guard written against one instance
+of a class only catches that instance; this one catches the class.
+
+Cost of the change: the catalogue records thread and length but not head style, so the countersunk
+hooks no longer say "countersunk screw" — they inherit the insert's generic bolt line. Inventing a
+second line item to express head shape would have doubled the count again, which is the exact
+mistake being fixed. Noted in HSW-SPEC rather than papered over.
+
+---
+
 ## D19. Three dimensions, because depth is the question the plan cannot answer
 
 A flat plan tells you which cells are used. Standing at the wall, the question

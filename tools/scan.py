@@ -304,7 +304,16 @@ def requirements(rel: str, ptype: str, m: dict, ids: set[str]) -> tuple[list, li
         if tag in bores:
             pid = pid_for[tag]
             if pid in ids:
+                # The insert already carries the bolt for this hole. Listing one
+                # here too is D11's wall-screw double count all over again, in a
+                # new place: `screw-holder` and `insert-with-m3` both emitted the
+                # identical "M3 bolt, 10-16 mm" line, so ONE M3 hole bought TWO
+                # bolts. One fixing passes through one hole.
                 requires.append({"partId": pid, "count": bores[tag]})
+            else:
+                # No such insert in the catalogue: the accessory has to carry the
+                # bolt itself or it would go unlisted entirely. Guarding the
+                # undercount matters as much as fixing the overcount.
                 hardware.append({"item": f"{tag} bolt, 10-16 mm", "count": bores[tag]})
             break
     else:
@@ -321,7 +330,12 @@ def requirements(rel: str, ptype: str, m: dict, ids: set[str]) -> tuple[list, li
             pid = pid_for[tag]
             n = bores["countersink"]
             if pid in ids:
+                # Same rule as above: the insert supplies the fixing. The head
+                # style (countersunk vs pan) is not tracked — the catalogue
+                # records thread and length only, and inventing a second
+                # line-item to express head shape would double the count.
                 requires.append({"partId": pid, "count": n})
+            else:
                 hardware.append({"item": f"{tag} countersunk screw, 10-16 mm", "count": n})
         elif m.get("socketWidths") and "insert-empty" in ids:
             requires.append({"partId": "insert-empty", "count": cells})

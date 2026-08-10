@@ -1,5 +1,5 @@
 {
- "generatedAt": "2026-08-10T22:13:32Z",
+ "generatedAt": "2026-08-10T22:59:42Z",
  "parts": [
   {
    "anchor": {
@@ -152,12 +152,7 @@
     }
    ],
    "group": "Hooks and holders",
-   "hardware": [
-    {
-     "count": 1,
-     "item": "M4 bolt, 10-16 mm"
-    }
-   ],
+   "hardware": [],
    "id": "box",
    "measurement": {
     "bores": {
@@ -560,12 +555,7 @@
     }
    ],
    "group": "Hooks and holders",
-   "hardware": [
-    {
-     "count": 1,
-     "item": "M3 countersunk screw, 10-16 mm"
-    }
-   ],
+   "hardware": [],
    "id": "hook-12mm-for-m3",
    "measurement": {
     "bores": {
@@ -634,12 +624,7 @@
     }
    ],
    "group": "Hooks and holders",
-   "hardware": [
-    {
-     "count": 1,
-     "item": "M3 countersunk screw, 10-16 mm"
-    }
-   ],
+   "hardware": [],
    "id": "hook-25mm-for-m3",
    "measurement": {
     "bores": {
@@ -1160,12 +1145,7 @@
     }
    ],
    "group": "Hooks and holders",
-   "hardware": [
-    {
-     "count": 1,
-     "item": "M3 bolt, 10-16 mm"
-    }
-   ],
+   "hardware": [],
    "id": "screw-holder",
    "measurement": {
     "bores": {
@@ -1238,12 +1218,7 @@
     }
    ],
    "group": "Hooks and holders",
-   "hardware": [
-    {
-     "count": 1,
-     "item": "M4 bolt, 10-16 mm"
-    }
-   ],
+   "hardware": [],
    "id": "sd-card-holder",
    "measurement": {
     "bores": {
@@ -1791,12 +1766,7 @@
     }
    ],
    "group": "Hooks and holders",
-   "hardware": [
-    {
-     "count": 1,
-     "item": "M4 bolt, 10-16 mm"
-    }
-   ],
+   "hardware": [],
    "id": "usb-holder",
    "measurement": {
     "bores": {

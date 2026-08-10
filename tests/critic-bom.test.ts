@@ -22,7 +22,7 @@ import { describe, expect, it } from 'vitest';
 
 import catalogJson from '../src/catalog/catalog.json';
 import { computeBom, itemCells, validate } from '../src/core/bom';
-import { hexKey, placeFootprint } from '../src/core/hex';
+import { hexKey, panelCells, placeFootprint } from '../src/core/hex';
 import { Store, emptyDoc } from '../src/core/store';
 import { crossesSeam, solveTiling, type PanelSize } from '../src/core/tiling';
 import type {
@@ -231,6 +231,10 @@ describe('0 — catalogue integrity', () => {
       { item: WALL_SCREW, count: 1 },
       { item: WALL_PLUG, count: 1 },
     ]);
+
+    // NOTE: this regression check only covers the WALL screw. The same class of
+    // double count is live today for accessory bolts — see the pending finding
+    // "an accessory and the insert it requires both claim the bolt" in section 7.
   });
 });
 
@@ -242,18 +246,28 @@ describe('0 — catalogue integrity', () => {
 // Items:  2 x shelf-1                  (3 cells, requires insert-empty x3)
 //         1 x hook-to-empty            (2 cells, requires insert-empty x2)
 //         1 x insert-with-m3           (1 cell,  hardware M3 bolt x1 + M3 nut x1)
-//         1 x hook-12mm-for-m3         (1 cell,  requires nothing)
+//         1 x hook-12mm-for-m3         (1 cell,  requires insert-with-m3 x1,
+//                                       and no hardware of its own)
 //
-// HAND ARITHMETIC
+// hook-12mm-for-m3 used to require nothing at all — it is one of the eight
+// accessories the regenerated catalogue now fixes (see section 7). It bolts
+// through a countersunk hole into an M3 insert, so it drags in a SECOND
+// insert-with-m3 on top of the one placed by hand, and that insert brings its
+// own bolt and nut. Both quantities below moved because of it.
+//
+// HAND ARITHMETIC (per-unit figures read from src/catalog/catalog.json)
 //   insert-countersunk = 5 x 2 panels                = 10
 //   insert-empty       = 3 x 2 shelves + 2 x 1 hook  = 8
-//   totalParts = 2 + 2 + 1 + 1 + 1 + 8 + 10          = 25
-//   minutes = 2(315.15) + 2(54.63) + 18.78 + 11.13 + 18.23 + 8(15.33) + 10(18.65)
-//           = 630.30 + 109.26 + 18.78 + 11.13 + 18.23 + 122.64 + 186.50 = 1096.84 -> 1097
-//   grams   = 98.14 + 15.32 + 3.08 + 1.12 + 2.34 + 15.60 + 22.90        = 158.50 -> 158.5
-//   metres  = 32.9050 + 5.1398 + 1.0325 + 0.3768 + 0.7859 + 5.2272 + 7.6860
-//           = 53.1532 -> 53.15
-//   shopping = M3 bolt 1, M3 nut 1, Wall screw 10, Wall plug 10
+//   insert-with-m3     = 1 placed + 1 x 1 hook-12mm  = 2
+//   totalParts = 2 + 2 + 1 + 1 + 2 + 8 + 10          = 26
+//   minutes = 2(315.15) + 2(54.63) + 18.78 + 11.13 + 2(18.23) + 8(15.33) + 10(18.65)
+//           = 630.30 + 109.26 + 18.78 + 11.13 + 36.46 + 122.64 + 186.50 = 1115.07 -> 1115
+//   grams   = 98.14 + 15.32 + 3.08 + 1.12 + 4.68 + 15.60 + 22.90        = 160.84 -> 160.8
+//   metres  = 32.9050 + 5.1398 + 1.0325 + 0.3768 + 1.5718 + 5.2272 + 7.6860
+//           = 53.9391 -> 53.94
+//   shopping = M3 bolt 2, M3 nut 2 (one pair per insert-with-m3),
+//              (the hook lists no screw of its own: the insert supplies it),
+//              Wall screw 10, Wall plug 10 (one each per countersunk insert)
 // ===========================================================================
 
 const L1_PANELS: PlacedPanel[] = [
@@ -288,7 +302,10 @@ describe('1 — SMALL: 2 panels + a handful of accessories', () => {
     expect(qty(bom, 'shelf-1')).toBe(2);
     expect(qty(bom, 'hook-to-empty')).toBe(1);
     expect(qty(bom, 'hook-12mm-for-m3')).toBe(1);
-    expect(qty(bom, 'insert-with-m3')).toBe(1);
+    // 1 placed by hand + 1 pulled in by hook-12mm-for-m3's `requires`. They
+    // share one line, per R2 — printing two of these as two lines is exactly
+    // how someone ends up with one insert and a hook they cannot mount.
+    expect(qty(bom, 'insert-with-m3')).toBe(2);
   });
 
   it('required inserts multiply N x M', () => {
@@ -309,21 +326,27 @@ describe('1 — SMALL: 2 panels + a handful of accessories', () => {
 
   it('shopping list is exactly right and not double counted', () => {
     expect(bom.shopping).toEqual([
-      { item: 'M3 bolt, 10-16 mm', count: 1 },
-      { item: 'M3 nut', count: 1 },
+      // one bolt + one nut per insert-with-m3, and there are two of them
+      { item: 'M3 bolt, 10-16 mm', count: 2 },
+      // the hook's own countersunk screw, which is NOT the insert's bolt
+      { item: 'M3 nut', count: 2 },
       { item: WALL_PLUG, count: 10 },
       { item: WALL_SCREW, count: 10 },
     ]);
     // one screw per countersunk insert, not two, and not zero
     expect(shop(bom, WALL_SCREW)).toBe(qty(bom, 'insert-countersunk'));
+    // and the M3 fixings follow the insert, not the accessory: D11's rule is
+    // that the fixing belongs to the part it passes through.
+    expect(shop(bom, 'M3 bolt, 10-16 mm')).toBe(qty(bom, 'insert-with-m3'));
+    expect(shop(bom, 'M3 nut')).toBe(qty(bom, 'insert-with-m3'));
   });
 
   it('totals match the hand arithmetic and the independent re-derivation', () => {
-    expect(bom.totals.parts).toBe(25);
+    expect(bom.totals.parts).toBe(26);
     expect(bom.totals.distinctParts).toBe(7);
-    expect(bom.totals.minutes).toBe(1097);
-    expect(bom.totals.grams).toBe(158.5);
-    expect(bom.totals.metres).toBe(53.15);
+    expect(bom.totals.minutes).toBe(1115);
+    expect(bom.totals.grams).toBe(160.8);
+    expect(bom.totals.metres).toBe(53.94);
 
     const expected = expectedTotals(
       new Map([
@@ -331,15 +354,15 @@ describe('1 — SMALL: 2 panels + a handful of accessories', () => {
         ['shelf-1', 2],
         ['hook-to-empty', 1],
         ['hook-12mm-for-m3', 1],
-        ['insert-with-m3', 1],
+        ['insert-with-m3', 2],
         ['insert-empty', 8],
         ['insert-countersunk', 10],
       ]),
     );
-    // Exact decimal sums: 1096.84 min, 158.50 g, 53.1532 m.
-    expect(expected.rawMinutesHundredths).toBe(109684);
-    expect(expected.rawGramsHundredths).toBe(15850);
-    expect(expected.rawMetresTenThousandths).toBe(531532);
+    // Exact decimal sums: 1115.07 min, 160.84 g, 53.9391 m.
+    expect(expected.rawMinutesHundredths).toBe(111507);
+    expect(expected.rawGramsHundredths).toBe(16084);
+    expect(expected.rawMetresTenThousandths).toBe(539391);
     expect(bom.totals.parts).toBe(expected.parts);
     expect(bom.totals.minutes).toBe(expected.minutes);
     expect(bom.totals.grams).toBe(expected.grams);
@@ -358,22 +381,37 @@ describe('1 — SMALL: 2 panels + a handful of accessories', () => {
 // 2. FULL GARAGE WALL — 2400 x 1200 on a 256 bed, plus 30 accessories
 // ===========================================================================
 //
-// The solver produces 50 x wall-honeycomb-bambu-211x248-fixed (10x10) and
-// 10 x wall-honeycomb-k1-211x201 rotated to 10x8 = 60 panels, 5800 cells.
+// `allowRotation` is FALSE here, because that is what the app passes (App.tsx:
+// 90 degrees is not a symmetry of a hex lattice, so swapping columns with rows
+// invents panels that cannot be built). Testing the solver in a mode the
+// product never uses proves nothing about the product's BOM.
 //
-// HAND ARITHMETIC
-//   insert-countersunk = 6 x 50 + 5 x 10                 = 350
+// With rotation off the solver produces five bands of ten
+// wall-honeycomb-bambu-211x248-fixed (10x10) and a top band of fourteen
+// wall-honeycomb-part (7x8) = 64 panels, 5784 cells. The k1 panel is only
+// usable rotated, so it disappears from the mix entirely.
+//
+// Band 0 begins at q=1, not q=0: `bandBump` pushes a band one whole column
+// right when its odd rows would otherwise lean off the left edge of the wall.
+// The accessories below are placed accordingly — row 0 of the bottom band
+// covers columns 1..100, in ten panels of ten.
+//
+// HAND ARITHMETIC (per-unit figures read from src/catalog/catalog.json)
+//   insert-countersunk = 6 x 50 + 5 x 14                 = 300 + 70 = 370
 //   insert-empty       = 3 x 10 shelves + 2 x 5 hooks    = 40
-//   totalParts = 50+10 + 10+5+5+5 + 5 + 40 + 350         = 480
-//   minutes = 50(554.9) + 10(444.1) + 10(54.63) + 5(18.78) + 5(19.4)
-//           + 5(109.83) + 5(18.23) + 40(15.33) + 350(18.65)
-//           = 27745 + 4441 + 546.3 + 93.9 + 97 + 549.15 + 91.15 + 613.2 + 6527.5
-//           = 40704.2 -> 40704
-//   grams   = 4333.5 + 696 + 76.6 + 15.4 + 11.45 + 83.05 + 11.7 + 78 + 801.5
-//           = 6107.2
-//   metres  = 1453.02 + 233.37 + 25.699 + 5.1625 + 3.8425 + 27.8535
-//           + 3.9295 + 26.136 + 269.01 = 2048.023 -> 2048.02
-//   shopping = Wall screw 350, Wall plug 350, M3 bolt 5, M3 nut 5
+//   insert-m4          = 1 x 5 boxes                     = 5
+//   insert-with-m3     = 5 placed                        = 5
+//   totalParts = 50+14 + 10+5+5+5+5 + 370+40+5+5         = 509
+//   minutes = 50(554.9) + 14(315.15) + 10(54.63) + 5(18.78) + 5(19.4)
+//           + 5(109.83) + 5(18.23) + 5(18.55) + 40(15.33) + 370(18.65)
+//           = 27745 + 4412.10 + 546.30 + 93.90 + 97 + 549.15 + 91.15 + 92.75
+//           + 613.20 + 6900.50 = 41141.05 -> 41141
+//   grams   = 4333.5 + 686.98 + 76.6 + 15.4 + 11.45 + 83.05 + 11.7 + 11.75
+//           + 78 + 847.3 = 6155.73 -> 6155.7
+//   metres  = 1453.02 + 230.335 + 25.699 + 5.1625 + 3.8425 + 27.8535
+//           + 3.9295 + 3.932 + 26.136 + 284.382 = 2064.292 -> 2064.29
+//   shopping = Wall screw 370, Wall plug 370, M3 bolt 5, M3 nut 5,
+//              M4 bolt 5 (from insert-m4 only; the boxes carry none), M4 nut 5
 // ===========================================================================
 
 function garageTiling() {
@@ -390,11 +428,17 @@ function garageTiling() {
     wall: { widthMm: 2400, heightMm: 1200 },
     bedId: 'bed256',
     available,
-    allowRotation: true,
+    // Matches src/ui/App.tsx. Do not flip this to explore a nicer panel mix:
+    // the rotated forms are not buildable.
+    allowRotation: false,
   });
 }
 
-/** 30 accessories, all on row 0, each wholly inside one panel of the bottom band. */
+/**
+ * 30 accessories, all on row 0, each wholly inside one panel of the bottom
+ * band. Row 0 of that band runs from q=1 to q=100 in ten panels of ten
+ * columns, so every footprint below starts and ends inside a single decade.
+ */
 function garageItems(): PlacedItem[] {
   const out: PlacedItem[] = [];
   let n = 0;
@@ -402,15 +446,15 @@ function garageItems(): PlacedItem[] {
     n += 1;
     out.push(item(`a${n}`, partId, { q, r: 0 }));
   };
-  for (const q of [0, 3, 6, 10, 13, 16, 20, 23, 26, 30]) add('shelf-1', q); // 10
-  for (const q of [33, 36, 40, 43, 46]) add('hook-to-empty', q); //  5
-  for (const q of [50, 53, 56, 60, 63]) add('hook-side', q); //  5
-  for (const q of [70, 72, 74, 76, 78]) add('insert-with-m3', q); //  5
-  for (const q of [80, 83, 86, 90, 93]) add('box', q); //  5
+  for (const q of [1, 4, 7, 11, 14, 17, 21, 24, 27, 31]) add('shelf-1', q); // 10, 3 cells each
+  for (const q of [34, 37, 41, 44, 47]) add('hook-to-empty', q); //  5, 2 cells each
+  for (const q of [51, 54, 57, 61, 64]) add('hook-side', q); //  5, 2 cells each
+  for (const q of [71, 73, 75, 77, 79]) add('insert-with-m3', q); //  5, 1 cell each
+  for (const q of [81, 84, 87, 91, 94]) add('box', q); //  5, 3 cells each
   return out;
 }
 
-describe('2 — FULL GARAGE WALL: 2400 x 1200, bed256, ~60 panels + 30 accessories', () => {
+describe('2 — FULL GARAGE WALL: 2400 x 1200, bed256, 64 panels + 30 accessories', () => {
   const tiling = garageTiling();
   const panels: PlacedPanel[] = tiling.panels.map((p, i) => ({
     id: `p${i}`,
@@ -424,34 +468,39 @@ describe('2 — FULL GARAGE WALL: 2400 x 1200, bed256, ~60 panels + 30 accessori
   const bom = computeBom(L2, catalog);
 
   it('the solver gives the panel mix the hand arithmetic assumes', () => {
-    expect(panels.length).toBe(60);
-    expect(tiling.cellCount).toBe(5800);
+    expect(panels.length).toBe(64);
+    expect(tiling.cellCount).toBe(5784); // 50 x 100 + 14 x 56
     const mix = new Map<string, number>();
     for (const p of panels) mix.set(p.partId, (mix.get(p.partId) ?? 0) + 1);
     expect([...mix.entries()].sort()).toEqual([
       ['wall-honeycomb-bambu-211x248-fixed', 50],
-      ['wall-honeycomb-k1-211x201', 10],
+      ['wall-honeycomb-part', 14],
     ]);
     expect(items.length).toBe(30);
+    // The cell count is the sum of the panels' own footprints, not a guess.
+    expect(panels.reduce((a, p) => a + p.columns * p.rows, 0)).toBe(5784);
   });
 
-  it('is clean: 60 disjoint panels, 30 accessories all on-panel and non-overlapping', () => {
+  it('is clean: 64 disjoint panels, 30 accessories all on-panel and non-overlapping', () => {
     expect(bom.issues).toEqual([]);
   });
 
   it('every panel and item appears with the right quantity', () => {
     expect(qty(bom, 'wall-honeycomb-bambu-211x248-fixed')).toBe(50);
-    expect(qty(bom, 'wall-honeycomb-k1-211x201')).toBe(10);
+    expect(qty(bom, 'wall-honeycomb-part')).toBe(14);
     expect(qty(bom, 'shelf-1')).toBe(10);
     expect(qty(bom, 'hook-to-empty')).toBe(5);
     expect(qty(bom, 'hook-side')).toBe(5);
     expect(qty(bom, 'box')).toBe(5);
     expect(qty(bom, 'insert-with-m3')).toBe(5);
+    // The k1 panel is only usable in its rotated form, which the app forbids.
+    expect(qty(bom, 'wall-honeycomb-k1-211x201')).toBe(0);
   });
 
-  it('required inserts multiply N x M across 60 panels', () => {
-    expect(qty(bom, 'insert-countersunk')).toBe(350); // 6x50 + 5x10
+  it('required inserts multiply N x M across 64 panels', () => {
+    expect(qty(bom, 'insert-countersunk')).toBe(370); // 6x50 + 5x14
     expect(qty(bom, 'insert-empty')).toBe(40); // 3x10 + 2x5
+    expect(qty(bom, 'insert-m4')).toBe(5); // 1 per box; box used to require none
 
     // Independent re-derivation straight from the placed panels.
     const byHand = panels.reduce(
@@ -462,12 +511,12 @@ describe('2 — FULL GARAGE WALL: 2400 x 1200, bed256, ~60 panels + 30 accessori
           .reduce((b, r) => b + r.count, 0),
       0,
     );
-    expect(byHand).toBe(350);
+    expect(byHand).toBe(370);
   });
 
-  it('REGRESSION: 350 inserts -> 350 wall screws, not 700 and not 0', () => {
-    expect(shop(bom, WALL_SCREW)).toBe(350);
-    expect(shop(bom, WALL_PLUG)).toBe(350);
+  it('REGRESSION: 370 inserts -> 370 wall screws, not 740 and not 0', () => {
+    expect(shop(bom, WALL_SCREW)).toBe(370);
+    expect(shop(bom, WALL_PLUG)).toBe(370);
     expect(shop(bom, WALL_SCREW)).toBe(qty(bom, 'insert-countersunk'));
     // ...and the panels are genuinely fixed to the wall: 4 per panel minimum.
     expect(shop(bom, WALL_SCREW)).toBeGreaterThanOrEqual(4 * panels.length);
@@ -477,43 +526,50 @@ describe('2 — FULL GARAGE WALL: 2400 x 1200, bed256, ~60 panels + 30 accessori
     expect(bom.shopping).toEqual([
       { item: 'M3 bolt, 10-16 mm', count: 5 },
       { item: 'M3 nut', count: 5 },
-      { item: WALL_PLUG, count: 350 },
-      { item: WALL_SCREW, count: 350 },
+      // 5 from the five insert-m4 the boxes require, plus the 5 the boxes
+      // themselves list — two different fixings, not one counted twice: the
+      // insert's bolt clamps the insert, the box's bolt clamps the box to it.
+      { item: 'M4 bolt, 10-16 mm', count: 5 },
+      { item: 'M4 nut', count: 5 },
+      { item: WALL_PLUG, count: 370 },
+      { item: WALL_SCREW, count: 370 },
     ]);
+    expect(shop(bom, 'M4 nut')).toBe(qty(bom, 'insert-m4'));
   });
 
   it('totals match the hand arithmetic', () => {
-    expect(bom.totals.parts).toBe(480);
-    expect(bom.totals.distinctParts).toBe(9);
-    expect(bom.totals.minutes).toBe(40704);
-    expect(bom.totals.grams).toBe(6107.2);
-    expect(bom.totals.metres).toBe(2048.02);
+    expect(bom.totals.parts).toBe(509);
+    expect(bom.totals.distinctParts).toBe(10);
+    expect(bom.totals.minutes).toBe(41141);
+    expect(bom.totals.grams).toBe(6155.7);
+    expect(bom.totals.metres).toBe(2064.29);
   });
 
   it('totals are summed UNROUNDED, not from the rounded lines', () => {
-    // Summing the rounded gram figures on the lines gives 6107.3; the honest
-    // answer is 6107.2. If these are ever equal the accumulator was rounded early.
+    // Summing the rounded gram figures on the lines gives 6155.9; the honest
+    // answer is 6155.7. If these are ever equal the accumulator was rounded early.
     const fromLines = [...bom.printed, ...bom.fasteners].reduce((a, l) => a + l.grams, 0);
-    expect(Number(fromLines.toFixed(1))).toBe(6107.3);
-    expect(bom.totals.grams).toBe(6107.2);
+    expect(Number(fromLines.toFixed(1))).toBe(6155.9);
+    expect(bom.totals.grams).toBe(6155.7);
 
     const expected = expectedTotals(
       new Map([
         ['wall-honeycomb-bambu-211x248-fixed', 50],
-        ['wall-honeycomb-k1-211x201', 10],
+        ['wall-honeycomb-part', 14],
         ['shelf-1', 10],
         ['hook-to-empty', 5],
         ['hook-side', 5],
         ['box', 5],
         ['insert-with-m3', 5],
+        ['insert-m4', 5],
         ['insert-empty', 40],
-        ['insert-countersunk', 350],
+        ['insert-countersunk', 370],
       ]),
     );
-    // Exact decimal sums: 40704.20 min, 6107.20 g, 2048.0230 m.
-    expect(expected.rawMinutesHundredths).toBe(4070420);
-    expect(expected.rawGramsHundredths).toBe(610720);
-    expect(expected.rawMetresTenThousandths).toBe(20480230);
+    // Exact decimal sums: 41141.05 min, 6155.73 g, 2064.2920 m.
+    expect(expected.rawMinutesHundredths).toBe(4114105);
+    expect(expected.rawGramsHundredths).toBe(615573);
+    expect(expected.rawMetresTenThousandths).toBe(20642920);
     expect(bom.totals.parts).toBe(expected.parts);
     expect(bom.totals.grams).toBe(expected.grams);
     expect(bom.totals.metres).toBe(expected.metres);
@@ -532,28 +588,37 @@ describe('2 — FULL GARAGE WALL: 2400 x 1200, bed256, ~60 panels + 30 accessori
 // ===========================================================================
 //
 // Two 4x4 panels (wall-honeycomb-106x89-fixed, 16 cells, requires 4 inserts).
-//   panel A cells: r0 q0..3, r1 q0..3, r2 q-1..2, r3 q-1..2
-//   panel B cells: r0 q4..7, r1 q4..7, r2 q3..6,  r3 q3..6
+// panelCells staggers row r by -ceil(r/2), so:
+//   panel A cells: r0 q0..3, r1 q-1..2, r2 q-1..2, r3 q-2..1
+//   panel B cells: r0 q4..7, r1 q3..6,  r2 q3..6,  r3 q2..5
 //
 //   x1 hook-to-empty at (3,0)  -> cells (3,0) on A and (4,0) on B  = SEAM CROSS
 //   x2 shelf-1       at (6,0)  -> cells (6,0),(7,0) on B, (8,0) on NOTHING = off-panel
-//   x3 hook-side     at (0,1)  -> (0,1),(1,1)   overlaps...
-//   x4 box           at (1,1)  -> (1,1),(2,1),(3,1)   ...on (1,1)
+//   x3 hook-side     at (0,1)  -> (0,1),(1,1)   shares (1,1) with...
+//   x4 box           at (1,1)  -> (1,1),(2,1),(3,1)   ...and that is ALLOWED:
+//        both are accessories, which bolt on in front of the wall. Two of them
+//        on one cell is what the wall is for, so it raises no issue at all.
 //   x5 ghost-shelf-9000 x2     -> partId not in the catalogue
 //   x6 insert-countersunk-with-m3x3 rotated 1 step at (2,2)
 //        footprint (0,0)(-1,1)(0,1)(-1,2) rotates to (0,0)(-1,0)(-1,1)(-2,1)
 //        -> cells (2,2),(1,2),(1,3),(0,3), all on panel A
+//   x7 insert-hollow-dual at (4,2) -> (4,2),(4,3) on panel B, shares (4,3)...
+//   x8 insert-empty       at (4,3) -> ...which IS an error: both are inserts,
+//        and there is only one hexagonal hole. One insert per hole.
 //
-// HAND ARITHMETIC
+// HAND ARITHMETIC (per-unit figures read from src/catalog/catalog.json)
 //   insert-countersunk = 4 x 2 panels                       = 8
-//   insert-empty       = 2 (hook-to-empty) + 3 (shelf-1)    = 5
-//   totalParts = 2 + 1 + 1 + 1 + 1 + 1 + 8 + 5              = 20
-//   minutes = 185.8 + 18.78 + 54.63 + 19.4 + 109.83 + 73.93 + 149.2 + 76.65
-//           = 688.22 -> 688
-//   grams   = 29.24 + 3.08 + 7.66 + 2.29 + 16.61 + 9.44 + 18.32 + 9.75 = 96.39 -> 96.4
-//   metres  = 9.8012 + 1.0325 + 2.5699 + 0.7685 + 5.5707 + 3.1659 + 6.1488 + 3.267
-//           = 32.3245 -> 32.32
-//   shopping: Wall screw 8 + 1 = 9, Wall plug 9, M3 bolt 3, M3 nut 3
+//   insert-empty       = 2 (hook-to-empty) + 3 (shelf-1) + 1 placed = 6
+//   insert-m4          = 1 (box; it used to require none)   = 1
+//   totalParts = 2 + 4 accessories + 1 spun + 1 hollow-dual + 8 + 6 + 1 = 23
+//   minutes = 185.80 + 18.78 + 54.63 + 19.40 + 109.83 + 73.93 + 30.92 + 18.55
+//           + 91.98 + 149.20 = 753.02 -> 753
+//   grams   = 29.24 + 3.08 + 7.66 + 2.29 + 16.61 + 9.44 + 3.99 + 2.35
+//           + 11.70 + 18.32 = 104.68 -> 104.7
+//   metres  = 9.8012 + 1.0325 + 2.5699 + 0.7685 + 5.5707 + 3.1659 + 1.3371
+//           + 0.7864 + 3.9204 + 6.1488 = 35.1014 -> 35.10
+//   shopping: Wall screw 8 + 1 = 9, Wall plug 9, M3 bolt 3, M3 nut 3,
+//             M4 bolt 1 (insert-m4 only), M4 nut 1
 // ===========================================================================
 
 const L3_PANELS: PlacedPanel[] = [
@@ -569,6 +634,10 @@ const L3_ITEMS: PlacedItem[] = [
   item('ghost1', 'ghost-shelf-9000', { q: 0, r: 3 }),
   item('ghost2', 'ghost-shelf-9000', { q: 1, r: 3 }),
   item('spun', 'insert-countersunk-with-m3x3', { q: 2, r: 2 }, 1),
+  // Index 6 above is load-bearing for the rotation test below; the exclusive
+  // pair is appended so it stays there.
+  item('plug1', 'insert-hollow-dual', { q: 4, r: 2 }),
+  item('plug2', 'insert-empty', { q: 4, r: 3 }),
 ];
 
 const L3 = doc({
@@ -598,10 +667,14 @@ describe('3 — AWKWARD: seams, edges, overlaps, a missing part and a rotation',
     expect(qty(bom, 'hook-side')).toBe(1);
     expect(qty(bom, 'box')).toBe(1);
     expect(qty(bom, 'insert-countersunk-with-m3x3')).toBe(1); // rotation changes nothing
+    expect(qty(bom, 'insert-hollow-dual')).toBe(1);
     expect(qty(bom, 'insert-countersunk')).toBe(8); // 4 x 2 panels
-    expect(qty(bom, 'insert-empty')).toBe(5); // 2 + 3
+    expect(qty(bom, 'insert-empty')).toBe(6); // 2 (hook) + 3 (shelf) + 1 placed
+    expect(qty(bom, 'insert-m4')).toBe(1); // required by the box
     expect(qty(bom, 'ghost-shelf-9000')).toBe(0); // contributes nothing
-    expect(bom.totals.distinctParts).toBe(8);
+    // An illegal overlap does not remove either item from the print list: the
+    // user still has to print both and then move one.
+    expect(bom.totals.distinctParts).toBe(10);
   });
 
   it('the unknown partId is reported once, listing both placements', () => {
@@ -619,11 +692,26 @@ describe('3 — AWKWARD: seams, edges, overlaps, a missing part and a rotation',
     expect(off[0]!.cells!.map(hexKey)).toEqual(['8,0']);
   });
 
-  it('the overlapping pair is reported, with the one shared cell', () => {
+  it('the two inserts sharing a hole are reported, with the one shared cell', () => {
+    // One hexagonal hole, one insert. This is the only overlap the app treats
+    // as an error, and it must name both items and the exact cell.
     const clash = bom.issues.filter((i) => i.code === 'overlap');
     expect(clash.length).toBe(1);
-    expect(clash[0]!.itemIds.sort()).toEqual(['over1', 'over2']);
-    expect(clash[0]!.cells!.map(hexKey)).toEqual(['1,1']);
+    expect(clash[0]!.level).toBe('error');
+    expect(clash[0]!.itemIds.sort()).toEqual(['plug1', 'plug2']);
+    expect(clash[0]!.cells!.map(hexKey)).toEqual(['4,3']);
+  });
+
+  it('the two overlapping ACCESSORIES are not reported at all', () => {
+    // over1 (hook-side) and over2 (box) genuinely share cell (1,1). The wall
+    // exists to mount things on top of one another, so this is not an error and
+    // not a warning — flagging it would put a complaint on a perfectly good
+    // parts list. Proven positively: the cell really is shared.
+    const a = itemCells(L3_ITEMS[2]!, catalog).map(hexKey);
+    const b = itemCells(L3_ITEMS[3]!, catalog).map(hexKey);
+    expect(a.filter((k) => b.includes(k))).toEqual(['1,1']);
+    expect(bom.issues.filter((i) => i.itemIds.includes('over1'))).toEqual([]);
+    expect(bom.issues.filter((i) => i.itemIds.includes('over2'))).toEqual([]);
   });
 
   it('the two panels do not overlap and no spurious issues appear', () => {
@@ -634,18 +722,23 @@ describe('3 — AWKWARD: seams, edges, overlaps, a missing part and a rotation',
     expect(bom.shopping).toEqual([
       { item: 'M3 bolt, 10-16 mm', count: 3 },
       { item: 'M3 nut', count: 3 },
+      // 1 from the insert-m4 the box requires + 1 the box itself carries
+      { item: 'M4 bolt, 10-16 mm', count: 1 },
+      { item: 'M4 nut', count: 1 },
       { item: WALL_PLUG, count: 9 },
       { item: WALL_SCREW, count: 9 },
     ]);
     // 8 from the panels' countersunk inserts + 1 that the m3x3 fastener carries
     expect(shop(bom, WALL_SCREW)).toBe(qty(bom, 'insert-countersunk') + 1);
+    // Rotating the m3x3 fastener did not multiply its 3 bolts into 6 or 12.
+    expect(shop(bom, 'M3 bolt, 10-16 mm')).toBe(3);
   });
 
   it('totals match the hand arithmetic', () => {
-    expect(bom.totals.parts).toBe(20);
-    expect(bom.totals.minutes).toBe(688);
-    expect(bom.totals.grams).toBe(96.4);
-    expect(bom.totals.metres).toBe(32.32);
+    expect(bom.totals.parts).toBe(23);
+    expect(bom.totals.minutes).toBe(753);
+    expect(bom.totals.grams).toBe(104.7);
+    expect(bom.totals.metres).toBe(35.1);
 
     const expected = expectedTotals(
       new Map([
@@ -655,17 +748,19 @@ describe('3 — AWKWARD: seams, edges, overlaps, a missing part and a rotation',
         ['hook-side', 1],
         ['box', 1],
         ['insert-countersunk-with-m3x3', 1],
+        ['insert-hollow-dual', 1],
+        ['insert-m4', 1],
         ['insert-countersunk', 8],
-        ['insert-empty', 5],
+        ['insert-empty', 6],
       ]),
     );
-    // Exact decimal sums: 688.22 min, 96.39 g, 32.3245 m.
-    expect(expected.rawMinutesHundredths).toBe(68822);
-    expect(expected.rawGramsHundredths).toBe(9639);
-    expect(expected.rawMetresTenThousandths).toBe(323245);
+    // Exact decimal sums: 753.02 min, 104.68 g, 35.1014 m.
+    expect(expected.rawMinutesHundredths).toBe(75302);
+    expect(expected.rawGramsHundredths).toBe(10468);
+    expect(expected.rawMetresTenThousandths).toBe(351014);
     expect(bom.totals.parts).toBe(expected.parts);
-    expect(bom.totals.grams).toBe(expected.grams); // 96.39 -> 96.4, half away from zero
-    expect(bom.totals.metres).toBe(expected.metres); // 32.3245 -> 32.32
+    expect(bom.totals.grams).toBe(expected.grams); // 104.68 -> 104.7, half away from zero
+    expect(bom.totals.metres).toBe(expected.metres); // 35.1014 -> 35.10
     expect(bom.totals.minutes).toBe(expected.minutes);
   });
 });
@@ -700,21 +795,24 @@ describe('4 — seam crossing', () => {
     expect(store.checkPlacement(cells).warnings ?? []).toEqual([]);
   });
 
-  it('fires on the real 60-panel garage wall, across a vertical seam', () => {
+  it('fires on the real 64-panel garage wall, across a vertical seam', () => {
     const tiled = garageTiling().panels;
-    // shelf-1 at q=8 covers 8,9,10 — panel A holds columns 0..9, panel B 10..19.
-    const cells = itemCells(item('s', 'shelf-1', { q: 8, r: 0 }), catalog);
-    expect(cells.map(hexKey)).toEqual(['8,0', '9,0', '10,0']);
+    // Band 0 starts at q=1 (bandBump), so the bottom band's panels hold columns
+    // 1..10, 11..20, and so on. shelf-1 at q=9 covers 9,10,11: the first two on
+    // the first panel, the third on the second.
+    const cells = itemCells(item('s', 'shelf-1', { q: 9, r: 0 }), catalog);
+    expect(cells.map(hexKey)).toEqual(['9,0', '10,0', '11,0']);
     expect(crossesSeam(cells, tiled)).toBe(true);
+    // ...and one that stops short of the seam does not fire.
     expect(crossesSeam(itemCells(item('s', 'shelf-1', { q: 5, r: 0 }), catalog), tiled)).toBe(false);
   });
 
   it('fires across a horizontal BAND seam, where the half-pitch stagger matters', () => {
     const tiled = garageTiling().panels;
-    // Band 0 is rows 0..9 with its left edge at q=0; band 1 starts at row 10 and
-    // is inset half a pitch, so its panels start at q=-5. A part spanning rows
-    // 9 and 10 therefore straddles two panels whose q origins do not line up —
-    // the case a pixel-rectangle comparison would get wrong.
+    // Band 0 is rows 0..9 with its panels' origins at q=1, 11, 21...; band 1
+    // starts at row 10 and its origins are at q=-4, 6, 16... A part spanning
+    // rows 9 and 10 therefore straddles two panels whose q origins do not line
+    // up — the case a pixel-rectangle comparison would get wrong.
     const cells = itemCells(item('d', 'insert-hollow-dual', { q: 0, r: 9 }), catalog);
     expect(cells.map(hexKey)).toEqual(['0,9', '0,10']);
     expect(crossesSeam(cells, tiled)).toBe(true);
@@ -877,16 +975,77 @@ describe('6 — sweeps over the whole catalogue', () => {
 // ===========================================================================
 
 describe('7 — findings (documented as tests so they cannot regress silently)', () => {
-  it('FINDING: accessories that bolt on via an M3/M4/M5 hole require no insert and no bolt', () => {
-    // hook-side is a real part, flagged in UNKNOWN.md as "likely screws to an
-    // insert via an M3/M4/M5 hole". The BOM says: print one hook, buy nothing,
-    // print no insert. At the wall it has nothing to bolt to.
-    const bom = computeBom(doc({ panels: [], items: [item('h', 'hook-side', { q: 0, r: 0 })] }), catalog);
-    expect(bom.totals.parts).toBe(1);
-    expect(bom.shopping).toEqual([]);
-    expect(bom.fasteners).toEqual([]);
+  it('REGRESSION (was a FINDING): an accessory with a bolt hole DOES require an insert and a bolt', () => {
+    // The finding: 18 accessories required no insert and no hardware, so the
+    // BOM said "print one hook, buy nothing" for a part that has nothing to
+    // bolt to at the wall. The cause was in the scanner, not the BOM — bore
+    // detection scanned Z only, and these parts are drawn lying down, so an M3
+    // hole through their side was invisible. It now scans all three axes, and a
+    // countersunk hole whose shank falls outside the plain-bolt window is
+    // matched using the filename as corroboration.
+    //
+    // Eight accessories changed as a result. These are the six the fix was
+    // aimed at; each must pull in a matching insert.
+    //
+    // The accessory itself lists NO bolt: one fixing passes through one hole,
+    // and the insert it requires already carries it. Listing one here too was
+    // the second half of this bug — `screw-holder` and `insert-with-m3` both
+    // emitted "M3 bolt, 10-16 mm", so one hole bought two bolts.
+    const fixed: Array<[string, string, RegExp]> = [
+      ['box', 'insert-m4', /^M4 bolt/],
+      ['usb-holder', 'insert-m4', /^M4 bolt/],
+      ['sd-card-holder', 'insert-m4', /^M4 bolt/],
+      ['screw-holder', 'insert-with-m3', /^M3 bolt/],
+      ['hook-12mm-for-m3', 'insert-with-m3', /^M3 bolt/],
+      ['hook-25mm-for-m3', 'insert-with-m3', /^M3 bolt/],
+    ];
+    for (const [id, insertId, bolt] of fixed) {
+      const p = part(id);
+      expect({ id, requires: (p.requires ?? []).map((r) => `${r.partId}x${r.count}`) }).toEqual({
+        id,
+        requires: [`${insertId}x1`],
+      });
+      expect(p.hardware ?? [], `${id} must not carry its own bolt`).toEqual([]);
 
-    // How many parts are in this position across the catalogue?
+      // ...and it reaches the BOM, not just the catalogue: placing one prints
+      // the insert too, and the bolt reaches the shopping list exactly once.
+      const bom = computeBom(doc({ panels: [], items: [item('h', id, { q: 0, r: 0 })] }), catalog);
+      expect(qty(bom, insertId), `${id} did not pull in ${insertId}`).toBe(1);
+      expect(bom.totals.parts).toBe(2);
+      const bolts = bom.shopping.filter((s) => bolt.test(s.item));
+      expect(bolts.map((b) => b.count), `${id} bolt count`).toEqual([1]);
+    }
+
+    // The general rule, so a future rescan cannot reintroduce the class: any
+    // accessory whose measured bores include a plain M3/M4/M5 shank must
+    // require an insert of that size and list a bolt of that size.
+    const broken: string[] = [];
+    for (const p of catalog.parts) {
+      if (p.type !== 'accessory') continue;
+      const bores = (p as unknown as { measurement?: { bores?: Record<string, number> } }).measurement
+        ?.bores ?? {};
+      for (const size of ['M3', 'M4', 'M5']) {
+        if (!(size in bores)) continue;
+        const inserts = (p.requires ?? []).filter((r) => part(r.partId).type === 'insert');
+        if (inserts.length === 0) broken.push(`${p.id}: ${size} hole, no insert`);
+        // The bolt must exist SOMEWHERE in the chain, exactly once — on the
+        // insert, not on the accessory as well.
+        const onInsert = inserts.some((r) =>
+          (part(r.partId).hardware ?? []).some((h) => h.item.startsWith(size)),
+        );
+        if (!onInsert) broken.push(`${p.id}: ${size} hole, insert supplies no ${size} bolt`);
+        if ((p.hardware ?? []).some((h) => h.item.startsWith(size))) {
+          broken.push(`${p.id}: ${size} bolt counted twice (accessory AND its insert)`);
+        }
+      }
+    }
+    expect(broken).toEqual([]);
+
+    // What is LEFT is a different problem, and P1's, not this one: twelve parts
+    // in which no bore and no hexagonal socket could be found on any axis, so
+    // there is nothing to infer a fixing from. They are listed in UNKNOWN.md
+    // and shown with an `est.` marker. Pinned here so the count cannot drift
+    // without someone noticing.
     const orphans = catalog.parts.filter(
       (p) =>
         p.type === 'accessory' &&
@@ -896,24 +1055,65 @@ describe('7 — findings (documented as tests so they cannot regress silently)',
     expect(orphans.map((p) => p.id).sort()).toEqual([
       '20-micro-sd-card-holder',
       '5-micro-sd-card-holder',
-      'box',
       'box-and-usb-holder-cover',
       'caliper-mount',
-      'hook-12mm-for-m3',
-      'hook-25mm-for-m3',
       'hook-bottom',
       'hook-keyboard-bottom',
       'hook-keyboard-side',
       'hook-side',
       'insert-cable-holder',
-      'screw-holder',
-      'sd-card-holder',
       'sd-card-holder-cover',
-      'usb-holder',
       'wranch-hoks-1',
       'wranch-hoks-2',
     ]);
-    expect(orphans.length).toBe(18);
+    expect(orphans.length).toBe(12);
+  });
+
+  it('REGRESSION: no fixing is ever claimed by a part AND by what it requires', () => {
+    // Was a live defect, found by the BOM critic: D11's double count — "the
+    // fixing belongs to the part it passes through" — had reappeared for
+    // ACCESSORY bolts after the catalogue was regenerated with three-axis bore
+    // detection. D11 fixed it for the wall screw only, and the section 0
+    // regression test guards only the wall screw, so the class walked straight
+    // back in with the newly-detected bores: `screw-holder` and
+    // `insert-with-m3` both emitted "M3 bolt, 10-16 mm", so one M3 hole bought
+    // two M3 bolts.
+    //
+    // Fixed in tools/scan.py: an accessory that successfully requires an insert
+    // no longer lists a bolt of its own, because the insert already carries it.
+    // If the insert is absent from the catalogue the accessory keeps the bolt,
+    // so the fix cannot turn an overcount into an undercount.
+    //
+    // This check is now GENERAL — every fixing, not just the wall screw — so
+    // the class cannot come back a third time through some other part.
+    const doubled: string[] = [];
+    for (const p of catalog.parts) {
+      for (const r of p.requires ?? []) {
+        const target = catalog.parts.find((x) => x.id === r.partId);
+        if (!target) continue;
+        for (const h of p.hardware ?? []) {
+          const size = /^M[345]/.exec(h.item)?.[0];
+          if (size === undefined) continue;
+          if ((target.hardware ?? []).some((t) => t.item.startsWith(size))) {
+            doubled.push(`${p.id} + ${r.partId} (${size})`);
+          }
+        }
+      }
+    }
+    expect(doubled.sort(), 'a fixing is counted twice').toEqual([]);
+
+    // The user-visible consequence, in one line: one screw-holder, one M3 hole,
+    // ONE M3 bolt on the shopping list.
+    const bom = computeBom(
+      doc({ panels: [], items: [item('s', 'screw-holder', { q: 0, r: 0 })] }),
+      catalog,
+    );
+    expect(
+      (part('screw-holder') as unknown as { measurement?: { bores?: Record<string, number> } })
+        .measurement?.bores,
+    ).toEqual({ M3: 1 });
+    expect(shop(bom, 'M3 bolt, 10-16 mm')).toBe(1);
+    expect(shop(bom, 'M3 nut')).toBe(1);
   });
 
   it('FINDING: the needs-review marker never reaches a BOM line', () => {
@@ -945,33 +1145,53 @@ describe('7 — findings (documented as tests so they cannot regress silently)',
     expect(part('insert-empty').provenance.notes.join(' ')).toContain('13.4, 16.5, 18.5');
   });
 
-  it('FINDING: nothing reserves cells for the wall-mount inserts a panel requires', () => {
-    // A 4x4 panel needs 4 countersunk inserts in 4 of its 16 cells, but the BOM
-    // does not place them and validate() does not check that 4 cells are free.
-    // Fill every cell of a panel with accessories and the BOM still cheerfully
-    // asks for 4 inserts that have nowhere to go.
-    const items: PlacedItem[] = [];
-    let n = 0;
-    for (const c of [
+  it('PENDING FINDING: nothing reserves cells for the wall-mount inserts a panel requires', () => {
+    // STILL OPEN — PARKED.md P8 item 2. A 4x4 panel needs 4 countersunk inserts
+    // in 4 of its 16 cells, but the BOM does not place them and validate() does
+    // not check that 4 cells are free. Fill every cell of the panel and the BOM
+    // still cheerfully asks for 4 inserts that have nowhere to go. The fix is a
+    // warning in validate() when free cells < required wall mounts.
+    //
+    // Everything below asserts the CURRENT, WRONG behaviour so that the suite
+    // stays green while the defect stays visible. If someone implements the
+    // warning, the first assertion fails and this test should be inverted into
+    // a regression test for it.
+    //
+    // The cell list is panel A's real footprint under the -ceil(r/2) stagger:
+    // rows 1 and 3 lean half a pitch LEFT of the row below. Using the old
+    // -floor(r/2) parity here put two of the sixteen off the panel and produced
+    // off-panel errors that had nothing to do with the finding.
+    const panelCellList: Hex[] = [
       { q: 0, r: 0 }, { q: 1, r: 0 }, { q: 2, r: 0 }, { q: 3, r: 0 },
-      { q: 0, r: 1 }, { q: 1, r: 1 }, { q: 2, r: 1 }, { q: 3, r: 1 },
+      { q: -1, r: 1 }, { q: 0, r: 1 }, { q: 1, r: 1 }, { q: 2, r: 1 },
       { q: -1, r: 2 }, { q: 0, r: 2 }, { q: 1, r: 2 }, { q: 2, r: 2 },
-      { q: -1, r: 3 }, { q: 0, r: 3 }, { q: 1, r: 3 }, { q: 2, r: 3 },
-    ]) {
-      n += 1;
-      items.push(item(`f${n}`, 'insert-cable-holder', c));
-    }
-    const bom = computeBom(
-      doc({
-        panels: [
-          { id: 'pA', partId: 'wall-honeycomb-106x89-fixed', origin: { q: 0, r: 0 }, columns: 4, rows: 4 },
-        ],
-        items,
-      }),
-      catalog,
+      { q: -2, r: 3 }, { q: -1, r: 3 }, { q: 0, r: 3 }, { q: 1, r: 3 },
+    ];
+    const panelA: PlacedPanel = {
+      id: 'pA',
+      partId: 'wall-honeycomb-106x89-fixed',
+      origin: { q: 0, r: 0 },
+      columns: 4,
+      rows: 4,
+    };
+    // The fixture is the panel's own cells, checked against the generator
+    // rather than trusted — a stale cell list would make this prove nothing.
+    expect(panelCellList.map(hexKey).sort()).toEqual(
+      panelCells(panelA.origin, panelA.columns, panelA.rows).map(hexKey).sort(),
     );
-    expect(bom.issues).toEqual([]); // no complaint at all
-    expect(qty(bom, 'insert-cable-holder')).toBe(16);
-    expect(qty(bom, 'insert-countersunk')).toBe(4); // nowhere to put them
+
+    const items: PlacedItem[] = panelCellList.map((c, i) =>
+      item(`f${i + 1}`, 'insert-cable-holder', c),
+    );
+    const bom = computeBom(doc({ panels: [panelA], items }), catalog);
+
+    expect(
+      bom.issues,
+      'P8.2 appears to be FIXED — validate() now notices there is no room for the wall mounts. ' +
+        'Invert this test into a regression test for that warning.',
+    ).toEqual([]); // WRONG: there is no complaint at all
+    expect(qty(bom, 'insert-cable-holder')).toBe(16); // every cell occupied
+    expect(qty(bom, 'insert-countersunk')).toBe(4); // and nowhere to put them
+    expect(items.length).toBe(part(panelA.partId).footprint.length); // the panel is genuinely full
   });
 });

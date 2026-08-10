@@ -315,7 +315,11 @@ describe('rounding', () => {
 });
 
 describe('validate', () => {
-  const wide = makePart({ id: 'wide', footprint: [{ q: 0, r: 0 }, { q: 1, r: 0 }] });
+  // Two cells wide, and of catalogue `type: 'insert'` — which is what makes a
+  // shared cell an error at all. Overlap is only impossible when both parts go
+  // INTO the hexagonal hole; accessories bolt on in front of it and are allowed
+  // to share cells (see the accessory case below).
+  const wide = makePart({ id: 'wide', type: 'insert', footprint: [{ q: 0, r: 0 }, { q: 1, r: 0 }] });
 
   it('reports both item ids and the shared cells of an overlap', () => {
     const catalog = makeCatalog([wide, PANEL]);
@@ -330,6 +334,18 @@ describe('validate', () => {
     expect(overlap[0]!.level).toBe('error');
     expect(overlap[0]!.itemIds.slice().sort()).toEqual(['left', 'right']);
     expect(overlap[0]!.cells).toEqual([{ q: 1, r: 0 }]);
+  });
+
+  it('does NOT report two accessories sharing a cell — mounting things on top is the point', () => {
+    // Same geometry as the case above, with the parts typed 'accessory'. The
+    // wall exists to carry things in front of it, so a shared cell is ordinary
+    // and gets no issue at all — not even a warning.
+    const shelfy = makePart({ id: 'shelfy', type: 'accessory', footprint: [{ q: 0, r: 0 }, { q: 1, r: 0 }] });
+    const doc = makeDoc({
+      panels: [panel('p1', 'panel3', 0, 0, 5, 5)],
+      items: [item('left', 'shelfy', 0, 0), item('right', 'shelfy', 1, 0)],
+    });
+    expect(validate(doc, makeCatalog([shelfy, PANEL]))).toEqual([]);
   });
 
   it('reports an item that no panel covers', () => {
@@ -369,8 +385,12 @@ describe('validate', () => {
 
     expect(clash).toHaveLength(1);
     expect(clash[0]!.itemIds).toEqual(['p1', 'p2']);
-    // p1 covers (0,0),(1,0),(0,1),(1,1); p2 covers (1,0),(2,0),(1,1),(2,1).
-    expect(cells(clash[0]!.cells ?? [])).toEqual(['1,0', '1,1']);
+    // panelCells staggers row r by -ceil(r/2), so row 1 leans half a pitch LEFT
+    // of row 0 (hex.ts, verified in tests/panel-parity.test.ts):
+    //   p1 covers (0,0),(1,0) and (-1,1),(0,1)
+    //   p2 covers (1,0),(2,0) and ( 0,1),(1,1)
+    // which share (1,0) on row 0 and (0,1) on row 1.
+    expect(cells(clash[0]!.cells ?? [])).toEqual(['0,1', '1,0']);
   });
 
   it('reports an unknown partId once, listing every placement that wants it', () => {
@@ -459,7 +479,10 @@ describe('computeBom robustness', () => {
   });
 
   it('carries the issues from validate', () => {
-    const wide = makePart({ id: 'wide', footprint: [{ q: 0, r: 0 }, { q: 1, r: 0 }] });
+    // Typed 'insert' so the shared cell is the one overlap that IS an error —
+    // two inserts cannot share one hexagonal hole. An insert lands on the
+    // `fasteners` section of the list rather than `printed` (R2).
+    const wide = makePart({ id: 'wide', type: 'insert', footprint: [{ q: 0, r: 0 }, { q: 1, r: 0 }] });
     const doc = makeDoc({
       panels: [panel('p1', 'panel3', 0, 0, 5, 5)],
       items: [item('left', 'wide', 0, 0), item('right', 'wide', 1, 0)],
@@ -468,7 +491,7 @@ describe('computeBom robustness', () => {
 
     expect(bom.issues.some((i) => i.code === 'overlap')).toBe(true);
     // Overlapping or not, the user still gets a print list.
-    expect(bom.printed.find((l) => l.partId === 'wide')!.quantity).toBe(2);
+    expect(bom.fasteners.find((l) => l.partId === 'wide')!.quantity).toBe(2);
   });
 
   it('sorts lines by name so output does not depend on placement order', () => {

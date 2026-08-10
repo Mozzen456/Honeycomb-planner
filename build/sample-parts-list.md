@@ -57,10 +57,9 @@ Wall 2400 × 1200 mm · bed `bed256`
 
 ## Shopping list
 
-- [ ] **4 ×** M3 bolt, 10-16 mm
-- [ ] **2 ×** M3 countersunk screw, 10-16 mm
+- [ ] **3 ×** M3 bolt, 10-16 mm
 - [ ] **3 ×** M3 nut
-- [ ] **8 ×** M4 bolt, 10-16 mm
+- [ ] **5 ×** M4 bolt, 10-16 mm
 - [ ] **5 ×** M4 nut
 - [ ] **350 ×** Wall plug, 6 mm
 - [ ] **350 ×** Wall screw, 3.5 x 35 mm countersunk

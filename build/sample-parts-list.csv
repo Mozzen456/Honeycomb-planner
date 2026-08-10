@@ -35,10 +35,9 @@ fastener,1,double-m4,double M4,insert,models/Fasteners and parts for attaching h
 fastener,3,insert-m4,insert M4,insert,models/Fasteners and parts for attaching hooks and objects/insert M4.stl,yes,18.67,2.37,0.79,56,7.1,2.36
 fastener,42,insert-empty,insert-empty,insert,models/Fasteners and parts for attaching hooks and objects/insert-empty.stl,yes,15.33,1.95,0.65,644,81.9,27.44
 fastener,3,insert-with-m3,insert-with-M3,insert,models/Fasteners and parts for attaching hooks and objects/insert-with-M3.stl,yes,18.33,2.33,0.79,55,7,2.36
-shopping,4,,"M3 bolt, 10-16 mm",bought,,,,,,,,
-shopping,2,,"M3 countersunk screw, 10-16 mm",bought,,,,,,,,
+shopping,3,,"M3 bolt, 10-16 mm",bought,,,,,,,,
 shopping,3,,M3 nut,bought,,,,,,,,
-shopping,8,,"M4 bolt, 10-16 mm",bought,,,,,,,,
+shopping,5,,"M4 bolt, 10-16 mm",bought,,,,,,,,
 shopping,5,,M4 nut,bought,,,,,,,,
 shopping,350,,"Wall plug, 6 mm",bought,,,,,,,,
 shopping,350,,"Wall screw, 3.5 x 35 mm countersunk",bought,,,,,,,,

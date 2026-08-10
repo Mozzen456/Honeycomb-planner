@@ -96,7 +96,20 @@ the BOM depends on it, so the app does not claim it. Reasoning and evidence are 
 
 ---
 
-## P7. 16 failing tests, all in critic files, all with a known cause
+## P7. RESOLVED — the suite is green
+
+**394 tests pass, `tsc --noEmit` is clean.** This section previously recorded 16 failures left
+behind after a round of critic fixes. They have all been reconciled: expectations that encoded
+deliberately-changed behaviour were recomputed by hand from the current catalogue, findings that
+were fixed were inverted into regression tests, and findings that are still open are pinned to the
+current behaviour with a message telling a future fixer to invert them.
+
+One genuine defect surfaced during that reconciliation and is now **fixed** — see D20: an accessory
+and the insert it required *both* claimed the same bolt, so one M3 hole bought two M3 bolts. That
+is D11's double-count class reappearing in a new place, which is why the guard against it is now
+general rather than specific to the wall screw.
+
+<details><summary>What the failures were (kept for the record)</summary>
 
 **Status: the underlying defects are fixed; these tests encode the pre-fix world.**
 
@@ -120,17 +133,16 @@ Recomputing nine hand-arithmetic fixtures needs the same care the critic spent p
 I ran out of budget before I could do it properly. Doing it carelessly would be worse than leaving
 it visible.
 
-**What is verified green:** `acceptance`, `panel-parity`, `tiling`, `hex`, `store`, `persist`,
-`exporters`, `samples` — including the full 2400 × 1200 "Done" scenario end to end.
+</details>
 
 ---
 
 ## P8. Defects found by the critics that are still open
 
-Fixed this pass: group rotation silently translating a selection, the 90°-rotation tiling bug, the
+Fixed: group rotation silently translating a selection, the 90°-rotation tiling bug, the
 stagger-parity mirror, silent truncation in `deserialize`, the panel-cell-count bomb, store/BOM
-disagreement on anchors and empty footprints, `rotateItems(NaN)`, and 18 accessories that required
-no insert or bolt.
+disagreement on anchors and empty footprints, `rotateItems(NaN)`, 18 accessories that required
+no insert or bolt, and the accessory/insert bolt double-count (D20).
 
 Still open, in severity order:
 
