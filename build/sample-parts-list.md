@@ -4,11 +4,11 @@ Wall 2400 × 1200 mm · bed `bed256`
 
 | Total | Value |
 | --- | ---: |
-| Parts to print | 482 |
-| Distinct parts | 34 |
-| Print time | 687 h 43 min |
-| Filament | 6206.4 g |
-| Filament length | 2081.3 m |
+| Parts to print | 488 |
+| Distinct parts | 36 |
+| Print time | 689 h 34 min |
+| Filament | 6220.5 g |
+| Filament length | 2086 m |
 
 ## Panels
 
@@ -51,11 +51,16 @@ Wall 2400 × 1200 mm · bed `bed256`
 
 - [ ] **350 ×** Insert-countersunk — 108 h 48 min, 801.5 g, needs supports `models/Parts for attaching honeycombs to the wall/Insert-countersunk.stl`
 - [ ] **1 ×** double M4 — 37 min, 4.7 g, needs supports `models/Fasteners and parts for attaching hooks and objects/double M4.stl`
+- [ ] **3 ×** insert M4 — 56 min, 7.1 g, needs supports `models/Fasteners and parts for attaching hooks and objects/insert M4.stl`
 - [ ] **42 ×** insert-empty — 10 h 44 min, 81.9 g, needs supports `models/Fasteners and parts for attaching hooks and objects/insert-empty.stl`
+- [ ] **3 ×** insert-with-M3 — 55 min, 7 g, needs supports `models/Fasteners and parts for attaching hooks and objects/insert-with-M3.stl`
 
 ## Shopping list
 
-- [ ] **2 ×** M4 bolt, 10-16 mm
-- [ ] **2 ×** M4 nut
+- [ ] **4 ×** M3 bolt, 10-16 mm
+- [ ] **2 ×** M3 countersunk screw, 10-16 mm
+- [ ] **3 ×** M3 nut
+- [ ] **8 ×** M4 bolt, 10-16 mm
+- [ ] **5 ×** M4 nut
 - [ ] **350 ×** Wall plug, 6 mm
 - [ ] **350 ×** Wall screw, 3.5 x 35 mm countersunk

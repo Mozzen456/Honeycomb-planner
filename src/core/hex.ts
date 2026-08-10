@@ -215,7 +215,16 @@ export function panelCells(origin: Hex, columns: number, rows: number): Hex[] {
   const out: Hex[] = [];
   for (let r = 0; r < rowCount; r++) {
     // Undo half the axial shear so the block stays visually rectangular.
-    const qShift = -Math.floor(r / 2);
+    //
+    // CEIL, not floor. Both keep the block rectangular, but they choose
+    // opposite parities: with floor, odd rows sit half a pitch to the RIGHT of
+    // the mesh's own cells, which mirrors the panel. Six of the seven shipped
+    // panels are chiral, so the generated cell map was a mirror image of the
+    // part — and a panel is not symmetric (one face is the 20 mm insert throat,
+    // the other the 22 mm mouth), so every per-cell instruction landed on the
+    // wrong side. Verified against the measured footprints in
+    // tests/panel-parity.test.ts.
+    const qShift = -Math.ceil(r / 2);
     for (let c = 0; c < cols; c++) {
       out.push({ q: origin.q + c + qShift, r: origin.r + r });
     }

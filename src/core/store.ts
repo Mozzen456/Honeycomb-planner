@@ -278,7 +278,7 @@ export class Store {
   addItem(partId: string, at: Hex, rotation: Rotation = 0): DropResult {
     const part = this.part(partId);
     if (!part) return { ok: false, reason: `Unknown part "${partId}"` };
-    const cells = placeFootprint(part.footprint, at, rotation);
+    const cells = partCells(part, at, rotation);
     const check = this.checkPlacement(cells);
     if (!check.ok) return check;
 
@@ -305,7 +305,7 @@ export class Store {
       const moved = { ...item, at };
       next.push(moved);
       const part = this.part(item.partId);
-      if (part) allCells.push(...placeFootprint(part.footprint, at, item.rotation));
+      if (part) allCells.push(...partCells(part, at, item.rotation));
     }
     // A group moves as one rigid body: if any member cannot land, none do.
     const check = this.checkPlacement(allCells, moving);
@@ -319,19 +319,38 @@ export class Store {
   }
 
   /**
-   * Rotate a selection about the centroid of its anchors.
+   * Rotate a selection about a fixed member of that selection.
    *
-   * Rotating each item about its own anchor would tear a group apart; rotating
-   * the whole selection about a shared pivot is what "it feels like a physical
-   * object" means.
+   * Rotating each item about its own anchor would tear a group apart, so the
+   * whole selection turns about one shared pivot.
+   *
+   * The pivot is the first selected item's cell, NOT the centroid. The centroid
+   * of an even-sized selection falls on a half-cell, which is not a lattice
+   * point, so it has to be rounded — and the rounded pivot then moves with the
+   * items on every step. Six 60° rotations stopped being the identity: a pair
+   * at (10,10),(11,10) walked to (14,8),(15,8), every step returning ok, with
+   * nothing to tell the user their wall had been rearranged.
+   *
+   * Pivoting on a member is exact: that item cannot move, so the pivot is the
+   * same on every step and six rotations are provably the identity.
+   *
+   * The member chosen is the one nearest the true (unrounded) centroid, so the
+   * selection still turns about its middle rather than orbiting a corner —
+   * pivoting on an arbitrary member swept a wide arc and pushed groups off the
+   * panel edge for rotations that ought to be free.
    */
   rotateItems(ids: readonly string[], steps: number): DropResult {
     if (ids.length === 0) return { ok: true };
+    if (!Number.isFinite(steps) || !Number.isInteger(steps)) {
+      // NaN would survive `((s % 6) + 6) % 6` and be written into the document
+      // as an unrepresentable rotation that save/load silently rewrites.
+      return { ok: false, reason: 'Rotation must be a whole number of steps' };
+    }
     const set = new Set(ids);
     const members = this.current.doc.items.filter((i) => set.has(i.id));
     if (members.length === 0) return { ok: true };
 
-    const pivot = centroidOf(members.map((m) => m.at));
+    const pivot = pivotNearestCentroid(members);
     const next: PlacedItem[] = [];
     const allCells: Hex[] = [];
     for (const item of this.current.doc.items) {
@@ -345,7 +364,7 @@ export class Store {
       const rotation = (((item.rotation + steps) % 6) + 6) % 6 as Rotation;
       next.push({ ...item, at, rotation });
       const part = this.part(item.partId);
-      if (part) allCells.push(...placeFootprint(part.footprint, at, rotation));
+      if (part) allCells.push(...partCells(part, at, rotation));
     }
     const check = this.checkPlacement(allCells, set);
     if (!check.ok) {
@@ -394,7 +413,7 @@ export class Store {
       if (groupId !== undefined) copy.groupId = groupId;
       copies.push(copy);
       const part = this.part(m.partId);
-      if (part) allCells.push(...placeFootprint(part.footprint, at, m.rotation));
+      if (part) allCells.push(...partCells(part, at, m.rotation));
     }
     const check = this.checkPlacement(allCells);
     if (!check.ok) return { ...check, reason: `Cannot duplicate — ${check.reason ?? 'no room'}` };
@@ -471,15 +490,58 @@ function clampDim(v: number): number {
   return Math.min(20000, Math.max(50, Math.round(v)));
 }
 
-function centroidOf(cells: readonly Hex[]): Hex {
-  if (cells.length === 0) return { q: 0, r: 0 };
-  let q = 0;
-  let r = 0;
-  for (const c of cells) {
-    q += c.q;
-    r += c.r;
+/**
+ * The member of a selection nearest its exact centroid, as the rotation pivot.
+ *
+ * Deterministic (ties break on id) and always a real cell, which is what makes
+ * six 60° steps exactly the identity — the pivot is an item, so it never moves,
+ * so it is the same pivot on every step.
+ */
+function pivotNearestCentroid(members: readonly PlacedItem[]): Hex {
+  const first = members[0];
+  if (!first) return { q: 0, r: 0 };
+  let sq = 0;
+  let sr = 0;
+  for (const m of members) {
+    sq += m.at.q;
+    sr += m.at.r;
   }
-  return { q: Math.round(q / cells.length), r: Math.round(r / cells.length) };
+  const cq = sq / members.length;
+  const cr = members.length === 0 ? 0 : sr / members.length;
+  let best = first;
+  let bestD = Infinity;
+  for (const m of members) {
+    // Distance in the skewed axial basis is fine here: we only need a stable
+    // "most central" choice, not a metric.
+    const d = (m.at.q - cq) ** 2 + (m.at.r - cr) ** 2;
+    if (d < bestD - 1e-9 || (Math.abs(d - bestD) <= 1e-9 && m.id < best.id)) {
+      bestD = d;
+      best = m;
+    }
+  }
+  return best.at;
+}
+
+/**
+ * Cells a catalogue part covers when placed — the SINGLE definition.
+ *
+ * This has to agree with `bom.itemCells` exactly, or the editor and the parts
+ * list disagree about reality: a drop the editor accepts is then reported as an
+ * overlap by the BOM (or the reverse, refusing a legal placement). Two rules
+ * matter and both were previously handled here differently from bom.ts:
+ *
+ *  - a non-zero `anchor` shifts the footprint so the anchor lands on `at`;
+ *  - an empty footprint counts as one cell, not zero. Treating it as zero cells
+ *    made `outside.length === cells.length` true as `0 === 0`, so a malformed
+ *    part was reported "off the wall" wherever it was dropped.
+ */
+export function partCells(part: CatalogPart, at: Hex, rotation: Rotation): Hex[] {
+  const anchor = part.anchor ?? { q: 0, r: 0 };
+  const base =
+    part.footprint.length > 0
+      ? part.footprint.map((c) => ({ q: c.q - anchor.q, r: c.r - anchor.r }))
+      : [{ q: 0, r: 0 }];
+  return placeFootprint(base, at, rotation);
 }
 
 const rotateAxial = hexRotate;

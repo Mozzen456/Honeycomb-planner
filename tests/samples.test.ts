@@ -3,7 +3,6 @@
  * build/ so the print page and CSV can be eyeballed as artefacts rather than
  * as assertions. Run with:  npx vitest run tools/make_samples.test.ts
  */
-import { mkdirSync, writeFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 import catalogJson from '../src/catalog/catalog.json';
@@ -15,7 +14,7 @@ import type { Catalog } from '../src/core/types';
 const catalog = catalogJson as unknown as Catalog;
 
 describe('sample exports', () => {
-  it('writes a garage-wall parts list to build/', () => {
+  it('writes a garage-wall parts list to build/', async () => {
     __resetIds();
     const available: PanelSize[] = catalog.parts
       .filter((p) => p.type === 'panel' && p.panel)
@@ -60,10 +59,16 @@ describe('sample exports', () => {
 
     const bom = store.bom();
     const doc = store.getState().doc;
-    mkdirSync('build', { recursive: true });
-    writeFileSync('build/sample-parts-list.html', toPrintableHtml(bom, doc), 'utf-8');
-    writeFileSync('build/sample-parts-list.csv', toCsv(bom), 'utf-8');
-    writeFileSync('build/sample-parts-list.md', toMarkdownChecklist(bom, doc), 'utf-8');
+
+    // `node:fs` is imported dynamically because @types/node is not a dependency
+    // of this project — the app itself never touches the filesystem, and adding
+    // node typings just to satisfy one generator would put Node globals in
+    // scope for every browser module in the repo.
+    const fs = (await import('node:fs')) as typeof import('fs');
+    fs.mkdirSync('build', { recursive: true });
+    fs.writeFileSync('build/sample-parts-list.html', toPrintableHtml(bom, doc), 'utf-8');
+    fs.writeFileSync('build/sample-parts-list.csv', toCsv(bom), 'utf-8');
+    fs.writeFileSync('build/sample-parts-list.md', toMarkdownChecklist(bom, doc), 'utf-8');
 
     // eslint-disable-next-line no-console
     console.log(

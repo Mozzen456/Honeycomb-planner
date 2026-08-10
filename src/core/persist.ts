@@ -38,6 +38,9 @@ const MAX_STRING = 4096;
 /** Sanity ceiling on collection sizes, so a hostile file cannot allocate forever. */
 const MAX_ARRAY = 200_000;
 
+/** Ceiling on a single panel's cell count — see the check in `migrate`. */
+const MAX_PANEL_CELLS = 20_000;
+
 /** Keys that must never reach an object we build. Prototype pollution vector. */
 const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
@@ -151,10 +154,18 @@ export function deserialize(text: string): LoadResult {
  * handed a live object (from `structuredClone`, an old localStorage shim, a
  * test), so the guarantee has to live here rather than in the reviver.
  */
-function sanitize(value: unknown, seen: WeakSet<object>, depth: number): unknown {
+function sanitize(value: unknown, seen: WeakSet<object>, depth: number, report: string[]): unknown {
   if (value === null) return null;
   const t = typeof value;
-  if (t === 'string') return (value as string).length > MAX_STRING ? (value as string).slice(0, MAX_STRING) : value;
+  if (t === 'string') {
+    const s = value as string;
+    if (s.length <= MAX_STRING) return s;
+    // Silence here is the one failure mode this module exists to prevent.
+    report.push(
+      `A text value of ${s.length} characters was shortened to ${MAX_STRING}.`,
+    );
+    return s.slice(0, MAX_STRING);
+  }
   if (t === 'number' || t === 'boolean') return value;
   if (t !== 'object') return undefined; // function, symbol, bigint, undefined
   if (depth >= MAX_DEPTH) return undefined;
@@ -165,8 +176,14 @@ function sanitize(value: unknown, seen: WeakSet<object>, depth: number): unknown
   try {
     if (Array.isArray(obj)) {
       const n = Math.min(obj.length, MAX_ARRAY);
+      if (obj.length > n) {
+        report.push(
+          `A list of ${obj.length} entries was cut to the ${MAX_ARRAY} entry limit; ` +
+            `${obj.length - n} were dropped.`,
+        );
+      }
       const out: unknown[] = [];
-      for (let i = 0; i < n; i++) out.push(sanitize(obj[i], seen, depth + 1));
+      for (let i = 0; i < n; i++) out.push(sanitize(obj[i], seen, depth + 1, report));
       return out;
     }
     const out: Record<string, unknown> = {};
@@ -174,7 +191,7 @@ function sanitize(value: unknown, seen: WeakSet<object>, depth: number): unknown
     for (const key of Object.keys(obj)) {
       if (DANGEROUS_KEYS.has(key)) continue;
       if (++count > MAX_ARRAY) break;
-      const child = sanitize((obj as Record<string, unknown>)[key], seen, depth + 1);
+      const child = sanitize((obj as Record<string, unknown>)[key], seen, depth + 1, report);
       if (child !== undefined) out[key] = child;
     }
     return out;
@@ -319,7 +336,11 @@ export function migrate(raw: unknown): LoadResult {
 
   let value: unknown;
   try {
-    value = sanitize(raw, new WeakSet(), 0);
+    // Truncation notes go straight into `errors`. Sanitising used to cap array
+    // and string lengths with no way to say so, which meant a 210,000-item file
+    // came back with 10,000 items silently missing and `errors: []` — exactly
+    // the "silently discard my layout" failure this module exists to prevent.
+    value = sanitize(raw, new WeakSet(), 0, errors);
   } catch (e) {
     return { doc: null, errors: [`This data could not be read: ${errorText(e)}`] };
   }
@@ -405,6 +426,19 @@ export function migrate(raw: unknown): LoadResult {
     if (partId === null || partId === '' || origin === null || columns === null || rows === null) {
       errors.push(...local);
       errors.push(`${where} was dropped because it is not a usable panel.`);
+      continue;
+    }
+    // Bounding each factor is not enough: 10000 x 10000 passes both checks and
+    // is 100 million cells. `panelCells` costs ~70 ms per million and is called
+    // several times per render, so a single pasted share link could freeze or
+    // OOM the tab. The largest real panel is 288 cells; 20000 leaves enormous
+    // headroom while keeping the workload bounded.
+    if (columns * rows > MAX_PANEL_CELLS) {
+      errors.push(...local);
+      errors.push(
+        `${where} claims ${columns} × ${rows} = ${columns * rows} cells, far beyond the ` +
+          `${MAX_PANEL_CELLS} cell limit; dropped.`,
+      );
       continue;
     }
     errors.push(...local);

@@ -32,8 +32,13 @@ printed,1,wranch-hoks-1,wranch-hoks-1,accessory,models/Hooks and holders/wranch-
 printed,1,wranch-hoks-2,wranch-hoks-2,accessory,models/Hooks and holders/wranch-hoks-2.stl,no,122,22.1,7.42,122,22.1,7.42
 fastener,350,insert-countersunk,Insert-countersunk,fastener,models/Parts for attaching honeycombs to the wall/Insert-countersunk.stl,yes,18.65,2.29,0.77,6528,801.5,269.01
 fastener,1,double-m4,double M4,insert,models/Fasteners and parts for attaching hooks and objects/double M4.stl,yes,37,4.7,1.58,37,4.7,1.58
+fastener,3,insert-m4,insert M4,insert,models/Fasteners and parts for attaching hooks and objects/insert M4.stl,yes,18.67,2.37,0.79,56,7.1,2.36
 fastener,42,insert-empty,insert-empty,insert,models/Fasteners and parts for attaching hooks and objects/insert-empty.stl,yes,15.33,1.95,0.65,644,81.9,27.44
-shopping,2,,"M4 bolt, 10-16 mm",bought,,,,,,,,
-shopping,2,,M4 nut,bought,,,,,,,,
+fastener,3,insert-with-m3,insert-with-M3,insert,models/Fasteners and parts for attaching hooks and objects/insert-with-M3.stl,yes,18.33,2.33,0.79,55,7,2.36
+shopping,4,,"M3 bolt, 10-16 mm",bought,,,,,,,,
+shopping,2,,"M3 countersunk screw, 10-16 mm",bought,,,,,,,,
+shopping,3,,M3 nut,bought,,,,,,,,
+shopping,8,,"M4 bolt, 10-16 mm",bought,,,,,,,,
+shopping,5,,M4 nut,bought,,,,,,,,
 shopping,350,,"Wall plug, 6 mm",bought,,,,,,,,
 shopping,350,,"Wall screw, 3.5 x 35 mm countersunk",bought,,,,,,,,

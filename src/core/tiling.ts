@@ -183,15 +183,35 @@ function maxRowIndex(wallHeightMm: number): number {
 const bandShift = (r0: number): number => r0 / 2 - Math.floor(r0 / 2);
 
 /**
+ * Half a pitch that odd rows overhang to the LEFT of the even rows.
+ *
+ * `panelCells` staggers by −ceil(r/2), which is the parity the meshes actually
+ * use (tests/panel-parity.test.ts checks the generated map against the measured
+ * footprints). Odd rows therefore sit half a pitch LEFT of even ones, not right.
+ * With the opposite assumption a band's leftmost cells ran 11.8 mm off the edge
+ * of the wall.
+ */
+const leftOverhang = (bandRows: number): number => (bandRows >= 2 ? 0.5 : 0);
+
+/**
+ * Whole-pitch nudge that keeps a band's leftmost cell on the wall.
+ *
+ * `q` is an integer, so the only correction available is a whole pitch. A band
+ * whose row parity puts its odd rows outside the wall is pushed one column
+ * right; the cost is 11.8 mm of unused wall on that band, which is honest and
+ * bounded, whereas the alternative is panels that overhang.
+ */
+const bandBump = (r0: number, bandRows: number): number =>
+  (leftOverhang(bandRows) > bandShift(r0) ? 1 : 0);
+
+/**
  * How many columns wide a band may be before it overruns the wall.
  *
- * Within a band, row `i` sits half a pitch right of row `i − 1`, so the rightmost
- * material belongs to an odd row — which only exists once the band is at least two
- * rows tall. A one-row band is therefore half a pitch narrower for the same column
- * count, and gets its own case rather than being rounded away.
+ * The rightmost material now belongs to an EVEN row (odd rows lean left), so the
+ * limit is set by the band's own left offset after any bump.
  */
 function maxColumnsInBand(wallWidthMm: number, r0: number, bandRows: number): number {
-  const shift = bandShift(r0) + (bandRows >= 2 ? 0.5 : 0);
+  const shift = bandShift(r0) + bandBump(r0, bandRows);
   // PITCH·(shift + columns − 1) + 2·MARGIN_X <= wallWidthMm
   const columns = (wallWidthMm - 2 * MARGIN_X) / PITCH - shift + 1;
   return Math.max(0, Math.floor(columns + EPS));
@@ -211,7 +231,7 @@ function fillBand(
   const usable = byRows.get(bandRows);
   if (usable === undefined) return [];
 
-  const qOrigin = -Math.floor(r0 / 2);
+  const qOrigin = -Math.floor(r0 / 2) + bandBump(r0, bandRows);
   const maxColumns = maxColumnsInBand(wallWidthMm, r0, bandRows);
 
   const out: TiledPanel[] = [];
@@ -256,7 +276,8 @@ function isBetterBand(candidate: BandPlan, incumbent: BandPlan | null): boolean 
 function panelContains(p: TiledPanel, c: Hex): boolean {
   const dr = c.r - p.origin.r;
   if (dr < 0 || dr >= p.rows) return false;
-  const dc = c.q - p.origin.q + Math.floor(dr / 2);
+  // Mirrors panelCells' -ceil(r/2) stagger; floor here would mis-test odd rows.
+  const dc = c.q - p.origin.q + Math.ceil(dr / 2);
   return dc >= 0 && dc < p.columns;
 }
 

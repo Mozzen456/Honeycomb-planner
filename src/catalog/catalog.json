@@ -1,5 +1,5 @@
 {
- "generatedAt": "2026-08-10T21:29:55Z",
+ "generatedAt": "2026-08-10T22:13:32Z",
  "parts": [
   {
    "anchor": {
@@ -152,10 +152,17 @@
     }
    ],
    "group": "Hooks and holders",
-   "hardware": [],
+   "hardware": [
+    {
+     "count": 1,
+     "item": "M4 bolt, 10-16 mm"
+    }
+   ],
    "id": "box",
    "measurement": {
-    "bores": {},
+    "bores": {
+     "M4": 1
+    },
     "confidence": 0.35,
     "interfaceWidths": [],
     "matingAxis": "n/a",
@@ -186,7 +193,12 @@
      "FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
     ]
    },
-   "requires": [],
+   "requires": [
+    {
+     "count": 1,
+     "partId": "insert-m4"
+    }
+   ],
    "sha256": "8397b7ea287e37d7943d8ccbf64e1ec8b4199583f6469280413a7398dafca68b",
    "type": "accessory",
    "volumeMm3": 16628.11
@@ -548,10 +560,17 @@
     }
    ],
    "group": "Hooks and holders",
-   "hardware": [],
+   "hardware": [
+    {
+     "count": 1,
+     "item": "M3 countersunk screw, 10-16 mm"
+    }
+   ],
    "id": "hook-12mm-for-m3",
    "measurement": {
-    "bores": {},
+    "bores": {
+     "countersink": 1
+    },
     "confidence": 0.35,
     "interfaceWidths": [],
     "matingAxis": "n/a",
@@ -582,7 +601,12 @@
      "FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
     ]
    },
-   "requires": [],
+   "requires": [
+    {
+     "count": 1,
+     "partId": "insert-with-m3"
+    }
+   ],
    "sha256": "d0ae7a7df285452279e76e6d487629e6bb6396906e958fcf2e23f2e678977bf3",
    "type": "accessory",
    "volumeMm3": 889.241
@@ -610,10 +634,17 @@
     }
    ],
    "group": "Hooks and holders",
-   "hardware": [],
+   "hardware": [
+    {
+     "count": 1,
+     "item": "M3 countersunk screw, 10-16 mm"
+    }
+   ],
    "id": "hook-25mm-for-m3",
    "measurement": {
-    "bores": {},
+    "bores": {
+     "countersink": 1
+    },
     "confidence": 0.35,
     "interfaceWidths": [],
     "matingAxis": "n/a",
@@ -644,7 +675,12 @@
      "FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
     ]
    },
-   "requires": [],
+   "requires": [
+    {
+     "count": 1,
+     "partId": "insert-with-m3"
+    }
+   ],
    "sha256": "78939331a2fbdcc8496be3259055f784ce82acde943183dd118974076dfa9008",
    "type": "accessory",
    "volumeMm3": 1243.395
@@ -1124,10 +1160,17 @@
     }
    ],
    "group": "Hooks and holders",
-   "hardware": [],
+   "hardware": [
+    {
+     "count": 1,
+     "item": "M3 bolt, 10-16 mm"
+    }
+   ],
    "id": "screw-holder",
    "measurement": {
-    "bores": {},
+    "bores": {
+     "M3": 1
+    },
     "confidence": 0.35,
     "interfaceWidths": [],
     "matingAxis": "n/a",
@@ -1158,7 +1201,12 @@
      "FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
     ]
    },
-   "requires": [],
+   "requires": [
+    {
+     "count": 1,
+     "partId": "insert-with-m3"
+    }
+   ],
    "sha256": "fdd8c10e96b5b2b58fb040cc1f2b83ef7a18c5bd7667a5b6f5f1f91d2902e177",
    "type": "accessory",
    "volumeMm3": 3440.542
@@ -1190,10 +1238,17 @@
     }
    ],
    "group": "Hooks and holders",
-   "hardware": [],
+   "hardware": [
+    {
+     "count": 1,
+     "item": "M4 bolt, 10-16 mm"
+    }
+   ],
    "id": "sd-card-holder",
    "measurement": {
-    "bores": {},
+    "bores": {
+     "M4": 1
+    },
     "confidence": 0.35,
     "interfaceWidths": [],
     "matingAxis": "n/a",
@@ -1224,7 +1279,12 @@
      "FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
     ]
    },
-   "requires": [],
+   "requires": [
+    {
+     "count": 1,
+     "partId": "insert-m4"
+    }
+   ],
    "sha256": "98b849749334cdda446cd90d3c2b59d2e0629014aeb250dfe75c9289d491b2bb",
    "type": "accessory",
    "volumeMm3": 30462.57
@@ -1731,10 +1791,17 @@
     }
    ],
    "group": "Hooks and holders",
-   "hardware": [],
+   "hardware": [
+    {
+     "count": 1,
+     "item": "M4 bolt, 10-16 mm"
+    }
+   ],
    "id": "usb-holder",
    "measurement": {
-    "bores": {},
+    "bores": {
+     "M4": 1
+    },
     "confidence": 0.35,
     "interfaceWidths": [],
     "matingAxis": "n/a",
@@ -1765,7 +1832,12 @@
      "FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
     ]
    },
-   "requires": [],
+   "requires": [
+    {
+     "count": 1,
+     "partId": "insert-m4"
+    }
+   ],
    "sha256": "e9fbe2b870d1914f4025df250cb0609d5b69d130318010784aa038a48cac5c95",
    "type": "accessory",
    "volumeMm3": 62191.875
@@ -1800,7 +1872,9 @@
    "hardware": [],
    "id": "usb-holder-without-screw",
    "measurement": {
-    "bores": {},
+    "bores": {
+     "countersink": 1
+    },
     "confidence": 0.35,
     "interfaceWidths": [],
     "matingAxis": "n/a",

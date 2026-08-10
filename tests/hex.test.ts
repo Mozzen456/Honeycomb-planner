@@ -1005,7 +1005,11 @@ describe('panelCells', () => {
       expect(rowCells).toHaveLength(columns);
       const xs = rowCells.map((c) => hexToMm(c).x);
       const minX = Math.min(...xs);
-      const expected = originX + (r % 2 === 0 ? 0 : STAGGER);
+      // Odd rows sit half a pitch to the LEFT, not the right: panelCells
+      // staggers by -ceil(r/2), which is the parity the meshes actually use.
+      // See tests/panel-parity.test.ts, which checks the generated cell map
+      // against the footprints measured from the STLs.
+      const expected = originX + (r % 2 === 0 ? 0 : -STAGGER);
       expect(minX).toBeCloseTo(expected, 9);
       // each row is a contiguous run of `columns` cells at exactly PITCH spacing
       xs.sort((a, b) => a - b);

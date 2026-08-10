@@ -206,7 +206,17 @@ export function App() {
       wall: state.doc.wall,
       bedId: state.doc.bedId,
       available,
-      allowRotation: true,
+      // MUST stay false. "Rotation" here swaps columns with rows, and 90° is
+      // not a symmetry of a hex lattice — spinning a panel's measured cell
+      // centres by 90° puts them 15.14 mm off the wall grid. With it enabled a
+      // 3000 x 2000 wall produced 17,294 mm² of real panel-on-panel overlap:
+      // panels that physically cannot be built.
+      //
+      // It is also unnecessary. `panel.columns/rows` are already expressed in
+      // the wall frame by the scanner, which canonicalises each STL's drawn
+      // orientation; `widthMm/heightMm` stay in the bed frame for printer fit.
+      // Rotating again applied that conversion twice.
+      allowRotation: false,
     });
     if (res.panels.length === 0) {
       say(res.warnings[0] ?? 'No panel fits that wall and printer', 'error');

@@ -116,7 +116,8 @@ describe('scale', () => {
     const place = timed('place 200 items', () => {
       let placed = 0;
       for (let i = 0; i < 200; i++) {
-        const r = s.addItem('single', { q: (i % 20) - 5, r: Math.floor(i / 20) });
+        const row = Math.floor(i / 20);
+        const r = s.addItem('single', { q: (i % 20) - Math.floor(row / 2), r: row });
         if (r.ok) placed++;
       }
       return placed;
@@ -126,7 +127,7 @@ describe('scale', () => {
     const v = timed('validate 200', () => validate(s.getState().doc, catalog));
     expect(v.value).toEqual([]);
     const b = timed('bom 200', () => computeBom(s.getState().doc, catalog));
-    expect(b.value.totals.parts).toBe(200);
+    expect(b.value.totals.parts).toBe(201); // 200 items + the panel they sit on
 
     const text = timed('serialize 200', () => serialize(s.getState().doc));
     const back = timed('deserialize 200', () => deserialize(text.value));
@@ -139,14 +140,16 @@ describe('scale', () => {
   }, 60_000);
 
   it('2000 items: reports how the cost scales against 200', () => {
-    const s = new Store(docWith(80, 80), catalog);
+    const s = new Store(docWith(50, 40), catalog);
+    const cell = (i: number): Hex => {
+      const row = Math.floor(i / 50);
+      return { q: (i % 50) - Math.floor(row / 2), r: row };
+    };
     const t200 = timed('place first 200 of 2000', () => {
-      for (let i = 0; i < 200; i++) s.addItem('single', { q: (i % 50) - 20, r: Math.floor(i / 50) });
+      for (let i = 0; i < 200; i++) s.addItem('single', cell(i));
     }).t;
     const tRest = timed('place remaining 1800', () => {
-      for (let i = 200; i < 2000; i++) {
-        s.addItem('single', { q: (i % 50) - 20, r: Math.floor(i / 50) });
-      }
+      for (let i = 200; i < 2000; i++) s.addItem('single', cell(i));
     }).t;
     const doc = s.getState().doc;
     expect(doc.items).toHaveLength(2000);
@@ -158,7 +161,7 @@ describe('scale', () => {
     );
 
     timed('validate 2000', () => expect(validate(doc, catalog)).toEqual([]));
-    timed('bom 2000', () => expect(computeBom(doc, catalog).totals.parts).toBe(2000));
+    timed('bom 2000', () => expect(computeBom(doc, catalog).totals.parts).toBe(2001));
     const text = timed('serialize 2000', () => serialize(doc));
     // eslint-disable-next-line no-console
     console.log(`[size] 2000-item document is ${(text.value.length / 1024).toFixed(0)} kB of JSON`);
@@ -306,23 +309,49 @@ describe('placement abuse', () => {
   });
 
   it('rotating a group six times returns it exactly where it started', () => {
-    const s = new Store(docWith(40, 40), catalog);
-    s.addItem('single', { q: 5, r: 10 });
-    s.addItem('single', { q: 6, r: 10 });
-    s.addItem('single', { q: 5, r: 11 });
-    const ids = s.getState().doc.items.map((i) => i.id);
-    s.groupItems(ids);
-    const before = JSON.stringify(s.getState().doc.items);
-    const refusals: string[] = [];
-    for (let i = 0; i < 6; i++) {
-      const r = s.rotateItems(ids, 1);
-      if (!r.ok) refusals.push(`step ${i}: ${r.reason}`);
+    // The pivot is the ROUNDED centroid, so a shape whose centroid is not a
+    // lattice point rotates about a slightly different centre each time. If that
+    // drifts, six 60-degree steps translate the user's group without telling them.
+    const shapes: Array<[string, Hex[]]> = [
+      ['single cell', [{ q: 10, r: 10 }]],
+      ['pair', [{ q: 10, r: 10 }, { q: 11, r: 10 }]],
+      ['L of three', [{ q: 10, r: 10 }, { q: 11, r: 10 }, { q: 10, r: 11 }]],
+      ['diagonal pair', [{ q: 10, r: 10 }, { q: 11, r: 11 }]],
+      ['four in a row', [
+        { q: 8, r: 12 },
+        { q: 9, r: 12 },
+        { q: 10, r: 12 },
+        { q: 11, r: 12 },
+      ]],
+      ['scattered five', [
+        { q: 6, r: 6 },
+        { q: 9, r: 7 },
+        { q: 7, r: 11 },
+        { q: 12, r: 9 },
+        { q: 10, r: 13 },
+      ]],
+    ];
+    const drifted: string[] = [];
+    const refused: string[] = [];
+    for (const [label, cells] of shapes) {
+      const s = new Store(docWith(40, 40), catalog);
+      for (const c of cells) expect(s.addItem('single', c).ok, `${label}: setup`).toBe(true);
+      const ids = s.getState().doc.items.map((i) => i.id);
+      if (ids.length > 1) s.groupItems(ids);
+      const before = s.getState().doc.items.map((i) => `${i.at.q},${i.at.r}`).join(' ');
+      for (let i = 0; i < 6; i++) {
+        const r = s.rotateItems(ids, 1);
+        if (!r.ok) refused.push(`${label} step ${i}: ${r.reason}`);
+      }
+      const after = s.getState().doc.items.map((i) => `${i.at.q},${i.at.r}`).join(' ');
+      if (after !== before) drifted.push(`${label}: [${before}] -> [${after}]`);
     }
-    expect(refusals, 'a rotation in open space was refused').toEqual([]);
+    expect(refused, 'a rotation in open space was refused').toEqual([]);
     expect(
-      JSON.stringify(s.getState().doc.items),
-      'six 60-degree rotations must be the identity; the parts have been moved',
-    ).toBe(before);
+      drifted,
+      'six 60-degree rotations must be the identity; these groups were silently moved ' +
+        '(rotateItems pivots on the ROUNDED centroid, which changes every step)',
+    ).toEqual([]);
   });
 
   it('survives negative, zero and absurd rotation step counts without corrupting rotation', () => {
@@ -425,18 +454,26 @@ describe('placement abuse', () => {
     expect(JSON.parse(s3).selection).toEqual(s.getState().selection);
   });
 
-  it('undo after a selection-only change still restores the selection it had', () => {
+  it('undo restores the selection as it was immediately before the undone command', () => {
     const s = new Store(docWith(20, 20), catalog);
     s.addItem('single', { q: 3, r: 3 });
     const id = s.getState().doc.items[0]!.id;
-    const placed = snap(s);
-    s.select([]); // selection-only, deliberately not an undo step
+    s.select([id]);
+    const beforeDelete = snap(s);
+    s.deleteItems([id]);
+    expect(s.getState().selection).toEqual([]);
+    s.undo();
+    expect(snap(s), 'undo of a delete lost the selection that was live at the time').toBe(
+      beforeDelete,
+    );
+
+    // A selection-only change is deliberately not an undo step; the next undo
+    // must therefore restore the selection as it stood when the command ran.
+    s.select([]);
+    const beforeSecond = snap(s);
     s.addItem('single', { q: 5, r: 5 });
     s.undo();
-    expect(
-      snap(s),
-      'undo restored the document but not the selection that produced it',
-    ).toBe(placed);
+    expect(snap(s)).toBe(beforeSecond);
   });
 
   it('duplicating a group onto itself is refused, not silently merged', () => {
@@ -680,6 +717,42 @@ describe('persistence abuse', () => {
     }
   }, 120_000);
 
+  it('a real file with more than 200k items does not lose the overflow in silence', () => {
+    // The realistic path: a saved file, not a hand-built object.
+    const items = Array.from({ length: 210_000 }, (_, i) => ({
+      id: `x${i}`,
+      partId: 's',
+      at: { q: 0, r: i },
+      rotation: 0,
+    }));
+    const text = JSON.stringify({ ...goodDoc, items });
+    // eslint-disable-next-line no-console
+    console.log(`[size] 210k-item file is ${(text.length / (1024 * 1024)).toFixed(1)} MB`);
+    const res = timed('deserialize 210k items', () => deserialize(text));
+    expect(res.value.doc).not.toBeNull();
+    const kept = res.value.doc!.items.length;
+    if (kept < items.length) {
+      expect(
+        res.value.errors.length,
+        `${items.length - kept} of ${items.length} items vanished with no error at all — ` +
+          `this is the exact failure mode persist.ts says it exists to prevent`,
+      ).toBeGreaterThan(0);
+    }
+  }, 300_000);
+
+  it('an over-long name is not truncated in silence', () => {
+    const long = 'N'.repeat(10_000);
+    const res = deserialize(serialize({ ...goodDoc, name: long }));
+    expect(res.doc).not.toBeNull();
+    if (res.doc!.name.length < long.length) {
+      expect(
+        res.errors.length,
+        `the layout name was cut from ${long.length} to ${res.doc!.name.length} characters ` +
+          `without a word to the user`,
+      ).toBeGreaterThan(0);
+    }
+  });
+
   it('share links: broken hash, wrong base64, wrong scheme, future schema', () => {
     const bad = [
       'https://x/planner',
@@ -746,7 +819,9 @@ describe('persistence abuse', () => {
         panels: Array.from({ length: 12 }, (_, i) => ({
           id: `p${i}`,
           partId: 'panel-a',
-          origin: { q: -i, r: i * 8 },
+          // 0 - 0 is -0, which JSON writes as 0: a cosmetic round-trip
+          // infidelity, kept out of this fixture so it does not mask real ones.
+          origin: { q: i === 0 ? 0 : -i, r: i * 8 },
           columns: 7,
           rows: 8,
         })),

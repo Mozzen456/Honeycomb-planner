@@ -1,4 +1,4 @@
-﻿"""Catalogue scanner.
+"""Catalogue scanner.
 
     python tools/scan.py            # measure new/changed files, append, keep the rest
     python tools/scan.py --rescan   # ignore the cache and re-measure everything
@@ -37,7 +37,7 @@ SCHEMA_VERSION = 1
 SCANNER_VERSION = "1.1.0"
 # Bumped whenever the measurement code changes meaning. The cache keys on it, so
 # a logic fix invalidates stale measurements instead of silently keeping them.
-MEASURE_VERSION = 3
+MEASURE_VERSION = 4
 CATALOG = ROOT / "src" / "catalog" / "catalog.json"
 OVERRIDES = ROOT / "src" / "catalog" / "overrides.json"
 CACHE = ROOT / "build" / "measure-cache.json"
@@ -97,17 +97,38 @@ def overhang_report(mesh) -> dict:
 
 
 def count_bores(mesh) -> dict[str, int]:
-    """Distinct screw bores by metric family, from circle fits.
+    """Distinct screw bores by metric family, across all three axes.
 
-    Counting every circular cross-section independently is wrong: a countersink
-    is a cone, so it presents a different diameter in every band, and its
-    mid-cone sections land squarely in the M4 and M5 tolerance windows. That
-    made every countersunk wall fastener claim an M5 bolt it does not take.
+    Two things this has to get right, both of which it got wrong at first:
 
-    So bores are grouped by CENTRE first, and each hole is sized by its narrowest
-    section -- the shank hole, which is the only diameter a screw has to pass.
-    A hole whose diameter varies is a countersink and is reported as such.
+    1. A countersink is a cone, so it presents a different diameter in every
+       slice and its mid-cone sections land squarely in the M4 and M5 tolerance
+       windows. Every countersunk wall fastener was claiming an M5 bolt it does
+       not take. Bores are therefore grouped by centre DISTANCE (rounding the
+       centre split one cone across a boundary into two holes) and each hole is
+       sized by its NARROWEST section -- the shank hole, the only diameter a
+       screw actually has to pass.
+
+    2. A bore only reads as a circle when sliced perpendicular to its own axis,
+       and these parts are drawn lying on whichever face suited the print bed.
+       Scanning Z alone found nothing in `hook-12mm-for-M3` -- a part whose name
+       says M3 -- so it required no insert and no bolt, and the parts list
+       quietly omitted the hardware needed to actually hang it on the wall.
+
+    Results are taken as the MAX per family across axes rather than the sum: a
+    hole is only visible on its own axis, so summing cannot double count, but
+    max is the conservative reading and this code does not invent fasteners.
     """
+    best: dict[str, int] = {}
+    for axis in (2, 0, 1):
+        found = _count_bores_one_axis(fpmod._oriented(mesh, axis))
+        for tag, n in found.items():
+            if n > best.get(tag, 0):
+                best[tag] = n
+    return best
+
+
+def _count_bores_one_axis(mesh) -> dict[str, int]:
     holes: dict[tuple, list[float]] = {}
     levels = [z for z, _ in z_levels(mesh)]
     for k in range(len(levels) - 1):
@@ -278,17 +299,32 @@ def requirements(rel: str, ptype: str, m: dict, ids: set[str]) -> tuple[list, li
     if m["tier"] == "wall-clip":
         return requires, hardware
 
+    pid_for = {"M3": "insert-with-m3", "M4": "insert-m4", "M5": "insert-m5"}
     for tag in ("M5", "M4", "M3"):
         if tag in bores:
-            pid = {"M3": "insert-with-m3", "M4": "insert-m4", "M5": "insert-m5"}[tag]
+            pid = pid_for[tag]
             if pid in ids:
                 requires.append({"partId": pid, "count": bores[tag]})
                 hardware.append({"item": f"{tag} bolt, 10-16 mm", "count": bores[tag]})
             break
     else:
-        if m.get("socketWidths"):
-            if "insert-empty" in ids:
-                requires.append({"partId": "insert-empty", "count": cells})
+        # A countersunk mounting hole takes a countersunk screw, whose shank
+        # clearance (~3.5 mm for M3) sits just outside the plain-bolt window, so
+        # the bore alone cannot name the thread. Here the filename is real
+        # evidence and geometry is not: `hook-12mm-for-M3` has a countersink and
+        # says M3. Using both is honest; using neither would silently ship a
+        # hook with nothing to bolt it to. Recorded in provenance either way.
+        stem = pathlib.Path(rel).stem.lower()
+        named = next((t for t in ("m5", "m4", "m3") if t in stem), None)
+        if bores.get("countersink") and named:
+            tag = named.upper()
+            pid = pid_for[tag]
+            n = bores["countersink"]
+            if pid in ids:
+                requires.append({"partId": pid, "count": n})
+                hardware.append({"item": f"{tag} countersunk screw, 10-16 mm", "count": n})
+        elif m.get("socketWidths") and "insert-empty" in ids:
+            requires.append({"partId": "insert-empty", "count": cells})
     return requires, hardware
 
 
