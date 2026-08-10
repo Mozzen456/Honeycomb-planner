@@ -1,0 +1,494 @@
+/* =============================================================================
+   Honeycomb Planner — element-level base
+   =============================================================================
+
+   Resets and default typography for bare HTML elements. Every value here comes
+   from tokens.css. There are no colour literals, no magic pixel values, and no
+   component styles — a `.button` or a `.panel` does not belong in this file.
+
+   Importing this file is enough: it pulls tokens.css in itself.
+   ============================================================================= */
+
+@import "./tokens.css";
+
+/* -----------------------------------------------------------------------------
+   1. Reset
+   -------------------------------------------------------------------------- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* Kill the UA's inherited margins outright. Spacing is a layout decision made
+   with --space-*, never something an element brings with it. */
+:where(
+  body, h1, h2, h3, h4, h5, h6, p, figure, blockquote,
+  dl, dd, ol, ul, fieldset, legend, pre, hr
+) {
+  margin: 0;
+  padding: 0;
+}
+
+:where(ul, ol)[role="list"] {
+  list-style: none;
+}
+
+/* -----------------------------------------------------------------------------
+   2. Document
+   -------------------------------------------------------------------------- */
+
+html {
+  /* No font-size override: the user's browser setting is the rem base, which is
+     the only reason the rem type scale is worth having. */
+  block-size: 100%;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  min-block-size: 100%;
+
+  /* Explicit token background — the app shell ground, level 0. */
+  background-color: var(--surface-0);
+  color: var(--text-primary);
+
+  font-family: var(--font-sans);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--line-height-normal);
+  letter-spacing: var(--letter-spacing-normal);
+
+  /* 13px UI text on both a light and a near-black ground: grayscale AA keeps
+     the stems even instead of fringing warm on dark. */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  /* This is an application, not a document: no rubber-banding, no
+     pull-to-refresh interrupting a drag on a tablet. */
+  overscroll-behavior: none;
+}
+
+/* React mount point. Named here so no layout file has to guess at it. */
+#root {
+  block-size: 100%;
+  isolation: isolate; /* keeps app z-index tokens out of any host stacking context */
+}
+
+/* -----------------------------------------------------------------------------
+   3. Typography
+   -------------------------------------------------------------------------- */
+
+:where(h1, h2, h3, h4, h5, h6) {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+  text-wrap: balance;
+}
+
+h1 {
+  font-size: var(--font-size-2xl);
+  letter-spacing: var(--letter-spacing-tight); /* only earned at >= 24px */
+}
+h2 { font-size: var(--font-size-xl); }
+h3 { font-size: var(--font-size-lg); }
+h4 { font-size: var(--font-size-md); }
+h5 { font-size: var(--font-size-sm); }
+
+/* h6 is the panel/section eyebrow: the smallest label in the product, so it
+   gets caps, extra tracking and the medium weight to stay legible at 11px. */
+h6 {
+  color: var(--text-secondary);
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: var(--letter-spacing-caps);
+  text-transform: uppercase;
+}
+
+p {
+  text-wrap: pretty;
+}
+
+p + p {
+  margin-block-start: var(--space-3);
+}
+
+small {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+}
+
+strong, b {
+  font-weight: var(--font-weight-semibold);
+}
+
+/* Deliberately not `medium`: em is for emphasis in prose, and prose is rare
+   here. Keep it italic rather than inventing a second emphasis channel. */
+em, i {
+  font-style: italic;
+}
+
+a {
+  color: var(--accent);
+  text-decoration-line: underline;
+  text-decoration-thickness: from-font;
+  text-underline-offset: var(--space-0-5);
+  transition: color var(--duration-fast) var(--ease-standard);
+}
+
+a:hover {
+  color: var(--accent-hover);
+}
+
+a:active {
+  color: var(--accent-active);
+}
+
+:where(ul, ol) {
+  padding-inline-start: var(--space-5);
+}
+
+hr {
+  border: 0;
+  border-block-start: var(--border-width-hair) solid var(--border-subtle);
+  margin-block: var(--space-4);
+}
+
+abbr[title] {
+  text-decoration: underline dotted;
+  cursor: help;
+}
+
+::selection {
+  background-color: var(--selection-bg);
+  color: var(--text-primary);
+}
+
+/* -----------------------------------------------------------------------------
+   4. Numerals and mono
+   -------------------------------------------------------------------------- */
+
+/* Everything that carries a measurement gets tabular figures by default, so a
+   quantity changing from 9 to 10 does not shift the column. Millimetres, grams,
+   minutes and counts all live in these elements. */
+:where(code, kbd, samp, pre) {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  font-variant-numeric: var(--font-numeric-tabular);
+}
+
+pre {
+  overflow-x: auto;
+  line-height: var(--line-height-snug);
+}
+
+kbd {
+  padding: var(--space-0-5) var(--space-1);
+  border: var(--border-width-hair) solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background-color: var(--surface-2);
+  color: var(--text-secondary);
+  font-size: var(--font-size-2xs);
+}
+
+/* -----------------------------------------------------------------------------
+   5. Tables — the parts list and the BOM
+   -------------------------------------------------------------------------- */
+
+table {
+  border-collapse: collapse;
+  inline-size: 100%;
+  font-variant-numeric: var(--font-numeric-tabular);
+}
+
+caption {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+  text-align: start;
+  padding-block-end: var(--space-2);
+}
+
+th {
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  text-align: start;
+  line-height: var(--line-height-snug);
+}
+
+td {
+  line-height: var(--line-height-snug);
+}
+
+:where(th, td) {
+  padding: var(--space-2) var(--space-3);
+  border-block-end: var(--border-width-hair) solid var(--border-subtle);
+  vertical-align: baseline;
+}
+
+/* -----------------------------------------------------------------------------
+   6. Media
+   -------------------------------------------------------------------------- */
+
+:where(img, svg, video, canvas) {
+  display: block;
+  max-inline-size: 100%;
+}
+
+:where(img, video) {
+  block-size: auto;
+}
+
+svg {
+  fill: currentColor;
+  flex-shrink: 0;
+}
+
+/* The wall. `touch-action: none` is load-bearing: without it a one-finger drag
+   on a tablet scrolls the page instead of moving the part being placed. */
+canvas {
+  touch-action: none;
+}
+
+/* -----------------------------------------------------------------------------
+   7. Forms and controls
+   -------------------------------------------------------------------------- */
+
+:where(button, input, select, textarea, optgroup) {
+  font: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+  margin: 0;
+}
+
+/* Native accents (checkbox ticks, range tracks, spinners) follow the one
+   accent colour instead of the OS blue. */
+:where(input, select, textarea, progress) {
+  accent-color: var(--accent);
+}
+
+button {
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-align: inherit;
+}
+
+:where(button, label, summary, [role="button"]) {
+  /* A double-click on a control should activate it twice, not select its text —
+     particularly on the canvas toolbar during a drag. */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Text-entry controls only. Checkboxes, radios, ranges and file pickers keep
+   their native box — giving them a 32px min-height and a border deforms them. */
+:where(
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="color"]),
+  textarea,
+  select
+) {
+  background-color: var(--surface-2);
+  border: var(--border-width-hair) solid var(--border-default);
+  border-radius: var(--radius-sm);
+  padding-inline: var(--space-2);
+  min-block-size: var(--control-height-md);
+  transition: border-color var(--duration-fast) var(--ease-standard);
+}
+
+:where(
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="color"]),
+  textarea,
+  select
+):hover:not(:disabled) {
+  border-color: var(--border-strong);
+}
+
+textarea {
+  padding-block: var(--space-2);
+  line-height: var(--line-height-normal);
+  resize: vertical;
+}
+
+/* Numeric inputs are measurements — mm, counts, wall size. Tabular, always. */
+input[type="number"],
+input[type="text"][inputmode="numeric"],
+output {
+  font-variant-numeric: var(--font-numeric-tabular);
+}
+
+::placeholder {
+  color: var(--text-tertiary);
+  opacity: 1; /* Firefox dims placeholders further; the token is already correct */
+}
+
+:where(button, input, select, textarea, a, [role="button"]):disabled,
+[aria-disabled="true"] {
+  color: var(--text-disabled);
+  cursor: not-allowed;
+}
+
+fieldset {
+  border: var(--border-width-hair) solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+}
+
+legend {
+  padding-inline: var(--space-1);
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+}
+
+summary {
+  cursor: pointer;
+}
+
+dialog {
+  background-color: var(--surface-3);
+  color: var(--text-primary);
+  border: var(--border-width-hair) solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: var(--space-5);
+}
+
+dialog::backdrop {
+  background-color: var(--scrim);
+}
+
+/* -----------------------------------------------------------------------------
+   8. Focus
+   -------------------------------------------------------------------------- */
+
+/* One ring for the whole app. Drawn as an outline so it costs no layout and
+   cannot be clipped by a scrolling ancestor the way an inset shadow can. */
+:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+  border-radius: var(--radius-sm);
+}
+
+/* Pointer focus stays silent; keyboard focus never does. */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* -----------------------------------------------------------------------------
+   9. Touch targets
+   -------------------------------------------------------------------------- */
+
+/* On a coarse pointer every control grows to the 44px minimum. On a mouse the
+   dense heights stand, because a trackpad user is paying for the density. */
+@media (pointer: coarse) {
+  :where(button, select, summary, [role="button"], [role="tab"], [role="menuitem"]) {
+    min-block-size: var(--tap-target-min);
+  }
+
+  /* Same exclusion as above: a 44px-tall checkbox is a 44px checkbox, not a
+     44px target around a small one. Those use .hit-area instead. */
+  :where(
+    input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="color"]),
+    textarea
+  ) {
+    min-block-size: var(--tap-target-min);
+  }
+}
+
+/* Opt-in hit expansion for controls that must stay visually small — icon
+   toggles in the top bar, checkboxes in the parts list. The pseudo-element
+   enlarges the hit rectangle to 44 x 44 without touching layout, so a 24px
+   toolbar icon is still a legal touch target. Requires a positioning context,
+   which the rule provides. */
+.hit-area {
+  position: relative;
+}
+
+.hit-area::after {
+  content: "";
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: 50%;
+  translate: -50% -50%;
+  inline-size: 100%;
+  block-size: 100%;
+  min-inline-size: var(--tap-target-min);
+  min-block-size: var(--tap-target-min);
+}
+
+/* -----------------------------------------------------------------------------
+   10. Scrollbars
+   -------------------------------------------------------------------------- */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-default) transparent;
+}
+
+::-webkit-scrollbar {
+  inline-size: var(--space-2);
+  block-size: var(--space-2);
+}
+
+::-webkit-scrollbar-track {
+  background-color: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--border-default);
+  border-radius: var(--radius-pill);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--border-strong);
+}
+
+/* -----------------------------------------------------------------------------
+   11. The three utilities that are genuinely element-level
+   -------------------------------------------------------------------------- */
+
+/* Force tabular figures on a span of text that is not in one of the elements
+   covered above — a count inside a heading, a total inside a button. */
+.tabular-nums {
+  font-variant-numeric: var(--font-numeric-tabular);
+}
+
+/* Available to screen readers, invisible on screen. Needed by the canvas: the
+   wall is a <canvas>, so its state has to be narrated somewhere. */
+.visually-hidden:not(:focus):not(:active) {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+/* -----------------------------------------------------------------------------
+   12. Reduced motion
+   -------------------------------------------------------------------------- */
+
+/* tokens.css already collapses the duration tokens, which covers everything
+   built correctly. This catches anything hand-rolled or third-party, and stops
+   smooth-scroll, which no duration token governs. */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: var(--duration-fast) !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: var(--duration-fast) !important;
+    scroll-behavior: auto !important;
+  }
+}

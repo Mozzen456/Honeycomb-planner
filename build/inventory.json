@@ -1,0 +1,1430 @@
+[
+ {
+  "file": "models/375x389-fixed.stl",
+  "name": "375x389-fixed",
+  "group": ".",
+  "bytes": 948284,
+  "stl_format": "binary",
+  "triangles": 18964,
+  "vertices_raw": 56892,
+  "bbox_min": [
+   491.7329,
+   -247.0389,
+   4.0
+  ],
+  "bbox_max": [
+   866.43,
+   142.3611,
+   12.0
+  ],
+  "size_mm": [
+   374.6971,
+   389.4,
+   8.0
+  ],
+  "volume_mm3": 259974.647,
+  "area_mm2": 240709.062,
+  "watertight": false,
+  "bodies": 18964
+ },
+ {
+  "file": "models/Fasteners and parts for attaching hooks and objects/double M4.stl",
+  "name": "double M4",
+  "group": "Fasteners and parts for attaching hooks and objects",
+  "bytes": 79884,
+  "stl_format": "binary",
+  "triangles": 1596,
+  "vertices_raw": 4788,
+  "bbox_min": [
+   121.3234,
+   66.1627,
+   0.0
+  ],
+  "bbox_max": [
+   167.7424,
+   100.4627,
+   10.0
+  ],
+  "size_mm": [
+   46.419,
+   34.3,
+   10.0
+  ],
+  "volume_mm3": 5777.222,
+  "area_mm2": 4360.023,
+  "watertight": false,
+  "bodies": 1596
+ },
+ {
+  "file": "models/Fasteners and parts for attaching hooks and objects/double M5.stl",
+  "name": "double M5",
+  "group": "Fasteners and parts for attaching hooks and objects",
+  "bytes": 81684,
+  "stl_format": "binary",
+  "triangles": 1632,
+  "vertices_raw": 4896,
+  "bbox_min": [
+   74.789,
+   66.1627,
+   0.0
+  ],
+  "bbox_max": [
+   121.208,
+   100.4627,
+   10.0
+  ],
+  "size_mm": [
+   46.419,
+   34.3,
+   10.0
+  ],
+  "volume_mm3": 5632.332,
+  "area_mm2": 4377.486,
+  "watertight": false,
+  "bodies": 1632
+ },
+ {
+  "file": "models/Fasteners and parts for attaching hooks and objects/insert M4.stl",
+  "name": "insert M4",
+  "group": "Fasteners and parts for attaching hooks and objects",
+  "bytes": 43884,
+  "stl_format": "binary",
+  "triangles": 876,
+  "vertices_raw": 2628,
+  "bbox_min": [
+   125.8935,
+   106.9753,
+   0.0
+  ],
+  "bbox_max": [
+   151.8743,
+   129.4753,
+   10.0
+  ],
+  "size_mm": [
+   25.9808,
+   22.5,
+   10.0
+  ],
+  "volume_mm3": 2872.821,
+  "area_mm2": 2191.866,
+  "watertight": false,
+  "bodies": 876
+ },
+ {
+  "file": "models/Fasteners and parts for attaching hooks and objects/insert M5.stl",
+  "name": "insert M5",
+  "group": "Fasteners and parts for attaching hooks and objects",
+  "bytes": 45284,
+  "stl_format": "binary",
+  "triangles": 904,
+  "vertices_raw": 2712,
+  "bbox_min": [
+   43.2199,
+   141.0703,
+   0.0
+  ],
+  "bbox_max": [
+   69.2006,
+   163.5703,
+   10.0
+  ],
+  "size_mm": [
+   25.9808,
+   22.5,
+   10.0
+  ],
+  "volume_mm3": 2800.345,
+  "area_mm2": 2200.58,
+  "watertight": false,
+  "bodies": 904
+ },
+ {
+  "file": "models/Fasteners and parts for attaching hooks and objects/insert-empty.stl",
+  "name": "insert-empty",
+  "group": "Fasteners and parts for attaching hooks and objects",
+  "bytes": 29484,
+  "stl_format": "binary",
+  "triangles": 588,
+  "vertices_raw": 1764,
+  "bbox_min": [
+   43.2199,
+   112.5703,
+   0.0
+  ],
+  "bbox_max": [
+   69.2006,
+   135.0703,
+   10.0
+  ],
+  "size_mm": [
+   25.9808,
+   22.5,
+   10.0
+  ],
+  "volume_mm3": 1872.098,
+  "area_mm2": 2118.457,
+  "watertight": false,
+  "bodies": 588
+ },
+ {
+  "file": "models/Fasteners and parts for attaching hooks and objects/insert-hollow-dual.stl",
+  "name": "insert-hollow-dual",
+  "group": "Fasteners and parts for attaching hooks and objects",
+  "bytes": 57884,
+  "stl_format": "binary",
+  "triangles": 1156,
+  "vertices_raw": 3468,
+  "bbox_min": [
+   74.789,
+   103.0909,
+   0.0
+  ],
+  "bbox_max": [
+   121.208,
+   137.3909,
+   10.0
+  ],
+  "size_mm": [
+   46.419,
+   34.3,
+   10.0
+  ],
+  "volume_mm3": 3771.36,
+  "area_mm2": 4197.065,
+  "watertight": false,
+  "bodies": 1156
+ },
+ {
+  "file": "models/Fasteners and parts for attaching hooks and objects/insert-hollow-for.stl",
+  "name": "insert-hollow-for",
+  "group": "Fasteners and parts for attaching hooks and objects",
+  "bytes": 115284,
+  "stl_format": "binary",
+  "triangles": 2304,
+  "vertices_raw": 6912,
+  "bbox_min": [
+   22.7817,
+   52.0421,
+   0.0
+  ],
+  "bbox_max": [
+   69.2006,
+   109.9421,
+   10.0
+  ],
+  "size_mm": [
+   46.419,
+   57.9,
+   10.0
+  ],
+  "volume_mm3": 7639.333,
+  "area_mm2": 8310.489,
+  "watertight": false,
+  "bodies": 2304
+ },
+ {
+  "file": "models/Fasteners and parts for attaching hooks and objects/insert-hollow-tre.stl",
+  "name": "insert-hollow-tre",
+  "group": "Fasteners and parts for attaching hooks and objects",
+  "bytes": 86584,
+  "stl_format": "binary",
+  "triangles": 1730,
+  "vertices_raw": 5190,
+  "bbox_min": [
+   69.1935,
+   16.4297,
+   0.0
+  ],
+  "bbox_max": [
+   115.6124,
+   62.5297,
+   10.0
+  ],
+  "size_mm": [
+   46.419,
+   46.1,
+   10.0
+  ],
+  "volume_mm3": 5705.346,
+  "area_mm2": 6253.777,
+  "watertight": false,
+  "bodies": 1730
+ },
+ {
+  "file": "models/Fasteners and parts for attaching hooks and objects/Insert-with-M3-dual.stl",
+  "name": "Insert-with-M3-dual",
+  "group": "Fasteners and parts for attaching hooks and objects",
+  "bytes": 77484,
+  "stl_format": "binary",
+  "triangles": 1548,
+  "vertices_raw": 4644,
+  "bbox_min": [
+   115.5522,
+   32.5666,
+   0.0
+  ],
+  "bbox_max": [
+   161.9711,
+   66.8666,
+   10.0
+  ],
+  "size_mm": [
+   46.419,
+   34.3,
+   10.0
+  ],
+  "volume_mm3": 5961.342,
+  "area_mm2": 4314.198,
+  "watertight": false,
+  "bodies": 1548
+ },
+ {
+  "file": "models/Fasteners and parts for attaching hooks and objects/insert-with-M3.stl",
+  "name": "insert-with-M3",
+  "group": "Fasteners and parts for attaching hooks and objects",
+  "bytes": 38284,
+  "stl_format": "binary",
+  "triangles": 764,
+  "vertices_raw": 2292,
+  "bbox_min": [
+   12.2576,
+   115.9421,
+   0.0
+  ],
+  "bbox_max": [
+   38.2384,
+   138.4421,
+   10.0
+  ],
+  "size_mm": [
+   25.9808,
+   22.5,
+   10.0
+  ],
+  "volume_mm3": 2963.726,
+  "area_mm2": 2171.191,
+  "watertight": false,
+  "bodies": 764
+ },
+ {
+  "file": "models/Hooks and holders/20-micro-sd-card-holder.stl",
+  "name": "20-micro-sd-card-holder",
+  "group": "Hooks and holders",
+  "bytes": 47884,
+  "stl_format": "binary",
+  "triangles": 956,
+  "vertices_raw": 2868,
+  "bbox_min": [
+   77.0096,
+   78.75,
+   0.0
+  ],
+  "bbox_max": [
+   102.9904,
+   101.25,
+   50.0
+  ],
+  "size_mm": [
+   25.9808,
+   22.5,
+   50.0
+  ],
+  "volume_mm3": 16330.176,
+  "area_mm2": 10243.401,
+  "watertight": false,
+  "bodies": 956
+ },
+ {
+  "file": "models/Hooks and holders/5-micro-sd-card-holder.stl",
+  "name": "5-micro-sd-card-holder",
+  "group": "Hooks and holders",
+  "bytes": 32084,
+  "stl_format": "binary",
+  "triangles": 640,
+  "vertices_raw": 1920,
+  "bbox_min": [
+   64.6688,
+   93.0,
+   0.0
+  ],
+  "bbox_max": [
+   90.6495,
+   115.5,
+   30.0
+  ],
+  "size_mm": [
+   25.9808,
+   22.5,
+   30.0
+  ],
+  "volume_mm3": 10267.472,
+  "area_mm2": 4871.693,
+  "watertight": false,
+  "bodies": 640
+ },
+ {
+  "file": "models/Hooks and holders/box-and-usb-holder-cover.stl",
+  "name": "box-and-usb-holder-cover",
+  "group": "Hooks and holders",
+  "bytes": 24284,
+  "stl_format": "binary",
+  "triangles": 484,
+  "vertices_raw": 1452,
+  "bbox_min": [
+   92.8255,
+   60.9221,
+   0.0
+  ],
+  "bbox_max": [
+   131.9698,
+   94.824,
+   5.0
+  ],
+  "size_mm": [
+   39.1444,
+   33.902,
+   5.0
+  ],
+  "volume_mm3": 2156.688,
+  "area_mm2": 2202.841,
+  "watertight": false,
+  "bodies": 484
+ },
+ {
+  "file": "models/Hooks and holders/box-without-screw.stl",
+  "name": "box-without-screw",
+  "group": "Hooks and holders",
+  "bytes": 22684,
+  "stl_format": "binary",
+  "triangles": 452,
+  "vertices_raw": 1356,
+  "bbox_min": [
+   40.812,
+   94.1061,
+   0.0
+  ],
+  "bbox_max": [
+   87.0,
+   157.1061,
+   40.0024
+  ],
+  "size_mm": [
+   46.188,
+   63.0,
+   40.0024
+  ],
+  "volume_mm3": 17117.916,
+  "area_mm2": 13082.109,
+  "watertight": false,
+  "bodies": 452
+ },
+ {
+  "file": "models/Hooks and holders/box.stl",
+  "name": "box",
+  "group": "Hooks and holders",
+  "bytes": 47484,
+  "stl_format": "binary",
+  "triangles": 948,
+  "vertices_raw": 2844,
+  "bbox_min": [
+   93.0,
+   100.8241,
+   0.0
+  ],
+  "bbox_max": [
+   139.188,
+   155.8241,
+   40.0023
+  ],
+  "size_mm": [
+   46.188,
+   55.0,
+   40.0023
+  ],
+  "volume_mm3": 16628.11,
+  "area_mm2": 12802.803,
+  "watertight": false,
+  "bodies": 948
+ },
+ {
+  "file": "models/Hooks and holders/caliper-mount.stl",
+  "name": "caliper-mount",
+  "group": "Hooks and holders",
+  "bytes": 50184,
+  "stl_format": "binary",
+  "triangles": 1002,
+  "vertices_raw": 3006,
+  "bbox_min": [
+   61.5301,
+   79.075,
+   0.0
+  ],
+  "bbox_max": [
+   118.4699,
+   100.925,
+   16.0
+  ],
+  "size_mm": [
+   56.9398,
+   21.85,
+   16.0
+  ],
+  "volume_mm3": 4200.622,
+  "area_mm2": 2802.925,
+  "watertight": false,
+  "bodies": 1002
+ },
+ {
+  "file": "models/Hooks and holders/hook-12mm-for-M3.stl",
+  "name": "hook-12mm-for-M3",
+  "group": "Hooks and holders",
+  "bytes": 39284,
+  "stl_format": "binary",
+  "triangles": 784,
+  "vertices_raw": 2352,
+  "bbox_min": [
+   477.1584,
+   150.5266,
+   0.0
+  ],
+  "bbox_max": [
+   486.4128,
+   170.5266,
+   13.0
+  ],
+  "size_mm": [
+   9.2545,
+   20.0,
+   13.0
+  ],
+  "volume_mm3": 889.241,
+  "area_mm2": 1063.007,
+  "watertight": false,
+  "bodies": 784
+ },
+ {
+  "file": "models/Hooks and holders/hook-25mm-for-M3.stl",
+  "name": "hook-25mm-for-M3",
+  "group": "Hooks and holders",
+  "bytes": 39584,
+  "stl_format": "binary",
+  "triangles": 790,
+  "vertices_raw": 2370,
+  "bbox_min": [
+   493.4815,
+   4.5102,
+   0.0
+  ],
+  "bbox_max": [
+   502.736,
+   37.5102,
+   13.0
+  ],
+  "size_mm": [
+   9.2545,
+   33.0,
+   13.0
+  ],
+  "volume_mm3": 1243.395,
+  "area_mm2": 1668.113,
+  "watertight": false,
+  "bodies": 790
+ },
+ {
+  "file": "models/Hooks and holders/hook-bottom.stl",
+  "name": "hook-bottom",
+  "group": "Hooks and holders",
+  "bytes": 5884,
+  "stl_format": "binary",
+  "triangles": 116,
+  "vertices_raw": 348,
+  "bbox_min": [
+   80.8032,
+   83.9893,
+   -0.0
+  ],
+  "bbox_max": [
+   113.5954,
+   111.5437,
+   13.5893
+  ],
+  "size_mm": [
+   32.7922,
+   27.5544,
+   13.5893
+  ],
+  "volume_mm3": 2569.22,
+  "area_mm2": 1515.412,
+  "watertight": false,
+  "bodies": 116
+ },
+ {
+  "file": "models/Hooks and holders/hook-keyboard-bottom.stl",
+  "name": "hook-keyboard-bottom",
+  "group": "Hooks and holders",
+  "bytes": 5084,
+  "stl_format": "binary",
+  "triangles": 100,
+  "vertices_raw": 300,
+  "bbox_min": [
+   106.0292,
+   73.7111,
+   0.0
+  ],
+  "bbox_max": [
+   128.6364,
+   95.2693,
+   13.3542
+  ],
+  "size_mm": [
+   22.6072,
+   21.5582,
+   13.3542
+  ],
+  "volume_mm3": 2460.513,
+  "area_mm2": 1127.92,
+  "watertight": false,
+  "bodies": 100
+ },
+ {
+  "file": "models/Hooks and holders/hook-keyboard-side.stl",
+  "name": "hook-keyboard-side",
+  "group": "Hooks and holders",
+  "bytes": 5484,
+  "stl_format": "binary",
+  "triangles": 108,
+  "vertices_raw": 324,
+  "bbox_min": [
+   71.0815,
+   105.4957,
+   0.0
+  ],
+  "bbox_max": [
+   95.2256,
+   132.2438,
+   13.4493
+  ],
+  "size_mm": [
+   24.1441,
+   26.7481,
+   13.4493
+  ],
+  "volume_mm3": 2998.495,
+  "area_mm2": 1333.071,
+  "watertight": false,
+  "bodies": 108
+ },
+ {
+  "file": "models/Hooks and holders/hook-side.stl",
+  "name": "hook-side",
+  "group": "Hooks and holders",
+  "bytes": 6884,
+  "stl_format": "binary",
+  "triangles": 136,
+  "vertices_raw": 408,
+  "bbox_min": [
+   51.3711,
+   78.7572,
+   0.0
+  ],
+  "bbox_max": [
+   78.9254,
+   111.5494,
+   13.5894
+  ],
+  "size_mm": [
+   27.5543,
+   32.7922,
+   13.5894
+  ],
+  "volume_mm3": 2559.058,
+  "area_mm2": 1552.695,
+  "watertight": false,
+  "bodies": 136
+ },
+ {
+  "file": "models/Hooks and holders/hook-to-empty-long.stl",
+  "name": "hook-to-empty-long",
+  "group": "Hooks and holders",
+  "bytes": 134184,
+  "stl_format": "binary",
+  "triangles": 2682,
+  "vertices_raw": 8046,
+  "bbox_min": [
+   108.5754,
+   72.7154,
+   0.0
+  ],
+  "bbox_max": [
+   126.4246,
+   162.1603,
+   22.7843
+  ],
+  "size_mm": [
+   17.8493,
+   89.4449,
+   22.7843
+  ],
+  "volume_mm3": 15390.307,
+  "area_mm2": 4767.063,
+  "watertight": false,
+  "bodies": 2682
+ },
+ {
+  "file": "models/Hooks and holders/hook-to-empty.stl",
+  "name": "hook-to-empty",
+  "group": "Hooks and holders",
+  "bytes": 227484,
+  "stl_format": "binary",
+  "triangles": 4548,
+  "vertices_raw": 13644,
+  "bbox_min": [
+   109.6942,
+   98.7135,
+   0.0
+  ],
+  "bbox_max": [
+   125.3058,
+   136.1672,
+   21.7443
+  ],
+  "size_mm": [
+   15.6116,
+   37.4537,
+   21.7443
+  ],
+  "volume_mm3": 6112.492,
+  "area_mm2": 2152.273,
+  "watertight": false,
+  "bodies": 4548
+ },
+ {
+  "file": "models/Hooks and holders/insert-cable holder.stl",
+  "name": "insert-cable holder",
+  "group": "Hooks and holders",
+  "bytes": 54184,
+  "stl_format": "binary",
+  "triangles": 1082,
+  "vertices_raw": 3246,
+  "bbox_min": [
+   55.2844,
+   47.7121,
+   0.0
+  ],
+  "bbox_max": [
+   70.7519,
+   72.7121,
+   13.3976
+  ],
+  "size_mm": [
+   15.4674,
+   25.0,
+   13.3976
+  ],
+  "volume_mm3": 3109.26,
+  "area_mm2": 1582.654,
+  "watertight": false,
+  "bodies": 1082
+ },
+ {
+  "file": "models/Hooks and holders/screw-holder.stl",
+  "name": "screw-holder",
+  "group": "Hooks and holders",
+  "bytes": 26484,
+  "stl_format": "binary",
+  "triangles": 528,
+  "vertices_raw": 1584,
+  "bbox_min": [
+   76.6448,
+   50.0385,
+   0.0
+  ],
+  "bbox_max": [
+   104.3576,
+   77.7385,
+   22.5
+  ],
+  "size_mm": [
+   27.7128,
+   27.7,
+   22.5
+  ],
+  "volume_mm3": 3440.542,
+  "area_mm2": 2364.843,
+  "watertight": false,
+  "bodies": 528
+ },
+ {
+  "file": "models/Hooks and holders/sd-card-holder-cover.stl",
+  "name": "sd-card-holder-cover",
+  "group": "Hooks and holders",
+  "bytes": 27484,
+  "stl_format": "binary",
+  "triangles": 548,
+  "vertices_raw": 1644,
+  "bbox_min": [
+   54.8867,
+   92.1891,
+   0.0
+  ],
+  "bbox_max": [
+   84.1133,
+   117.5,
+   6.0
+  ],
+  "size_mm": [
+   29.2265,
+   25.3109,
+   6.0
+  ],
+  "volume_mm3": 1360.849,
+  "area_mm2": 1310.258,
+  "watertight": false,
+  "bodies": 548
+ },
+ {
+  "file": "models/Hooks and holders/sd-card-holder-without-screw.stl",
+  "name": "sd-card-holder-without-screw",
+  "group": "Hooks and holders",
+  "bytes": 41584,
+  "stl_format": "binary",
+  "triangles": 830,
+  "vertices_raw": 2490,
+  "bbox_min": [
+   52.0,
+   25.1061,
+   0.0
+  ],
+  "bbox_max": [
+   87.0,
+   88.1061,
+   30.3109
+  ],
+  "size_mm": [
+   35.0,
+   63.0,
+   30.3109
+  ],
+  "volume_mm3": 32596.97,
+  "area_mm2": 18295.621,
+  "watertight": false,
+  "bodies": 830
+ },
+ {
+  "file": "models/Hooks and holders/sd-card-holder.stl",
+  "name": "sd-card-holder",
+  "group": "Hooks and holders",
+  "bytes": 143084,
+  "stl_format": "binary",
+  "triangles": 2860,
+  "vertices_raw": 8580,
+  "bbox_min": [
+   90.1133,
+   62.5,
+   0.0
+  ],
+  "bbox_max": [
+   125.1133,
+   117.5,
+   30.3109
+  ],
+  "size_mm": [
+   35.0,
+   55.0,
+   30.3109
+  ],
+  "volume_mm3": 30462.57,
+  "area_mm2": 16348.46,
+  "watertight": false,
+  "bodies": 2860
+ },
+ {
+  "file": "models/Hooks and holders/USB-holder-without-screw.stl",
+  "name": "USB-holder-without-screw",
+  "group": "Hooks and holders",
+  "bytes": 349384,
+  "stl_format": "binary",
+  "triangles": 6986,
+  "vertices_raw": 20958,
+  "bbox_min": [
+   93.0,
+   94.1061,
+   0.0
+  ],
+  "bbox_max": [
+   139.188,
+   157.1061,
+   40.0023
+  ],
+  "size_mm": [
+   46.188,
+   63.0,
+   40.0023
+  ],
+  "volume_mm3": 66603.267,
+  "area_mm2": 16561.641,
+  "watertight": false,
+  "bodies": 6986
+ },
+ {
+  "file": "models/Hooks and holders/USB-holder.stl",
+  "name": "USB-holder",
+  "group": "Hooks and holders",
+  "bytes": 366084,
+  "stl_format": "binary",
+  "triangles": 7320,
+  "vertices_raw": 21960,
+  "bbox_min": [
+   40.812,
+   100.8241,
+   0.0
+  ],
+  "bbox_max": [
+   87.0,
+   155.8241,
+   40.0023
+  ],
+  "size_mm": [
+   46.188,
+   55.0,
+   40.0023
+  ],
+  "volume_mm3": 62191.875,
+  "area_mm2": 17511.679,
+  "watertight": false,
+  "bodies": 7320
+ },
+ {
+  "file": "models/Hooks and holders/wranch-hoks-1.stl",
+  "name": "wranch-hoks-1",
+  "group": "Hooks and holders",
+  "bytes": 59484,
+  "stl_format": "binary",
+  "triangles": 1188,
+  "vertices_raw": 3564,
+  "bbox_min": [
+   -10.0,
+   68.6805,
+   0.0
+  ],
+  "bbox_max": [
+   190.0,
+   111.3195,
+   13.288
+  ],
+  "size_mm": [
+   200.0,
+   42.6389,
+   13.288
+  ],
+  "volume_mm3": 42619.559,
+  "area_mm2": 14484.054,
+  "watertight": false,
+  "bodies": 1188
+ },
+ {
+  "file": "models/Hooks and holders/wranch-hoks-2.stl",
+  "name": "wranch-hoks-2",
+  "group": "Hooks and holders",
+  "bytes": 45884,
+  "stl_format": "binary",
+  "triangles": 916,
+  "vertices_raw": 2748,
+  "bbox_min": [
+   -0.9045,
+   25.231,
+   0.0
+  ],
+  "bbox_max": [
+   199.0955,
+   67.8699,
+   13.288
+  ],
+  "size_mm": [
+   200.0,
+   42.6389,
+   13.288
+  ],
+  "volume_mm3": 47402.454,
+  "area_mm2": 15287.896,
+  "watertight": false,
+  "bodies": 916
+ },
+ {
+  "file": "models/Other parts/countersunk-to-holee.stl",
+  "name": "countersunk-to-holee",
+  "group": "Other parts",
+  "bytes": 34084,
+  "stl_format": "binary",
+  "triangles": 680,
+  "vertices_raw": 2040,
+  "bbox_min": [
+   79.319,
+   80.75,
+   0.0
+  ],
+  "bbox_max": [
+   100.681,
+   99.25,
+   12.0
+  ],
+  "size_mm": [
+   21.362,
+   18.5,
+   12.0
+  ],
+  "volume_mm3": 1224.92,
+  "area_mm2": 1380.579,
+  "watertight": false,
+  "bodies": 680
+ },
+ {
+  "file": "models/Other parts/cover-contersunk.stl",
+  "name": "cover-contersunk",
+  "group": "Other parts",
+  "bytes": 23084,
+  "stl_format": "binary",
+  "triangles": 460,
+  "vertices_raw": 1380,
+  "bbox_min": [
+   54.5401,
+   127.724,
+   0.0
+  ],
+  "bbox_max": [
+   75.902,
+   146.224,
+   5.0
+  ],
+  "size_mm": [
+   21.362,
+   18.5,
+   5.0
+  ],
+  "volume_mm3": 586.576,
+  "area_mm2": 751.06,
+  "watertight": false,
+  "bodies": 460
+ },
+ {
+  "file": "models/Parts for attaching honeycombs to the wall/hexagon-countersung-and-hole.stl",
+  "name": "hexagon-countersung-and-hole",
+  "group": "Parts for attaching honeycombs to the wall",
+  "bytes": 73284,
+  "stl_format": "binary",
+  "triangles": 1464,
+  "vertices_raw": 4392,
+  "bbox_min": [
+   31.0119,
+   33.776,
+   0.0
+  ],
+  "bbox_max": [
+   56.9927,
+   79.876,
+   10.0
+  ],
+  "size_mm": [
+   25.9808,
+   46.1,
+   10.0
+  ],
+  "volume_mm3": 4726.205,
+  "area_mm2": 4257.955,
+  "watertight": false,
+  "bodies": 1464
+ },
+ {
+  "file": "models/Parts for attaching honeycombs to the wall/insert-countersung-m3.stl",
+  "name": "insert-countersung-m3",
+  "group": "Parts for attaching honeycombs to the wall",
+  "bytes": 80084,
+  "stl_format": "binary",
+  "triangles": 1600,
+  "vertices_raw": 4800,
+  "bbox_min": [
+   31.0119,
+   85.876,
+   0.0
+  ],
+  "bbox_max": [
+   56.9927,
+   131.976,
+   10.0
+  ],
+  "size_mm": [
+   25.9808,
+   46.1,
+   10.0
+  ],
+  "volume_mm3": 5820.02,
+  "area_mm2": 4318.733,
+  "watertight": false,
+  "bodies": 1600
+ },
+ {
+  "file": "models/Parts for attaching honeycombs to the wall/Insert-countersunk-with-m3x3.stl",
+  "name": "Insert-countersunk-with-m3x3",
+  "group": "Parts for attaching honeycombs to the wall",
+  "bytes": 144284,
+  "stl_format": "binary",
+  "triangles": 2884,
+  "vertices_raw": 8652,
+  "bbox_min": [
+   62.9927,
+   85.876,
+   0.0
+  ],
+  "bbox_max": [
+   129.8499,
+   131.976,
+   10.0
+  ],
+  "size_mm": [
+   66.8572,
+   46.1,
+   10.0
+  ],
+  "volume_mm3": 11876.679,
+  "area_mm2": 8553.788,
+  "watertight": false,
+  "bodies": 2884
+ },
+ {
+  "file": "models/Parts for attaching honeycombs to the wall/Insert-countersunk.stl",
+  "name": "Insert-countersunk",
+  "group": "Parts for attaching honeycombs to the wall",
+  "bytes": 49484,
+  "stl_format": "binary",
+  "triangles": 988,
+  "vertices_raw": 2964,
+  "bbox_min": [
+   77.0096,
+   66.5,
+   0.0
+  ],
+  "bbox_max": [
+   102.9904,
+   89.0,
+   10.0
+  ],
+  "size_mm": [
+   25.9808,
+   22.5,
+   10.0
+  ],
+  "volume_mm3": 2824.344,
+  "area_mm2": 2171.316,
+  "watertight": false,
+  "bodies": 988
+ },
+ {
+  "file": "models/Parts for attaching honeycombs to the wall/insert-for-countersunk-hole-3.stl",
+  "name": "insert-for-countersunk-hole-3",
+  "group": "Parts for attaching honeycombs to the wall",
+  "bytes": 127484,
+  "stl_format": "binary",
+  "triangles": 2548,
+  "vertices_raw": 7644,
+  "bbox_min": [
+   62.9927,
+   33.776,
+   0.0
+  ],
+  "bbox_max": [
+   129.8499,
+   79.876,
+   10.0
+  ],
+  "size_mm": [
+   66.8572,
+   46.1,
+   10.0
+  ],
+  "volume_mm3": 8594.905,
+  "area_mm2": 8371.379,
+  "watertight": false,
+  "bodies": 2548
+ },
+ {
+  "file": "models/shelves/shelf-1.stl",
+  "name": "shelf-1",
+  "group": "shelves",
+  "bytes": 12984,
+  "stl_format": "binary",
+  "triangles": 258,
+  "vertices_raw": 774,
+  "bbox_min": [
+   -73.9404,
+   -74.6226,
+   0.0
+  ],
+  "bbox_max": [
+   -17.5331,
+   -23.6147,
+   13.4512
+  ],
+  "size_mm": [
+   56.4072,
+   51.0078,
+   13.4512
+  ],
+  "volume_mm3": 8621.991,
+  "area_mm2": 6882.645,
+  "watertight": false,
+  "bodies": 258
+ },
+ {
+  "file": "models/shelves/shelf-2.stl",
+  "name": "shelf-2",
+  "group": "shelves",
+  "bytes": 11284,
+  "stl_format": "binary",
+  "triangles": 224,
+  "vertices_raw": 672,
+  "bbox_min": [
+   -11.5336,
+   -74.6137,
+   -0.0
+  ],
+  "bbox_max": [
+   85.7497,
+   -23.6,
+   13.4512
+  ],
+  "size_mm": [
+   97.2833,
+   51.0137,
+   13.4512
+  ],
+  "volume_mm3": 12577.462,
+  "area_mm2": 10662.527,
+  "watertight": false,
+  "bodies": 224
+ },
+ {
+  "file": "models/shelves/shelf-3.stl",
+  "name": "shelf-3",
+  "group": "shelves",
+  "bytes": 12784,
+  "stl_format": "binary",
+  "triangles": 254,
+  "vertices_raw": 762,
+  "bbox_min": [
+   -72.8479,
+   39.378,
+   0.0
+  ],
+  "bbox_max": [
+   65.3119,
+   90.4172,
+   13.4688
+  ],
+  "size_mm": [
+   138.1598,
+   51.0393,
+   13.4688
+  ],
+  "volume_mm3": 16540.951,
+  "area_mm2": 14434.065,
+  "watertight": false,
+  "bodies": 254
+ },
+ {
+  "file": "models/shelves/shelf-4.stl",
+  "name": "shelf-4",
+  "group": "shelves",
+  "bytes": 17284,
+  "stl_format": "binary",
+  "triangles": 344,
+  "vertices_raw": 1032,
+  "bbox_min": [
+   -93.2856,
+   -17.6252,
+   0.0
+  ],
+  "bbox_max": [
+   85.7496,
+   33.4002,
+   13.4512
+  ],
+  "size_mm": [
+   179.0352,
+   51.0253,
+   13.4512
+  ],
+  "volume_mm3": 21723.087,
+  "area_mm2": 18801.133,
+  "watertight": false,
+  "bodies": 344
+ },
+ {
+  "file": "models/wall-honeycomb-106x89-fixed.stl",
+  "name": "wall-honeycomb-106x89-fixed",
+  "group": ".",
+  "bytes": 57084,
+  "stl_format": "binary",
+  "triangles": 1140,
+  "vertices_raw": 3420,
+  "bbox_min": [
+   190.219,
+   -35.0661,
+   4.0
+  ],
+  "bbox_max": [
+   278.7841,
+   71.1339,
+   12.0
+  ],
+  "size_mm": [
+   88.5651,
+   106.2,
+   8.0
+  ],
+  "volume_mm3": 14443.288,
+  "area_mm2": 15831.426,
+  "watertight": false,
+  "bodies": 1140
+ },
+ {
+  "file": "models/wall-honeycomb-224x190size(mk3s).stl",
+  "name": "wall-honeycomb-224x190size(mk3s)",
+  "group": ".",
+  "bytes": 273084,
+  "stl_format": "binary",
+  "triangles": 5460,
+  "vertices_raw": 16380,
+  "bbox_min": [
+   42.9,
+   59.6225,
+   0.0
+  ],
+  "bbox_max": [
+   267.1,
+   250.3775,
+   8.0
+  ],
+  "size_mm": [
+   224.2,
+   190.7549,
+   8.0
+  ],
+  "volume_mm3": 73117.916,
+  "area_mm2": 71221.613,
+  "watertight": false,
+  "bodies": 5460
+ },
+ {
+  "file": "models/wall-honeycomb-293x271-(big-printer).stl",
+  "name": "wall-honeycomb-293x271-(big-printer)",
+  "group": ".",
+  "bytes": 512284,
+  "stl_format": "binary",
+  "triangles": 10244,
+  "vertices_raw": 30732,
+  "bbox_min": [
+   8.5274,
+   19.3,
+   0.0
+  ],
+  "bbox_max": [
+   301.4726,
+   290.7,
+   8.0
+  ],
+  "size_mm": [
+   292.9451,
+   271.4,
+   8.0
+  ],
+  "volume_mm3": 139014.458,
+  "area_mm2": 131584.49,
+  "watertight": false,
+  "bodies": 10244
+ },
+ {
+  "file": "models/wall-honeycomb-bambu-211x248-fixed.stl",
+  "name": "wall-honeycomb-bambu-211x248-fixed",
+  "group": ".",
+  "bytes": 335484,
+  "stl_format": "binary",
+  "triangles": 6708,
+  "vertices_raw": 20124,
+  "bbox_min": [
+   402.8288,
+   -78.8611,
+   4.0
+  ],
+  "bbox_max": [
+   650.6288,
+   132.332,
+   12.0
+  ],
+  "size_mm": [
+   247.8,
+   211.1931,
+   8.0
+  ],
+  "volume_mm3": 90269.403,
+  "area_mm2": 87010.234,
+  "watertight": false,
+  "bodies": 6708
+ },
+ {
+  "file": "models/wall-honeycomb-k1-211x201.stl",
+  "name": "wall-honeycomb-k1-211x201",
+  "group": ".",
+  "bytes": 269884,
+  "stl_format": "binary",
+  "triangles": 5396,
+  "vertices_raw": 16188,
+  "bbox_min": [
+   360.8957,
+   -79.1304,
+   4.0
+  ],
+  "bbox_max": [
+   572.0888,
+   121.4696,
+   12.0
+  ],
+  "size_mm": [
+   211.1931,
+   200.6,
+   8.0
+  ],
+  "volume_mm3": 72215.48,
+  "area_mm2": 70436.605,
+  "watertight": false,
+  "bodies": 5396
+ },
+ {
+  "file": "models/wall-honeycomb-part.stl",
+  "name": "wall-honeycomb-part",
+  "group": ".",
+  "bytes": 190684,
+  "stl_format": "binary",
+  "triangles": 3812,
+  "vertices_raw": 11436,
+  "bbox_min": [
+   1.5,
+   4.8414,
+   0.0
+  ],
+  "bbox_max": [
+   178.5,
+   175.1586,
+   8.0
+  ],
+  "size_mm": [
+   177.0,
+   170.3171,
+   8.0
+  ],
+  "volume_mm3": 50550.958,
+  "area_mm2": 50286.682,
+  "watertight": false,
+  "bodies": 3812
+ }
+]

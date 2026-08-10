@@ -1,0 +1,2099 @@
+[
+ {
+  "file": "models/Fasteners and parts for attaching hooks and objects/double M4.stl",
+  "circles": [
+   {
+    "dia_fit": 4.19,
+    "dia_inscribed": 4.1821,
+    "centre": [
+     134.314,
+     89.213
+    ],
+    "z_from": 0.3,
+    "z_to": 2.5,
+    "resid_max": 0.004333,
+    "facets": 68,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 4.19,
+    "dia_inscribed": 4.1821,
+    "centre": [
+     154.752,
+     77.413
+    ],
+    "z_from": 0.3,
+    "z_to": 2.5,
+    "resid_max": 0.004333,
+    "facets": 68,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 4.2,
+    "dia_inscribed": 4.1821,
+    "centre": [
+     134.314,
+     89.213
+    ],
+    "z_from": 2.5,
+    "z_to": 3.0,
+    "resid_max": 0.001509,
+    "facets": 68,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 4.2,
+    "dia_inscribed": 4.1821,
+    "centre": [
+     154.752,
+     77.413
+    ],
+    "z_from": 2.5,
+    "z_to": 3.0,
+    "resid_max": 0.001509,
+    "facets": 68,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 4.49,
+    "dia_inscribed": 4.4829,
+    "centre": [
+     134.314,
+     89.213
+    ],
+    "z_from": 0.0,
+    "z_to": 0.3,
+    "resid_max": 0.005522,
+    "facets": 70,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 4.49,
+    "dia_inscribed": 4.4829,
+    "centre": [
+     154.752,
+     77.413
+    ],
+    "z_from": 0.0,
+    "z_to": 0.3,
+    "resid_max": 0.005516,
+    "facets": 70,
+    "n_bands": 1
+   }
+  ]
+ },
+ {
+  "file": "models/Fasteners and parts for attaching hooks and objects/double M5.stl",
+  "circles": [
+   {
+    "dia_fit": 5.09,
+    "dia_inscribed": 5.0816,
+    "centre": [
+     87.779,
+     89.213
+    ],
+    "z_from": 0.3,
+    "z_to": 2.5,
+    "resid_max": 0.004443,
+    "facets": 74,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.09,
+    "dia_inscribed": 5.0816,
+    "centre": [
+     108.218,
+     77.413
+    ],
+    "z_from": 0.3,
+    "z_to": 2.5,
+    "resid_max": 0.004443,
+    "facets": 74,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.1,
+    "dia_inscribed": 5.0816,
+    "centre": [
+     87.779,
+     89.213
+    ],
+    "z_from": 2.5,
+    "z_to": 3.0,
+    "resid_max": 0.001546,
+    "facets": 74,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.1,
+    "dia_inscribed": 5.0816,
+    "centre": [
+     108.218,
+     77.413
+    ],
+    "z_from": 2.5,
+    "z_to": 3.0,
+    "resid_max": 0.001546,
+    "facets": 74,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.39,
+    "dia_inscribed": 5.3816,
+    "centre": [
+     87.779,
+     89.213
+    ],
+    "z_from": 0.0,
+    "z_to": 0.3,
+    "resid_max": 0.006128,
+    "facets": 76,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.39,
+    "dia_inscribed": 5.3816,
+    "centre": [
+     108.218,
+     77.413
+    ],
+    "z_from": 0.0,
+    "z_to": 0.3,
+    "resid_max": 0.006132,
+    "facets": 76,
+    "n_bands": 1
+   }
+  ]
+ },
+ {
+  "file": "models/Fasteners and parts for attaching hooks and objects/insert M4.stl",
+  "circles": [
+   {
+    "dia_fit": 4.19,
+    "dia_inscribed": 4.1888,
+    "centre": [
+     138.884,
+     118.225
+    ],
+    "z_from": 0.3,
+    "z_to": 2.5,
+    "resid_max": 0.002711,
+    "facets": 86,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 4.2,
+    "dia_inscribed": 4.1888,
+    "centre": [
+     138.884,
+     118.225
+    ],
+    "z_from": 2.5,
+    "z_to": 3.0,
+    "resid_max": 0.000948,
+    "facets": 86,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 4.5,
+    "dia_inscribed": 4.489,
+    "centre": [
+     138.884,
+     118.225
+    ],
+    "z_from": 0.0,
+    "z_to": 0.3,
+    "resid_max": 0.003604,
+    "facets": 89,
+    "n_bands": 1
+   }
+  ]
+ },
+ {
+  "file": "models/Fasteners and parts for attaching hooks and objects/insert M5.stl",
+  "circles": [
+   {
+    "dia_fit": 5.09,
+    "dia_inscribed": 5.0891,
+    "centre": [
+     56.21,
+     152.32
+    ],
+    "z_from": 0.3,
+    "z_to": 2.5,
+    "resid_max": 0.002643,
+    "facets": 96,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.1,
+    "dia_inscribed": 5.0891,
+    "centre": [
+     56.21,
+     152.32
+    ],
+    "z_from": 2.5,
+    "z_to": 3.0,
+    "resid_max": 0.000927,
+    "facets": 96,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.4,
+    "dia_inscribed": 5.3893,
+    "centre": [
+     56.21,
+     152.32
+    ],
+    "z_from": 0.0,
+    "z_to": 0.3,
+    "resid_max": 0.003465,
+    "facets": 98,
+    "n_bands": 1
+   }
+  ]
+ },
+ {
+  "file": "models/Fasteners and parts for attaching hooks and objects/Insert-with-M3-dual.stl",
+  "circles": [
+   {
+    "dia_fit": 3.19,
+    "dia_inscribed": 3.1825,
+    "centre": [
+     128.543,
+     55.617
+    ],
+    "z_from": 0.3,
+    "z_to": 3.7,
+    "resid_max": 0.003844,
+    "facets": 60,
+    "n_bands": 2
+   },
+   {
+    "dia_fit": 3.19,
+    "dia_inscribed": 3.1825,
+    "centre": [
+     148.981,
+     43.817
+    ],
+    "z_from": 0.3,
+    "z_to": 3.7,
+    "resid_max": 0.003845,
+    "facets": 60,
+    "n_bands": 2
+   },
+   {
+    "dia_fit": 3.49,
+    "dia_inscribed": 3.4831,
+    "centre": [
+     128.543,
+     55.617
+    ],
+    "z_from": 0.0,
+    "z_to": 0.3,
+    "resid_max": 0.005393,
+    "facets": 62,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 3.49,
+    "dia_inscribed": 3.4831,
+    "centre": [
+     148.981,
+     43.817
+    ],
+    "z_from": 0.0,
+    "z_to": 0.3,
+    "resid_max": 0.005392,
+    "facets": 62,
+    "n_bands": 1
+   }
+  ]
+ },
+ {
+  "file": "models/Fasteners and parts for attaching hooks and objects/insert-with-M3.stl",
+  "circles": [
+   {
+    "dia_fit": 3.19,
+    "dia_inscribed": 3.1891,
+    "centre": [
+     25.248,
+     127.192
+    ],
+    "z_from": 0.3,
+    "z_to": 2.5,
+    "resid_max": 0.002578,
+    "facets": 76,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 3.2,
+    "dia_inscribed": 3.1891,
+    "centre": [
+     25.248,
+     127.192
+    ],
+    "z_from": 0.0,
+    "z_to": 3.7,
+    "resid_max": 0.00149,
+    "facets": 76,
+    "n_bands": 2
+   }
+  ]
+ },
+ {
+  "file": "models/Hooks and holders/box-without-screw.stl",
+  "circles": [
+   {
+    "dia_fit": 51.41,
+    "dia_inscribed": 20.9686,
+    "centre": [
+     63.843,
+     121.799
+    ],
+    "z_from": 2.6353,
+    "z_to": 2.7002,
+    "resid_max": 0.275036,
+    "facets": 20,
+    "n_bands": 1
+   }
+  ]
+ },
+ {
+  "file": "models/Hooks and holders/box.stl",
+  "circles": [
+   {
+    "dia_fit": 50.86,
+    "dia_inscribed": 20.967,
+    "centre": [
+     116.03,
+     128.217
+    ],
+    "z_from": 2.6352,
+    "z_to": 2.7001,
+    "resid_max": 0.281767,
+    "facets": 20,
+    "n_bands": 1
+   }
+  ]
+ },
+ {
+  "file": "models/Hooks and holders/caliper-mount.stl",
+  "circles": [
+   {
+    "dia_fit": 3.49,
+    "dia_inscribed": 3.4808,
+    "centre": [
+     94.054,
+     92.924
+    ],
+    "z_from": 0.0,
+    "z_to": 1.5,
+    "resid_max": 0.004803,
+    "facets": 60,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.99,
+    "dia_inscribed": 5.9805,
+    "centre": [
+     94.054,
+     92.924
+    ],
+    "z_from": 1.5,
+    "z_to": 5.0,
+    "resid_max": 0.004872,
+    "facets": 78,
+    "n_bands": 1
+   }
+  ]
+ },
+ {
+  "file": "models/Hooks and holders/screw-holder.stl",
+  "circles": [
+   {
+    "dia_fit": 13.59,
+    "dia_inscribed": 13.5859,
+    "centre": [
+     90.501,
+     62.038
+    ],
+    "z_from": 1.35,
+    "z_to": 5.0,
+    "resid_max": 0.003517,
+    "facets": 138,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 13.6,
+    "dia_inscribed": 13.5859,
+    "centre": [
+     90.501,
+     62.038
+    ],
+    "z_from": 0.0,
+    "z_to": 6.0,
+    "resid_max": 0.002135,
+    "facets": 138,
+    "n_bands": 4
+   }
+  ]
+ },
+ {
+  "file": "models/Hooks and holders/USB-holder-without-screw.stl",
+  "circles": [
+   {
+    "dia_fit": 5.03,
+    "dia_inscribed": 0.5241,
+    "centre": [
+     125.087,
+     131.606
+    ],
+    "z_from": 17.8809,
+    "z_to": 17.8827,
+    "resid_max": 0.000707,
+    "facets": 15,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.03,
+    "dia_inscribed": 0.5241,
+    "centre": [
+     125.087,
+     141.606
+    ],
+    "z_from": 17.8809,
+    "z_to": 17.8827,
+    "resid_max": 0.000707,
+    "facets": 15,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.03,
+    "dia_inscribed": 0.5416,
+    "centre": [
+     125.095,
+     121.606
+    ],
+    "z_from": 17.8809,
+    "z_to": 17.8827,
+    "resid_max": 0.000709,
+    "facets": 14,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.03,
+    "dia_inscribed": 0.545,
+    "centre": [
+     125.097,
+     101.606
+    ],
+    "z_from": 17.8809,
+    "z_to": 17.8827,
+    "resid_max": 0.00071,
+    "facets": 14,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.03,
+    "dia_inscribed": 0.545,
+    "centre": [
+     125.097,
+     111.606
+    ],
+    "z_from": 17.8809,
+    "z_to": 17.8827,
+    "resid_max": 0.00071,
+    "facets": 14,
+    "n_bands": 1
+   }
+  ]
+ },
+ {
+  "file": "models/Hooks and holders/USB-holder.stl",
+  "circles": [
+   {
+    "dia_fit": 4.99,
+    "dia_inscribed": 0.4172,
+    "centre": [
+     72.922,
+     108.31
+    ],
+    "z_from": 17.9241,
+    "z_to": 17.9288,
+    "resid_max": 0.036664,
+    "facets": 15,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 4.99,
+    "dia_inscribed": 0.4172,
+    "centre": [
+     72.922,
+     118.31
+    ],
+    "z_from": 17.9241,
+    "z_to": 17.9288,
+    "resid_max": 0.036664,
+    "facets": 15,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 4.99,
+    "dia_inscribed": 0.4172,
+    "centre": [
+     72.922,
+     128.31
+    ],
+    "z_from": 17.9241,
+    "z_to": 17.9288,
+    "resid_max": 0.036664,
+    "facets": 15,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 4.99,
+    "dia_inscribed": 0.4172,
+    "centre": [
+     72.922,
+     138.31
+    ],
+    "z_from": 17.9241,
+    "z_to": 17.9288,
+    "resid_max": 0.036664,
+    "facets": 15,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 4.99,
+    "dia_inscribed": 0.4172,
+    "centre": [
+     72.922,
+     148.31
+    ],
+    "z_from": 17.9241,
+    "z_to": 17.9288,
+    "resid_max": 0.036664,
+    "facets": 15,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.0,
+    "dia_inscribed": 0.4466,
+    "centre": [
+     72.916,
+     108.314
+    ],
+    "z_from": 17.9042,
+    "z_to": 17.9241,
+    "resid_max": 0.026835,
+    "facets": 15,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.0,
+    "dia_inscribed": 0.4466,
+    "centre": [
+     72.916,
+     118.314
+    ],
+    "z_from": 17.9042,
+    "z_to": 17.9241,
+    "resid_max": 0.026835,
+    "facets": 15,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.0,
+    "dia_inscribed": 0.4466,
+    "centre": [
+     72.916,
+     128.314
+    ],
+    "z_from": 17.9042,
+    "z_to": 17.9241,
+    "resid_max": 0.026835,
+    "facets": 15,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.0,
+    "dia_inscribed": 0.4466,
+    "centre": [
+     72.916,
+     138.314
+    ],
+    "z_from": 17.9042,
+    "z_to": 17.9241,
+    "resid_max": 0.026835,
+    "facets": 15,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.0,
+    "dia_inscribed": 0.4466,
+    "centre": [
+     72.916,
+     148.314
+    ],
+    "z_from": 17.9042,
+    "z_to": 17.9241,
+    "resid_max": 0.026835,
+    "facets": 15,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.02,
+    "dia_inscribed": 0.4962,
+    "centre": [
+     72.905,
+     108.32
+    ],
+    "z_from": 17.8827,
+    "z_to": 17.9042,
+    "resid_max": 0.010169,
+    "facets": 15,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.02,
+    "dia_inscribed": 0.4962,
+    "centre": [
+     72.905,
+     118.32
+    ],
+    "z_from": 17.8827,
+    "z_to": 17.9042,
+    "resid_max": 0.010169,
+    "facets": 15,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.02,
+    "dia_inscribed": 0.4962,
+    "centre": [
+     72.905,
+     128.32
+    ],
+    "z_from": 17.8827,
+    "z_to": 17.9042,
+    "resid_max": 0.010169,
+    "facets": 15,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.02,
+    "dia_inscribed": 0.4962,
+    "centre": [
+     72.905,
+     138.32
+    ],
+    "z_from": 17.8827,
+    "z_to": 17.9042,
+    "resid_max": 0.010169,
+    "facets": 15,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.02,
+    "dia_inscribed": 0.4962,
+    "centre": [
+     72.905,
+     148.32
+    ],
+    "z_from": 17.8827,
+    "z_to": 17.9042,
+    "resid_max": 0.010169,
+    "facets": 15,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.03,
+    "dia_inscribed": 0.545,
+    "centre": [
+     72.909,
+     108.324
+    ],
+    "z_from": 17.8809,
+    "z_to": 17.8827,
+    "resid_max": 0.00071,
+    "facets": 14,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.03,
+    "dia_inscribed": 0.545,
+    "centre": [
+     72.909,
+     118.324
+    ],
+    "z_from": 17.8809,
+    "z_to": 17.8827,
+    "resid_max": 0.00071,
+    "facets": 14,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.03,
+    "dia_inscribed": 0.545,
+    "centre": [
+     72.909,
+     128.324
+    ],
+    "z_from": 17.8809,
+    "z_to": 17.8827,
+    "resid_max": 0.00071,
+    "facets": 14,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.03,
+    "dia_inscribed": 0.545,
+    "centre": [
+     72.909,
+     138.324
+    ],
+    "z_from": 17.8809,
+    "z_to": 17.8827,
+    "resid_max": 0.00071,
+    "facets": 14,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.03,
+    "dia_inscribed": 0.545,
+    "centre": [
+     72.909,
+     148.324
+    ],
+    "z_from": 17.8809,
+    "z_to": 17.8827,
+    "resid_max": 0.00071,
+    "facets": 14,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.04,
+    "dia_inscribed": 0.7558,
+    "centre": [
+     54.723,
+     108.306
+    ],
+    "z_from": 17.9241,
+    "z_to": 17.9288,
+    "resid_max": 0.04124,
+    "facets": 16,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.04,
+    "dia_inscribed": 0.7558,
+    "centre": [
+     54.723,
+     118.306
+    ],
+    "z_from": 17.9241,
+    "z_to": 17.9288,
+    "resid_max": 0.04124,
+    "facets": 16,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.04,
+    "dia_inscribed": 0.7558,
+    "centre": [
+     54.723,
+     128.306
+    ],
+    "z_from": 17.9241,
+    "z_to": 17.9288,
+    "resid_max": 0.04124,
+    "facets": 16,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.04,
+    "dia_inscribed": 0.7558,
+    "centre": [
+     54.723,
+     138.306
+    ],
+    "z_from": 17.9241,
+    "z_to": 17.9288,
+    "resid_max": 0.04124,
+    "facets": 16,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.04,
+    "dia_inscribed": 0.7558,
+    "centre": [
+     54.723,
+     148.306
+    ],
+    "z_from": 17.9241,
+    "z_to": 17.9288,
+    "resid_max": 0.04124,
+    "facets": 16,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.05,
+    "dia_inscribed": 0.7879,
+    "centre": [
+     54.728,
+     108.311
+    ],
+    "z_from": 17.9042,
+    "z_to": 17.9241,
+    "resid_max": 0.029758,
+    "facets": 16,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.05,
+    "dia_inscribed": 0.7879,
+    "centre": [
+     54.728,
+     118.311
+    ],
+    "z_from": 17.9042,
+    "z_to": 17.9241,
+    "resid_max": 0.029758,
+    "facets": 16,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.05,
+    "dia_inscribed": 0.7879,
+    "centre": [
+     54.728,
+     128.311
+    ],
+    "z_from": 17.9042,
+    "z_to": 17.9241,
+    "resid_max": 0.029758,
+    "facets": 16,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.05,
+    "dia_inscribed": 0.7879,
+    "centre": [
+     54.728,
+     138.311
+    ],
+    "z_from": 17.9042,
+    "z_to": 17.9241,
+    "resid_max": 0.029758,
+    "facets": 16,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.05,
+    "dia_inscribed": 0.7879,
+    "centre": [
+     54.728,
+     148.311
+    ],
+    "z_from": 17.9042,
+    "z_to": 17.9241,
+    "resid_max": 0.029758,
+    "facets": 16,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.07,
+    "dia_inscribed": 0.842,
+    "centre": [
+     54.737,
+     108.32
+    ],
+    "z_from": 17.8827,
+    "z_to": 17.9042,
+    "resid_max": 0.010247,
+    "facets": 16,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.07,
+    "dia_inscribed": 0.842,
+    "centre": [
+     54.737,
+     118.32
+    ],
+    "z_from": 17.8827,
+    "z_to": 17.9042,
+    "resid_max": 0.010247,
+    "facets": 16,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.07,
+    "dia_inscribed": 0.842,
+    "centre": [
+     54.737,
+     128.32
+    ],
+    "z_from": 17.8827,
+    "z_to": 17.9042,
+    "resid_max": 0.010247,
+    "facets": 16,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.07,
+    "dia_inscribed": 0.842,
+    "centre": [
+     54.737,
+     138.32
+    ],
+    "z_from": 17.8827,
+    "z_to": 17.9042,
+    "resid_max": 0.010247,
+    "facets": 16,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.07,
+    "dia_inscribed": 0.842,
+    "centre": [
+     54.737,
+     148.32
+    ],
+    "z_from": 17.8827,
+    "z_to": 17.9042,
+    "resid_max": 0.010247,
+    "facets": 16,
+    "n_bands": 1
+   }
+  ]
+ },
+ {
+  "file": "models/Other parts/countersunk-to-holee.stl",
+  "circles": [
+   {
+    "dia_fit": 3.5,
+    "dia_inscribed": 3.4953,
+    "centre": [
+     90.0,
+     90.0
+    ],
+    "z_from": 11.25,
+    "z_to": 12.0,
+    "resid_max": 6e-06,
+    "facets": 86,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 3.75,
+    "dia_inscribed": 3.7405,
+    "centre": [
+     90.0,
+     90.0
+    ],
+    "z_from": 11.0002,
+    "z_to": 11.25,
+    "resid_max": 0.000749,
+    "facets": 115,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 7.0,
+    "dia_inscribed": 6.9905,
+    "centre": [
+     90.0,
+     90.0
+    ],
+    "z_from": 8.0,
+    "z_to": 11.0002,
+    "resid_max": 0.002723,
+    "facets": 115,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 10.0,
+    "dia_inscribed": 9.9905,
+    "centre": [
+     90.0,
+     90.0
+    ],
+    "z_from": 0.3,
+    "z_to": 8.0,
+    "resid_max": 0.00227,
+    "facets": 144,
+    "n_bands": 2
+   },
+   {
+    "dia_fit": 10.3,
+    "dia_inscribed": 10.2907,
+    "centre": [
+     90.0,
+     90.0
+    ],
+    "z_from": 0.0,
+    "z_to": 0.3,
+    "resid_max": 0.003049,
+    "facets": 146,
+    "n_bands": 1
+   }
+  ]
+ },
+ {
+  "file": "models/Parts for attaching honeycombs to the wall/hexagon-countersung-and-hole.stl",
+  "circles": [
+   {
+    "dia_fit": 3.49,
+    "dia_inscribed": 3.4831,
+    "centre": [
+     44.002,
+     45.026
+    ],
+    "z_from": 9.25,
+    "z_to": 9.7732,
+    "resid_max": 0.004108,
+    "facets": 64,
+    "n_bands": 2
+   },
+   {
+    "dia_fit": 3.5,
+    "dia_inscribed": 3.4831,
+    "centre": [
+     44.002,
+     45.026
+    ],
+    "z_from": 9.7732,
+    "z_to": 10.0,
+    "resid_max": 0.002167,
+    "facets": 64,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 4.01,
+    "dia_inscribed": 3.9928,
+    "centre": [
+     44.002,
+     45.026
+    ],
+    "z_from": 8.7405,
+    "z_to": 9.25,
+    "resid_max": 0.002389,
+    "facets": 86,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 4.71,
+    "dia_inscribed": 4.7017,
+    "centre": [
+     44.002,
+     45.026
+    ],
+    "z_from": 8.5414,
+    "z_to": 8.7405,
+    "resid_max": 0.004283,
+    "facets": 86,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.12,
+    "dia_inscribed": 5.1112,
+    "centre": [
+     44.002,
+     45.026
+    ],
+    "z_from": 8.331,
+    "z_to": 8.5414,
+    "resid_max": 0.004858,
+    "facets": 86,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.54,
+    "dia_inscribed": 5.5317,
+    "centre": [
+     44.002,
+     45.026
+    ],
+    "z_from": 8.121,
+    "z_to": 8.331,
+    "resid_max": 0.005163,
+    "facets": 86,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.95,
+    "dia_inscribed": 5.9398,
+    "centre": [
+     44.002,
+     45.026
+    ],
+    "z_from": 7.9231,
+    "z_to": 8.121,
+    "resid_max": 0.005238,
+    "facets": 86,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 6.32,
+    "dia_inscribed": 6.3127,
+    "centre": [
+     44.002,
+     45.026
+    ],
+    "z_from": 7.748,
+    "z_to": 7.9231,
+    "resid_max": 0.005154,
+    "facets": 86,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 6.64,
+    "dia_inscribed": 6.6301,
+    "centre": [
+     44.002,
+     45.026
+    ],
+    "z_from": 7.6056,
+    "z_to": 7.748,
+    "resid_max": 0.004986,
+    "facets": 86,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 6.89,
+    "dia_inscribed": 6.8781,
+    "centre": [
+     44.002,
+     45.026
+    ],
+    "z_from": 7.5,
+    "z_to": 7.6056,
+    "resid_max": 0.004801,
+    "facets": 86,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 8.0,
+    "dia_inscribed": 7.9835,
+    "centre": [
+     44.002,
+     45.026
+    ],
+    "z_from": 6.5,
+    "z_to": 7.5,
+    "resid_max": 0.003531,
+    "facets": 86,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 9.5,
+    "dia_inscribed": 9.4832,
+    "centre": [
+     44.002,
+     45.026
+    ],
+    "z_from": 6.0,
+    "z_to": 6.5,
+    "resid_max": 0.000991,
+    "facets": 86,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 9.99,
+    "dia_inscribed": 9.9831,
+    "centre": [
+     44.002,
+     45.026
+    ],
+    "z_from": 0.3,
+    "z_to": 6.0,
+    "resid_max": 0.003501,
+    "facets": 108,
+    "n_bands": 2
+   },
+   {
+    "dia_fit": 10.0,
+    "dia_inscribed": 9.9831,
+    "centre": [
+     44.002,
+     45.026
+    ],
+    "z_from": 0.0,
+    "z_to": 0.3,
+    "resid_max": 0.000419,
+    "facets": 108,
+    "n_bands": 1
+   }
+  ]
+ },
+ {
+  "file": "models/Parts for attaching honeycombs to the wall/insert-countersung-m3.stl",
+  "circles": [
+   {
+    "dia_fit": 3.19,
+    "dia_inscribed": 3.1836,
+    "centre": [
+     44.002,
+     120.726
+    ],
+    "z_from": 0.3,
+    "z_to": 2.5,
+    "resid_max": 0.003869,
+    "facets": 62,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 3.2,
+    "dia_inscribed": 3.1836,
+    "centre": [
+     44.002,
+     120.726
+    ],
+    "z_from": 0.0,
+    "z_to": 3.7,
+    "resid_max": 0.002233,
+    "facets": 62,
+    "n_bands": 2
+   },
+   {
+    "dia_fit": 3.49,
+    "dia_inscribed": 3.4831,
+    "centre": [
+     44.002,
+     97.126
+    ],
+    "z_from": 9.25,
+    "z_to": 9.7732,
+    "resid_max": 0.004107,
+    "facets": 64,
+    "n_bands": 2
+   },
+   {
+    "dia_fit": 3.5,
+    "dia_inscribed": 3.4831,
+    "centre": [
+     44.002,
+     97.126
+    ],
+    "z_from": 9.7732,
+    "z_to": 10.0,
+    "resid_max": 0.002165,
+    "facets": 64,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 4.01,
+    "dia_inscribed": 3.9928,
+    "centre": [
+     44.002,
+     97.126
+    ],
+    "z_from": 8.7405,
+    "z_to": 9.25,
+    "resid_max": 0.002388,
+    "facets": 86,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 4.71,
+    "dia_inscribed": 4.7017,
+    "centre": [
+     44.002,
+     97.126
+    ],
+    "z_from": 8.5414,
+    "z_to": 8.7405,
+    "resid_max": 0.004283,
+    "facets": 86,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.12,
+    "dia_inscribed": 5.1113,
+    "centre": [
+     44.002,
+     97.126
+    ],
+    "z_from": 8.331,
+    "z_to": 8.5414,
+    "resid_max": 0.004858,
+    "facets": 86,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.54,
+    "dia_inscribed": 5.5317,
+    "centre": [
+     44.002,
+     97.126
+    ],
+    "z_from": 8.121,
+    "z_to": 8.331,
+    "resid_max": 0.005162,
+    "facets": 86,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.95,
+    "dia_inscribed": 5.9398,
+    "centre": [
+     44.002,
+     97.126
+    ],
+    "z_from": 7.9231,
+    "z_to": 8.121,
+    "resid_max": 0.005238,
+    "facets": 86,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 6.32,
+    "dia_inscribed": 6.3127,
+    "centre": [
+     44.002,
+     97.126
+    ],
+    "z_from": 7.748,
+    "z_to": 7.9231,
+    "resid_max": 0.005153,
+    "facets": 86,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 6.64,
+    "dia_inscribed": 6.6301,
+    "centre": [
+     44.002,
+     97.126
+    ],
+    "z_from": 7.6056,
+    "z_to": 7.748,
+    "resid_max": 0.004985,
+    "facets": 86,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 6.89,
+    "dia_inscribed": 6.8781,
+    "centre": [
+     44.002,
+     97.126
+    ],
+    "z_from": 7.5,
+    "z_to": 7.6056,
+    "resid_max": 0.004801,
+    "facets": 86,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 7.5,
+    "dia_inscribed": 7.4836,
+    "centre": [
+     44.002,
+     97.126
+    ],
+    "z_from": 7.0,
+    "z_to": 7.5,
+    "resid_max": 0.004185,
+    "facets": 86,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 8.5,
+    "dia_inscribed": 8.4834,
+    "centre": [
+     44.002,
+     97.126
+    ],
+    "z_from": 6.5,
+    "z_to": 7.0,
+    "resid_max": 0.002768,
+    "facets": 86,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 9.5,
+    "dia_inscribed": 9.4832,
+    "centre": [
+     44.002,
+     97.126
+    ],
+    "z_from": 6.0,
+    "z_to": 6.5,
+    "resid_max": 0.00099,
+    "facets": 86,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 9.99,
+    "dia_inscribed": 9.9831,
+    "centre": [
+     44.002,
+     97.126
+    ],
+    "z_from": 0.3,
+    "z_to": 6.0,
+    "resid_max": 0.00423,
+    "facets": 108,
+    "n_bands": 3
+   },
+   {
+    "dia_fit": 10.0,
+    "dia_inscribed": 9.9831,
+    "centre": [
+     44.002,
+     97.126
+    ],
+    "z_from": 0.0,
+    "z_to": 0.3,
+    "resid_max": 0.000416,
+    "facets": 108,
+    "n_bands": 1
+   }
+  ]
+ },
+ {
+  "file": "models/Parts for attaching honeycombs to the wall/Insert-countersunk-with-m3x3.stl",
+  "circles": [
+   {
+    "dia_fit": 3.19,
+    "dia_inscribed": 3.1748,
+    "centre": [
+     75.983,
+     108.926
+    ],
+    "z_from": 0.3,
+    "z_to": 3.7,
+    "resid_max": 0.005947,
+    "facets": 50,
+    "n_bands": 2
+   },
+   {
+    "dia_fit": 3.19,
+    "dia_inscribed": 3.1748,
+    "centre": [
+     96.421,
+     120.726
+    ],
+    "z_from": 0.3,
+    "z_to": 3.7,
+    "resid_max": 0.005947,
+    "facets": 50,
+    "n_bands": 2
+   },
+   {
+    "dia_fit": 3.19,
+    "dia_inscribed": 3.1748,
+    "centre": [
+     116.859,
+     108.926
+    ],
+    "z_from": 0.3,
+    "z_to": 3.7,
+    "resid_max": 0.005948,
+    "facets": 50,
+    "n_bands": 2
+   },
+   {
+    "dia_fit": 3.2,
+    "dia_inscribed": 3.1748,
+    "centre": [
+     75.983,
+     108.926
+    ],
+    "z_from": 0.0,
+    "z_to": 0.3,
+    "resid_max": 0.000982,
+    "facets": 50,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 3.2,
+    "dia_inscribed": 3.1748,
+    "centre": [
+     96.421,
+     120.726
+    ],
+    "z_from": 0.0,
+    "z_to": 0.3,
+    "resid_max": 0.000982,
+    "facets": 50,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 3.2,
+    "dia_inscribed": 3.1748,
+    "centre": [
+     116.859,
+     108.926
+    ],
+    "z_from": 0.0,
+    "z_to": 0.3,
+    "resid_max": 0.000982,
+    "facets": 50,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 3.49,
+    "dia_inscribed": 3.4745,
+    "centre": [
+     96.421,
+     97.126
+    ],
+    "z_from": 9.25,
+    "z_to": 10.0,
+    "resid_max": 0.006221,
+    "facets": 52,
+    "n_bands": 3
+   },
+   {
+    "dia_fit": 4.01,
+    "dia_inscribed": 3.9843,
+    "centre": [
+     96.421,
+     97.126
+    ],
+    "z_from": 8.7405,
+    "z_to": 9.25,
+    "resid_max": 0.003554,
+    "facets": 70,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 4.71,
+    "dia_inscribed": 4.6933,
+    "centre": [
+     96.421,
+     97.126
+    ],
+    "z_from": 8.5414,
+    "z_to": 8.7405,
+    "resid_max": 0.00637,
+    "facets": 70,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.12,
+    "dia_inscribed": 5.103,
+    "centre": [
+     96.421,
+     97.126
+    ],
+    "z_from": 8.331,
+    "z_to": 8.5414,
+    "resid_max": 0.007225,
+    "facets": 70,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.54,
+    "dia_inscribed": 5.5236,
+    "centre": [
+     96.421,
+     97.126
+    ],
+    "z_from": 8.121,
+    "z_to": 8.331,
+    "resid_max": 0.007677,
+    "facets": 70,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.95,
+    "dia_inscribed": 5.9318,
+    "centre": [
+     96.421,
+     97.126
+    ],
+    "z_from": 7.9231,
+    "z_to": 8.121,
+    "resid_max": 0.007788,
+    "facets": 70,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 6.32,
+    "dia_inscribed": 6.3047,
+    "centre": [
+     96.421,
+     97.126
+    ],
+    "z_from": 7.748,
+    "z_to": 7.9231,
+    "resid_max": 0.007662,
+    "facets": 70,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 6.64,
+    "dia_inscribed": 6.622,
+    "centre": [
+     96.421,
+     97.126
+    ],
+    "z_from": 7.6056,
+    "z_to": 7.748,
+    "resid_max": 0.007412,
+    "facets": 70,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 6.89,
+    "dia_inscribed": 6.8699,
+    "centre": [
+     96.421,
+     97.126
+    ],
+    "z_from": 7.5,
+    "z_to": 7.6056,
+    "resid_max": 0.007137,
+    "facets": 70,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 7.49,
+    "dia_inscribed": 7.4754,
+    "centre": [
+     96.421,
+     97.126
+    ],
+    "z_from": 7.0,
+    "z_to": 7.5,
+    "resid_max": 0.006221,
+    "facets": 70,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 8.5,
+    "dia_inscribed": 8.475,
+    "centre": [
+     96.421,
+     97.126
+    ],
+    "z_from": 6.5,
+    "z_to": 7.0,
+    "resid_max": 0.004115,
+    "facets": 70,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 9.5,
+    "dia_inscribed": 9.4747,
+    "centre": [
+     96.421,
+     97.126
+    ],
+    "z_from": 6.0,
+    "z_to": 6.5,
+    "resid_max": 0.001472,
+    "facets": 70,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 9.99,
+    "dia_inscribed": 9.9745,
+    "centre": [
+     96.421,
+     97.126
+    ],
+    "z_from": 0.3,
+    "z_to": 6.0,
+    "resid_max": 0.00637,
+    "facets": 88,
+    "n_bands": 3
+   },
+   {
+    "dia_fit": 10.0,
+    "dia_inscribed": 9.9745,
+    "centre": [
+     96.421,
+     97.126
+    ],
+    "z_from": 0.0,
+    "z_to": 0.3,
+    "resid_max": 0.000624,
+    "facets": 88,
+    "n_bands": 1
+   }
+  ]
+ },
+ {
+  "file": "models/Parts for attaching honeycombs to the wall/Insert-countersunk.stl",
+  "circles": [
+   {
+    "dia_fit": 3.49,
+    "dia_inscribed": 3.4892,
+    "centre": [
+     90.0,
+     77.75
+    ],
+    "z_from": 9.6,
+    "z_to": 9.7732,
+    "resid_max": 0.002632,
+    "facets": 80,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 3.5,
+    "dia_inscribed": 3.4892,
+    "centre": [
+     90.0,
+     77.75
+    ],
+    "z_from": 9.25,
+    "z_to": 10.0,
+    "resid_max": 0.00194,
+    "facets": 80,
+    "n_bands": 2
+   },
+   {
+    "dia_fit": 4.01,
+    "dia_inscribed": 3.9988,
+    "centre": [
+     90.0,
+     77.75
+    ],
+    "z_from": 8.7405,
+    "z_to": 9.25,
+    "resid_max": 0.00158,
+    "facets": 106,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 4.69,
+    "dia_inscribed": 4.6781,
+    "centre": [
+     90.0,
+     77.75
+    ],
+    "z_from": 8.5708,
+    "z_to": 8.7405,
+    "resid_max": 0.002793,
+    "facets": 106,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.03,
+    "dia_inscribed": 5.027,
+    "centre": [
+     90.0,
+     77.75
+    ],
+    "z_from": 8.3916,
+    "z_to": 8.5708,
+    "resid_max": 0.003142,
+    "facets": 106,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.39,
+    "dia_inscribed": 5.3875,
+    "centre": [
+     90.0,
+     77.75
+    ],
+    "z_from": 8.2102,
+    "z_to": 8.3916,
+    "resid_max": 0.003356,
+    "facets": 106,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.75,
+    "dia_inscribed": 5.7451,
+    "centre": [
+     90.0,
+     77.75
+    ],
+    "z_from": 8.0341,
+    "z_to": 8.2102,
+    "resid_max": 0.003449,
+    "facets": 106,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 6.09,
+    "dia_inscribed": 6.085,
+    "centre": [
+     90.0,
+     77.75
+    ],
+    "z_from": 7.8703,
+    "z_to": 8.0341,
+    "resid_max": 0.003447,
+    "facets": 106,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 6.4,
+    "dia_inscribed": 6.3936,
+    "centre": [
+     90.0,
+     77.75
+    ],
+    "z_from": 7.7255,
+    "z_to": 7.8703,
+    "resid_max": 0.00338,
+    "facets": 106,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 6.67,
+    "dia_inscribed": 6.6581,
+    "centre": [
+     90.0,
+     77.75
+    ],
+    "z_from": 7.6056,
+    "z_to": 7.7255,
+    "resid_max": 0.003281,
+    "facets": 106,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 6.89,
+    "dia_inscribed": 6.8836,
+    "centre": [
+     90.0,
+     77.75
+    ],
+    "z_from": 7.5,
+    "z_to": 7.6056,
+    "resid_max": 0.003169,
+    "facets": 106,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 8.0,
+    "dia_inscribed": 7.989,
+    "centre": [
+     90.0,
+     77.75
+    ],
+    "z_from": 6.5,
+    "z_to": 7.5,
+    "resid_max": 0.00233,
+    "facets": 106,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 9.5,
+    "dia_inscribed": 9.4888,
+    "centre": [
+     90.0,
+     77.75
+    ],
+    "z_from": 6.0,
+    "z_to": 6.5,
+    "resid_max": 0.000652,
+    "facets": 106,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 10.0,
+    "dia_inscribed": 9.9887,
+    "centre": [
+     90.0,
+     77.75
+    ],
+    "z_from": 0.0,
+    "z_to": 6.0,
+    "resid_max": 0.002344,
+    "facets": 132,
+    "n_bands": 3
+   }
+  ]
+ },
+ {
+  "file": "models/Parts for attaching honeycombs to the wall/insert-for-countersunk-hole-3.stl",
+  "circles": [
+   {
+    "dia_fit": 3.49,
+    "dia_inscribed": 3.4745,
+    "centre": [
+     96.421,
+     45.026
+    ],
+    "z_from": 9.25,
+    "z_to": 10.0,
+    "resid_max": 0.006221,
+    "facets": 52,
+    "n_bands": 3
+   },
+   {
+    "dia_fit": 4.01,
+    "dia_inscribed": 3.9843,
+    "centre": [
+     96.421,
+     45.026
+    ],
+    "z_from": 8.7405,
+    "z_to": 9.25,
+    "resid_max": 0.003555,
+    "facets": 70,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 4.71,
+    "dia_inscribed": 4.6933,
+    "centre": [
+     96.421,
+     45.026
+    ],
+    "z_from": 8.5414,
+    "z_to": 8.7405,
+    "resid_max": 0.006371,
+    "facets": 70,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.12,
+    "dia_inscribed": 5.103,
+    "centre": [
+     96.421,
+     45.026
+    ],
+    "z_from": 8.331,
+    "z_to": 8.5414,
+    "resid_max": 0.007226,
+    "facets": 70,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.54,
+    "dia_inscribed": 5.5236,
+    "centre": [
+     96.421,
+     45.026
+    ],
+    "z_from": 8.121,
+    "z_to": 8.331,
+    "resid_max": 0.007678,
+    "facets": 70,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 5.95,
+    "dia_inscribed": 5.9318,
+    "centre": [
+     96.421,
+     45.026
+    ],
+    "z_from": 7.9231,
+    "z_to": 8.121,
+    "resid_max": 0.007789,
+    "facets": 70,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 6.32,
+    "dia_inscribed": 6.3047,
+    "centre": [
+     96.421,
+     45.026
+    ],
+    "z_from": 7.748,
+    "z_to": 7.9231,
+    "resid_max": 0.007663,
+    "facets": 70,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 6.64,
+    "dia_inscribed": 6.622,
+    "centre": [
+     96.421,
+     45.026
+    ],
+    "z_from": 7.6056,
+    "z_to": 7.748,
+    "resid_max": 0.007413,
+    "facets": 70,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 6.89,
+    "dia_inscribed": 6.8699,
+    "centre": [
+     96.421,
+     45.026
+    ],
+    "z_from": 7.5,
+    "z_to": 7.6056,
+    "resid_max": 0.007138,
+    "facets": 70,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 7.99,
+    "dia_inscribed": 7.9752,
+    "centre": [
+     96.421,
+     45.026
+    ],
+    "z_from": 6.5,
+    "z_to": 7.5,
+    "resid_max": 0.005248,
+    "facets": 70,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 9.5,
+    "dia_inscribed": 9.4747,
+    "centre": [
+     96.421,
+     45.026
+    ],
+    "z_from": 6.0,
+    "z_to": 6.5,
+    "resid_max": 0.001473,
+    "facets": 70,
+    "n_bands": 1
+   },
+   {
+    "dia_fit": 9.99,
+    "dia_inscribed": 9.9745,
+    "centre": [
+     96.421,
+     45.026
+    ],
+    "z_from": 0.3,
+    "z_to": 6.0,
+    "resid_max": 0.005268,
+    "facets": 88,
+    "n_bands": 2
+   },
+   {
+    "dia_fit": 10.0,
+    "dia_inscribed": 9.9745,
+    "centre": [
+     96.421,
+     45.026
+    ],
+    "z_from": 0.0,
+    "z_to": 0.3,
+    "resid_max": 0.000625,
+    "facets": 88,
+    "n_bands": 1
+   }
+  ]
+ },
+ {
+  "file": "models/shelves/shelf-4.stl",
+  "circles": [
+   {
+    "dia_fit": 171.09,
+    "dia_inscribed": 39.8267,
+    "centre": [
+     -3.631,
+     4.301
+    ],
+    "z_from": 2.5,
+    "z_to": 2.5011,
+    "resid_max": 1.49831,
+    "facets": 12,
+    "n_bands": 1
+   }
+  ]
+ }
+]

@@ -1,0 +1,7067 @@
+{
+ "generatedAt": "2026-08-10T21:29:55Z",
+ "parts": [
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    25.9808,
+    22.5,
+    50.0
+   ],
+   "drawnOrientation": "flat",
+   "file": "models/Hooks and holders/20-micro-sd-card-holder.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    }
+   ],
+   "group": "Hooks and holders",
+   "hardware": [],
+   "id": "20-micro-sd-card-holder",
+   "measurement": {
+    "bores": {},
+    "confidence": 0.97,
+    "interfaceWidths": [
+     22.5
+    ],
+    "matingAxis": "z",
+    "method": "bbox-gate+silhouette",
+    "overhangAreaMm2": 2214.87,
+    "overhangFraction": 0.21622,
+    "socketWidths": [
+     13.4
+    ],
+    "tier": "wall-clip",
+    "triangles": 956,
+    "watertight": false
+   },
+   "name": "20-micro-sd-card-holder",
+   "needsReview": false,
+   "print": {
+    "grams": 12.69,
+    "metres": 4.254,
+    "minutes": 84.42,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": true
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "bbox decomposes exactly onto the lattice (flat-drawn, 0+1 x 0+1 half-steps); mating face on z at z=40.750; 1 cell(s) filled, hexagons 94.7% solid",
+     "wall interface hexagons present at [22.5] mm across flats",
+     "also carries insert-side socket(s) at [13.4] mm -- accessories plug into this part"
+    ]
+   },
+   "requires": [],
+   "sha256": "7fb7cf3349d185ac670a1025a9e3782fbcdb095bf5d85769ec2e864e4d640ad6",
+   "type": "accessory",
+   "volumeMm3": 16330.176
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    25.9808,
+    22.5,
+    30.0
+   ],
+   "drawnOrientation": "flat",
+   "file": "models/Hooks and holders/5-micro-sd-card-holder.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    }
+   ],
+   "group": "Hooks and holders",
+   "hardware": [],
+   "id": "5-micro-sd-card-holder",
+   "measurement": {
+    "bores": {},
+    "confidence": 0.97,
+    "interfaceWidths": [
+     22.5
+    ],
+    "matingAxis": "z",
+    "method": "bbox-gate+silhouette",
+    "overhangAreaMm2": 523.74,
+    "overhangFraction": 0.10751,
+    "socketWidths": [
+     13.4
+    ],
+    "tier": "wall-clip",
+    "triangles": 640,
+    "watertight": false
+   },
+   "name": "5-micro-sd-card-holder",
+   "needsReview": false,
+   "print": {
+    "grams": 6.17,
+    "metres": 2.0699,
+    "minutes": 38.48,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": true
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "bbox decomposes exactly onto the lattice (flat-drawn, 0+1 x 0+1 half-steps); mating face on z at z=20.750; 1 cell(s) filled, hexagons 94.7% solid",
+     "wall interface hexagons present at [22.5] mm across flats",
+     "also carries insert-side socket(s) at [13.4] mm -- accessories plug into this part"
+    ]
+   },
+   "requires": [],
+   "sha256": "92c23ee435b27af6a3218051f6d09c3185711806624c86f64722d4c6c1eca501",
+   "type": "accessory",
+   "volumeMm3": 10267.472
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    46.188,
+    55.0,
+    40.0023
+   ],
+   "drawnOrientation": "n/a",
+   "file": "models/Hooks and holders/box.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 1,
+     "r": 0
+    },
+    {
+     "q": 2,
+     "r": 0
+    }
+   ],
+   "group": "Hooks and holders",
+   "hardware": [],
+   "id": "box",
+   "measurement": {
+    "bores": {},
+    "confidence": 0.35,
+    "interfaceWidths": [],
+    "matingAxis": "n/a",
+    "method": "bbox-span",
+    "overhangAreaMm2": 67.95,
+    "overhangFraction": 0.00531,
+    "socketWidths": [],
+    "tier": "insert-fed",
+    "triangles": 948,
+    "watertight": false
+   },
+   "name": "box",
+   "needsReview": true,
+   "print": {
+    "grams": 16.61,
+    "metres": 5.5707,
+    "minutes": 109.83,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": false
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "no wall interface; longest bbox edge 55.00 mm spans at most 3 cell(s) at 20.438 mm per step",
+     "no hexagonal interface of any size found; likely screws to an insert via an M3/M4/M5 hole",
+     "FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+    ]
+   },
+   "requires": [],
+   "sha256": "8397b7ea287e37d7943d8ccbf64e1ec8b4199583f6469280413a7398dafca68b",
+   "type": "accessory",
+   "volumeMm3": 16628.11
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    39.1444,
+    33.902,
+    5.0
+   ],
+   "drawnOrientation": "n/a",
+   "file": "models/Hooks and holders/box-and-usb-holder-cover.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 1,
+     "r": 0
+    }
+   ],
+   "group": "Hooks and holders",
+   "hardware": [],
+   "id": "box-and-usb-holder-cover",
+   "measurement": {
+    "bores": {},
+    "confidence": 0.35,
+    "interfaceWidths": [],
+    "matingAxis": "n/a",
+    "method": "bbox-span",
+    "overhangAreaMm2": 22.14,
+    "overhangFraction": 0.01005,
+    "socketWidths": [],
+    "tier": "insert-fed",
+    "triangles": 484,
+    "watertight": false
+   },
+   "name": "box-and-usb-holder-cover",
+   "needsReview": true,
+   "print": {
+    "grams": 2.23,
+    "metres": 0.7468,
+    "minutes": 16.35,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": false
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "no wall interface; longest bbox edge 39.14 mm spans at most 2 cell(s) at 20.438 mm per step",
+     "no hexagonal interface of any size found; likely screws to an insert via an M3/M4/M5 hole",
+     "FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+    ]
+   },
+   "requires": [],
+   "sha256": "6a47bb49cdcc72030d90696fe0259662a7e90188f6db82303f327c4163089188",
+   "type": "accessory",
+   "volumeMm3": 2156.688
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    46.188,
+    63.0,
+    40.0024
+   ],
+   "drawnOrientation": "n/a",
+   "file": "models/Hooks and holders/box-without-screw.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 1,
+     "r": 0
+    },
+    {
+     "q": 2,
+     "r": 0
+    }
+   ],
+   "group": "Hooks and holders",
+   "hardware": [],
+   "id": "box-without-screw",
+   "measurement": {
+    "bores": {},
+    "confidence": 0.35,
+    "interfaceWidths": [],
+    "matingAxis": "n/a",
+    "method": "bbox-span",
+    "overhangAreaMm2": 47.61,
+    "overhangFraction": 0.00364,
+    "socketWidths": [
+     13.45
+    ],
+    "tier": "insert-fed",
+    "triangles": 452,
+    "watertight": false
+   },
+   "name": "box-without-screw",
+   "needsReview": true,
+   "print": {
+    "grams": 17.23,
+    "metres": 5.7782,
+    "minutes": 113.68,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": false
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "no wall interface; longest bbox edge 63.00 mm spans at most 3 cell(s) at 20.438 mm per step",
+     "plugs into an insert socket at [13.45] mm across flats",
+     "FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+    ]
+   },
+   "requires": [
+    {
+     "count": 3,
+     "partId": "insert-empty"
+    }
+   ],
+   "sha256": "e2e73460e89f817cf432d3765728e994ea3cdf1927e8b3d0c0f2c3e3dfac144c",
+   "type": "accessory",
+   "volumeMm3": 17117.916
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    56.9398,
+    21.85,
+    16.0
+   ],
+   "drawnOrientation": "n/a",
+   "file": "models/Hooks and holders/caliper-mount.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 1,
+     "r": 0
+    },
+    {
+     "q": 2,
+     "r": 0
+    }
+   ],
+   "group": "Hooks and holders",
+   "hardware": [],
+   "id": "caliper-mount",
+   "measurement": {
+    "bores": {
+     "countersink": 1
+    },
+    "confidence": 0.35,
+    "interfaceWidths": [],
+    "matingAxis": "n/a",
+    "method": "bbox-span",
+    "overhangAreaMm2": 24.87,
+    "overhangFraction": 0.00887,
+    "socketWidths": [],
+    "tier": "insert-fed",
+    "triangles": 1002,
+    "watertight": false
+   },
+   "name": "caliper-mount",
+   "needsReview": true,
+   "print": {
+    "grams": 3.05,
+    "metres": 1.0237,
+    "minutes": 23.13,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": false
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "no wall interface; longest bbox edge 56.94 mm spans at most 3 cell(s) at 20.438 mm per step",
+     "no hexagonal interface of any size found; likely screws to an insert via an M3/M4/M5 hole",
+     "FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+    ]
+   },
+   "requires": [],
+   "sha256": "fbbb7ff07585cfffee0a91bf91fc71c5eef998878af197ab901ee24c961e0565",
+   "type": "accessory",
+   "volumeMm3": 4200.622
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    21.362,
+    18.5,
+    12.0
+   ],
+   "drawnOrientation": "n/a",
+   "file": "models/Other parts/countersunk-to-holee.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    }
+   ],
+   "group": "Other parts",
+   "hardware": [],
+   "id": "countersunk-to-holee",
+   "measurement": {
+    "bores": {
+     "countersink": 1
+    },
+    "confidence": 0.35,
+    "interfaceWidths": [],
+    "matingAxis": "n/a",
+    "method": "bbox-span",
+    "overhangAreaMm2": 25.26,
+    "overhangFraction": 0.0183,
+    "socketWidths": [
+     11.35,
+     18.2,
+     18.5
+    ],
+    "tier": "insert-fed",
+    "triangles": 680,
+    "watertight": false
+   },
+   "name": "countersunk-to-holee",
+   "needsReview": true,
+   "print": {
+    "grams": 1.47,
+    "metres": 0.4921,
+    "minutes": 15.23,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": false
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "no wall interface; longest bbox edge 21.36 mm spans at most 1 cell(s) at 20.438 mm per step",
+     "plugs into an insert socket at [11.35, 18.2, 18.5] mm across flats",
+     "FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+    ]
+   },
+   "requires": [
+    {
+     "count": 1,
+     "partId": "insert-empty"
+    }
+   ],
+   "sha256": "3494959798cc6a4426a7c58521f707e1037be75cf7f14a2e0f350dd39b6dfc26",
+   "type": "accessory",
+   "volumeMm3": 1224.92
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    21.362,
+    18.5,
+    5.0
+   ],
+   "drawnOrientation": "n/a",
+   "file": "models/Other parts/cover-contersunk.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    }
+   ],
+   "group": "Other parts",
+   "hardware": [],
+   "id": "cover-contersunk",
+   "measurement": {
+    "bores": {},
+    "confidence": 0.35,
+    "interfaceWidths": [],
+    "matingAxis": "n/a",
+    "method": "bbox-span",
+    "overhangAreaMm2": 0.0,
+    "overhangFraction": 0.0,
+    "socketWidths": [
+     18.2,
+     18.5
+    ],
+    "tier": "insert-fed",
+    "triangles": 460,
+    "watertight": false
+   },
+   "name": "cover-contersunk",
+   "needsReview": true,
+   "print": {
+    "grams": 0.73,
+    "metres": 0.2433,
+    "minutes": 6.65,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": false
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "no wall interface; longest bbox edge 21.36 mm spans at most 1 cell(s) at 20.438 mm per step",
+     "plugs into an insert socket at [18.2, 18.5] mm across flats",
+     "FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+    ]
+   },
+   "requires": [
+    {
+     "count": 1,
+     "partId": "insert-empty"
+    }
+   ],
+   "sha256": "aaf6bd8a5c76d40829c6945f5c3168b364dd197afacc55671fc6e4981fb24f13",
+   "type": "accessory",
+   "volumeMm3": 586.576
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    9.2545,
+    20.0,
+    13.0
+   ],
+   "drawnOrientation": "n/a",
+   "file": "models/Hooks and holders/hook-12mm-for-M3.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    }
+   ],
+   "group": "Hooks and holders",
+   "hardware": [],
+   "id": "hook-12mm-for-m3",
+   "measurement": {
+    "bores": {},
+    "confidence": 0.35,
+    "interfaceWidths": [],
+    "matingAxis": "n/a",
+    "method": "bbox-span",
+    "overhangAreaMm2": 94.47,
+    "overhangFraction": 0.08887,
+    "socketWidths": [],
+    "tier": "insert-fed",
+    "triangles": 784,
+    "watertight": false
+   },
+   "name": "hook-12mm-for-M3",
+   "needsReview": true,
+   "print": {
+    "grams": 1.12,
+    "metres": 0.3768,
+    "minutes": 11.13,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": true
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "no wall interface; longest bbox edge 20.00 mm spans at most 1 cell(s) at 20.438 mm per step",
+     "no hexagonal interface of any size found; likely screws to an insert via an M3/M4/M5 hole",
+     "FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+    ]
+   },
+   "requires": [],
+   "sha256": "d0ae7a7df285452279e76e6d487629e6bb6396906e958fcf2e23f2e678977bf3",
+   "type": "accessory",
+   "volumeMm3": 889.241
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    9.2545,
+    33.0,
+    13.0
+   ],
+   "drawnOrientation": "n/a",
+   "file": "models/Hooks and holders/hook-25mm-for-M3.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 1,
+     "r": 0
+    }
+   ],
+   "group": "Hooks and holders",
+   "hardware": [],
+   "id": "hook-25mm-for-m3",
+   "measurement": {
+    "bores": {},
+    "confidence": 0.35,
+    "interfaceWidths": [],
+    "matingAxis": "n/a",
+    "method": "bbox-span",
+    "overhangAreaMm2": 158.13,
+    "overhangFraction": 0.0948,
+    "socketWidths": [],
+    "tier": "insert-fed",
+    "triangles": 790,
+    "watertight": false
+   },
+   "name": "hook-25mm-for-M3",
+   "needsReview": true,
+   "print": {
+    "grams": 1.56,
+    "metres": 0.5231,
+    "minutes": 13.77,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": true
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "no wall interface; longest bbox edge 33.00 mm spans at most 2 cell(s) at 20.438 mm per step",
+     "no hexagonal interface of any size found; likely screws to an insert via an M3/M4/M5 hole",
+     "FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+    ]
+   },
+   "requires": [],
+   "sha256": "78939331a2fbdcc8496be3259055f784ce82acde943183dd118974076dfa9008",
+   "type": "accessory",
+   "volumeMm3": 1243.395
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    32.7922,
+    27.5544,
+    13.5893
+   ],
+   "drawnOrientation": "n/a",
+   "file": "models/Hooks and holders/hook-bottom.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 1,
+     "r": 0
+    }
+   ],
+   "group": "Hooks and holders",
+   "hardware": [],
+   "id": "hook-bottom",
+   "measurement": {
+    "bores": {},
+    "confidence": 0.35,
+    "interfaceWidths": [],
+    "matingAxis": "n/a",
+    "method": "bbox-span",
+    "overhangAreaMm2": 10.6,
+    "overhangFraction": 0.007,
+    "socketWidths": [],
+    "tier": "insert-fed",
+    "triangles": 116,
+    "watertight": false
+   },
+   "name": "hook-bottom",
+   "needsReview": true,
+   "print": {
+    "grams": 2.18,
+    "metres": 0.7309,
+    "minutes": 16.67,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": false
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "no wall interface; longest bbox edge 32.79 mm spans at most 2 cell(s) at 20.438 mm per step",
+     "no hexagonal interface of any size found; likely screws to an insert via an M3/M4/M5 hole",
+     "FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+    ]
+   },
+   "requires": [],
+   "sha256": "6efbfc7cd47b3e67e65e36334254b5c8046eae44d10a1e38e348e8d107cbc193",
+   "type": "accessory",
+   "volumeMm3": 2569.22
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    22.6072,
+    21.5582,
+    13.3542
+   ],
+   "drawnOrientation": "n/a",
+   "file": "models/Hooks and holders/hook-keyboard-bottom.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    }
+   ],
+   "group": "Hooks and holders",
+   "hardware": [],
+   "id": "hook-keyboard-bottom",
+   "measurement": {
+    "bores": {},
+    "confidence": 0.35,
+    "interfaceWidths": [],
+    "matingAxis": "n/a",
+    "method": "bbox-span",
+    "overhangAreaMm2": 9.86,
+    "overhangFraction": 0.00874,
+    "socketWidths": [],
+    "tier": "insert-fed",
+    "triangles": 100,
+    "watertight": false
+   },
+   "name": "hook-keyboard-bottom",
+   "needsReview": true,
+   "print": {
+    "grams": 1.47,
+    "metres": 0.494,
+    "minutes": 9.2,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": false
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "no wall interface; longest bbox edge 22.61 mm spans at most 1 cell(s) at 20.438 mm per step",
+     "no hexagonal interface of any size found; likely screws to an insert via an M3/M4/M5 hole",
+     "FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+    ]
+   },
+   "requires": [],
+   "sha256": "645faad50ae724c6a4dac8d94d8d0acaf1b4d631b8924f4baa5a3df7f0addc35",
+   "type": "accessory",
+   "volumeMm3": 2460.513
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    24.1441,
+    26.7481,
+    13.4493
+   ],
+   "drawnOrientation": "n/a",
+   "file": "models/Hooks and holders/hook-keyboard-side.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 1,
+     "r": 0
+    }
+   ],
+   "group": "Hooks and holders",
+   "hardware": [],
+   "id": "hook-keyboard-side",
+   "measurement": {
+    "bores": {},
+    "confidence": 0.35,
+    "interfaceWidths": [],
+    "matingAxis": "n/a",
+    "method": "bbox-span",
+    "overhangAreaMm2": 9.86,
+    "overhangFraction": 0.00739,
+    "socketWidths": [],
+    "tier": "insert-fed",
+    "triangles": 108,
+    "watertight": false
+   },
+   "name": "hook-keyboard-side",
+   "needsReview": true,
+   "print": {
+    "grams": 1.77,
+    "metres": 0.5949,
+    "minutes": 10.58,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": false
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "no wall interface; longest bbox edge 26.75 mm spans at most 2 cell(s) at 20.438 mm per step",
+     "no hexagonal interface of any size found; likely screws to an insert via an M3/M4/M5 hole",
+     "FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+    ]
+   },
+   "requires": [],
+   "sha256": "ef17d5800ba84390cd7e249854fad54218b36216bf7fb1fc66a3a3f7102fc15a",
+   "type": "accessory",
+   "volumeMm3": 2998.495
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    27.5543,
+    32.7922,
+    13.5894
+   ],
+   "drawnOrientation": "n/a",
+   "file": "models/Hooks and holders/hook-side.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 1,
+     "r": 0
+    }
+   ],
+   "group": "Hooks and holders",
+   "hardware": [],
+   "id": "hook-side",
+   "measurement": {
+    "bores": {},
+    "confidence": 0.35,
+    "interfaceWidths": [],
+    "matingAxis": "n/a",
+    "method": "bbox-span",
+    "overhangAreaMm2": 9.86,
+    "overhangFraction": 0.00635,
+    "socketWidths": [],
+    "tier": "insert-fed",
+    "triangles": 136,
+    "watertight": false
+   },
+   "name": "hook-side",
+   "needsReview": true,
+   "print": {
+    "grams": 2.29,
+    "metres": 0.7685,
+    "minutes": 19.4,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": false
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "no wall interface; longest bbox edge 32.79 mm spans at most 2 cell(s) at 20.438 mm per step",
+     "no hexagonal interface of any size found; likely screws to an insert via an M3/M4/M5 hole",
+     "FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+    ]
+   },
+   "requires": [],
+   "sha256": "24b627ece971f00b72b82151e3519b512ef9dc9d5c2f58414cccc0dc00e9bf27",
+   "type": "accessory",
+   "volumeMm3": 2559.058
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    15.6116,
+    37.4537,
+    21.7443
+   ],
+   "drawnOrientation": "n/a",
+   "file": "models/Hooks and holders/hook-to-empty.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 1,
+     "r": 0
+    }
+   ],
+   "group": "Hooks and holders",
+   "hardware": [],
+   "id": "hook-to-empty",
+   "measurement": {
+    "bores": {},
+    "confidence": 0.35,
+    "interfaceWidths": [],
+    "matingAxis": "n/a",
+    "method": "bbox-span",
+    "overhangAreaMm2": 57.67,
+    "overhangFraction": 0.0268,
+    "socketWidths": [
+     13.24
+    ],
+    "tier": "insert-fed",
+    "triangles": 4548,
+    "watertight": false
+   },
+   "name": "hook-to-empty",
+   "needsReview": true,
+   "print": {
+    "grams": 3.08,
+    "metres": 1.0325,
+    "minutes": 18.78,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": true
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "no wall interface; longest bbox edge 37.45 mm spans at most 2 cell(s) at 20.438 mm per step",
+     "plugs into an insert socket at [13.24] mm across flats",
+     "FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+    ]
+   },
+   "requires": [
+    {
+     "count": 2,
+     "partId": "insert-empty"
+    }
+   ],
+   "sha256": "84c83742fcefe2ab66bf019311b9d4106abd9276a2d8c2400012a2e282e9a5b5",
+   "type": "accessory",
+   "volumeMm3": 6112.492
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    17.8493,
+    89.4449,
+    22.7843
+   ],
+   "drawnOrientation": "n/a",
+   "file": "models/Hooks and holders/hook-to-empty-long.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 1,
+     "r": 0
+    },
+    {
+     "q": 2,
+     "r": 0
+    },
+    {
+     "q": 3,
+     "r": 0
+    },
+    {
+     "q": 4,
+     "r": 0
+    }
+   ],
+   "group": "Hooks and holders",
+   "hardware": [],
+   "id": "hook-to-empty-long",
+   "measurement": {
+    "bores": {},
+    "confidence": 0.35,
+    "interfaceWidths": [],
+    "matingAxis": "n/a",
+    "method": "bbox-span",
+    "overhangAreaMm2": 75.74,
+    "overhangFraction": 0.01589,
+    "socketWidths": [
+     13.74
+    ],
+    "tier": "insert-fed",
+    "triangles": 2682,
+    "watertight": false
+   },
+   "name": "hook-to-empty-long",
+   "needsReview": true,
+   "print": {
+    "grams": 7.2,
+    "metres": 2.4127,
+    "minutes": 39.93,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": false
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "no wall interface; longest bbox edge 89.44 mm spans at most 5 cell(s) at 20.438 mm per step",
+     "plugs into an insert socket at [13.74] mm across flats",
+     "FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+    ]
+   },
+   "requires": [
+    {
+     "count": 5,
+     "partId": "insert-empty"
+    }
+   ],
+   "sha256": "5d60343a76002ac0419355c27a62f0909ace2c00af8fc88c6ac34959a2028377",
+   "type": "accessory",
+   "volumeMm3": 15390.307
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    15.4674,
+    25.0,
+    13.3976
+   ],
+   "drawnOrientation": "n/a",
+   "file": "models/Hooks and holders/insert-cable holder.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    }
+   ],
+   "group": "Hooks and holders",
+   "hardware": [],
+   "id": "insert-cable-holder",
+   "measurement": {
+    "bores": {},
+    "confidence": 0.35,
+    "interfaceWidths": [],
+    "matingAxis": "n/a",
+    "method": "bbox-span",
+    "overhangAreaMm2": 3.74,
+    "overhangFraction": 0.00237,
+    "socketWidths": [],
+    "tier": "insert-fed",
+    "triangles": 1082,
+    "watertight": false
+   },
+   "name": "insert-cable holder",
+   "needsReview": true,
+   "print": {
+    "grams": 2.0,
+    "metres": 0.6714,
+    "minutes": 13.02,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": false
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "no wall interface; longest bbox edge 25.00 mm spans at most 1 cell(s) at 20.438 mm per step",
+     "no hexagonal interface of any size found; likely screws to an insert via an M3/M4/M5 hole",
+     "FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+    ]
+   },
+   "requires": [],
+   "sha256": "2d9a9c76f2e66b031b073a8b1b5d2bd1fd2c3c28697174a83bc38a9aa0eec28d",
+   "type": "accessory",
+   "volumeMm3": 3109.26
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    27.7128,
+    27.7,
+    22.5
+   ],
+   "drawnOrientation": "n/a",
+   "file": "models/Hooks and holders/screw-holder.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 1,
+     "r": 0
+    }
+   ],
+   "group": "Hooks and holders",
+   "hardware": [],
+   "id": "screw-holder",
+   "measurement": {
+    "bores": {},
+    "confidence": 0.35,
+    "interfaceWidths": [],
+    "matingAxis": "n/a",
+    "method": "bbox-span",
+    "overhangAreaMm2": 7.97,
+    "overhangFraction": 0.00337,
+    "socketWidths": [],
+    "tier": "insert-fed",
+    "triangles": 528,
+    "watertight": false
+   },
+   "name": "screw-holder",
+   "needsReview": true,
+   "print": {
+    "grams": 2.99,
+    "metres": 1.0037,
+    "minutes": 23.22,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": false
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "no wall interface; longest bbox edge 27.71 mm spans at most 2 cell(s) at 20.438 mm per step",
+     "no hexagonal interface of any size found; likely screws to an insert via an M3/M4/M5 hole",
+     "FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+    ]
+   },
+   "requires": [],
+   "sha256": "fdd8c10e96b5b2b58fb040cc1f2b83ef7a18c5bd7667a5b6f5f1f91d2902e177",
+   "type": "accessory",
+   "volumeMm3": 3440.542
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    35.0,
+    55.0,
+    30.3109
+   ],
+   "drawnOrientation": "n/a",
+   "file": "models/Hooks and holders/sd-card-holder.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 1,
+     "r": 0
+    },
+    {
+     "q": 2,
+     "r": 0
+    }
+   ],
+   "group": "Hooks and holders",
+   "hardware": [],
+   "id": "sd-card-holder",
+   "measurement": {
+    "bores": {},
+    "confidence": 0.35,
+    "interfaceWidths": [],
+    "matingAxis": "n/a",
+    "method": "bbox-span",
+    "overhangAreaMm2": 227.59,
+    "overhangFraction": 0.01392,
+    "socketWidths": [],
+    "tier": "insert-fed",
+    "triangles": 2860,
+    "watertight": false
+   },
+   "name": "sd-card-holder",
+   "needsReview": true,
+   "print": {
+    "grams": 22.42,
+    "metres": 7.5159,
+    "minutes": 148.25,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": false
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "no wall interface; longest bbox edge 55.00 mm spans at most 3 cell(s) at 20.438 mm per step",
+     "no hexagonal interface of any size found; likely screws to an insert via an M3/M4/M5 hole",
+     "FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+    ]
+   },
+   "requires": [],
+   "sha256": "98b849749334cdda446cd90d3c2b59d2e0629014aeb250dfe75c9289d491b2bb",
+   "type": "accessory",
+   "volumeMm3": 30462.57
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    29.2265,
+    25.3109,
+    6.0
+   ],
+   "drawnOrientation": "n/a",
+   "file": "models/Hooks and holders/sd-card-holder-cover.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 1,
+     "r": 0
+    }
+   ],
+   "group": "Hooks and holders",
+   "hardware": [],
+   "id": "sd-card-holder-cover",
+   "measurement": {
+    "bores": {},
+    "confidence": 0.35,
+    "interfaceWidths": [],
+    "matingAxis": "n/a",
+    "method": "bbox-span",
+    "overhangAreaMm2": 5.17,
+    "overhangFraction": 0.00394,
+    "socketWidths": [],
+    "tier": "insert-fed",
+    "triangles": 548,
+    "watertight": false
+   },
+   "name": "sd-card-holder-cover",
+   "needsReview": true,
+   "print": {
+    "grams": 1.45,
+    "metres": 0.4871,
+    "minutes": 11.27,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": false
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "no wall interface; longest bbox edge 29.23 mm spans at most 2 cell(s) at 20.438 mm per step",
+     "no hexagonal interface of any size found; likely screws to an insert via an M3/M4/M5 hole",
+     "FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+    ]
+   },
+   "requires": [],
+   "sha256": "582161d58041ee3dd117cb51734418c4b0ce9c70562c1658f01aa1a5c2ff7c79",
+   "type": "accessory",
+   "volumeMm3": 1360.849
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    35.0,
+    63.0,
+    30.3109
+   ],
+   "drawnOrientation": "n/a",
+   "file": "models/Hooks and holders/sd-card-holder-without-screw.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 1,
+     "r": 0
+    },
+    {
+     "q": 2,
+     "r": 0
+    }
+   ],
+   "group": "Hooks and holders",
+   "hardware": [],
+   "id": "sd-card-holder-without-screw",
+   "measurement": {
+    "bores": {},
+    "confidence": 0.35,
+    "interfaceWidths": [],
+    "matingAxis": "n/a",
+    "method": "bbox-span",
+    "overhangAreaMm2": 39.03,
+    "overhangFraction": 0.00213,
+    "socketWidths": [
+     13.45
+    ],
+    "tier": "insert-fed",
+    "triangles": 830,
+    "watertight": false
+   },
+   "name": "sd-card-holder-without-screw",
+   "needsReview": true,
+   "print": {
+    "grams": 25.86,
+    "metres": 8.6713,
+    "minutes": 171.07,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": false
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "no wall interface; longest bbox edge 63.00 mm spans at most 3 cell(s) at 20.438 mm per step",
+     "plugs into an insert socket at [13.45] mm across flats",
+     "FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+    ]
+   },
+   "requires": [
+    {
+     "count": 3,
+     "partId": "insert-empty"
+    }
+   ],
+   "sha256": "f9c750ad091644c23de7fa9d561f5723c54a1474cc169e358f8ed215abd0de51",
+   "type": "accessory",
+   "volumeMm3": 32596.97
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    56.4072,
+    51.0078,
+    13.4512
+   ],
+   "drawnOrientation": "n/a",
+   "file": "models/shelves/shelf-1.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 1,
+     "r": 0
+    },
+    {
+     "q": 2,
+     "r": 0
+    }
+   ],
+   "group": "shelves",
+   "hardware": [],
+   "id": "shelf-1",
+   "measurement": {
+    "bores": {},
+    "confidence": 0.35,
+    "interfaceWidths": [],
+    "matingAxis": "n/a",
+    "method": "bbox-span",
+    "overhangAreaMm2": 0.0,
+    "overhangFraction": 0.0,
+    "socketWidths": [
+     13.45
+    ],
+    "tier": "insert-fed",
+    "triangles": 258,
+    "watertight": false
+   },
+   "name": "shelf-1",
+   "needsReview": true,
+   "print": {
+    "grams": 7.66,
+    "metres": 2.5699,
+    "minutes": 54.63,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": false
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "no wall interface; longest bbox edge 56.41 mm spans at most 3 cell(s) at 20.438 mm per step",
+     "plugs into an insert socket at [13.45] mm across flats",
+     "FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+    ]
+   },
+   "requires": [
+    {
+     "count": 3,
+     "partId": "insert-empty"
+    }
+   ],
+   "sha256": "a43f490cc2e8a5f8a9274d2386a7b6af7a3f4c6568fc40a547c3cf25a122a1fa",
+   "type": "accessory",
+   "volumeMm3": 8621.991
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    97.2833,
+    51.0137,
+    13.4512
+   ],
+   "drawnOrientation": "n/a",
+   "file": "models/shelves/shelf-2.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 1,
+     "r": 0
+    },
+    {
+     "q": 2,
+     "r": 0
+    },
+    {
+     "q": 3,
+     "r": 0
+    },
+    {
+     "q": 4,
+     "r": 0
+    }
+   ],
+   "group": "shelves",
+   "hardware": [],
+   "id": "shelf-2",
+   "measurement": {
+    "bores": {},
+    "confidence": 0.35,
+    "interfaceWidths": [],
+    "matingAxis": "n/a",
+    "method": "bbox-span",
+    "overhangAreaMm2": 0.0,
+    "overhangFraction": 0.0,
+    "socketWidths": [
+     13.45
+    ],
+    "tier": "insert-fed",
+    "triangles": 224,
+    "watertight": false
+   },
+   "name": "shelf-2",
+   "needsReview": true,
+   "print": {
+    "grams": 11.37,
+    "metres": 3.8128,
+    "minutes": 80.5,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": false
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "no wall interface; longest bbox edge 97.28 mm spans at most 5 cell(s) at 20.438 mm per step",
+     "plugs into an insert socket at [13.45] mm across flats",
+     "FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+    ]
+   },
+   "requires": [
+    {
+     "count": 5,
+     "partId": "insert-empty"
+    }
+   ],
+   "sha256": "d46dd6f03f4f14747fa7f879e77c078f4c5a4cc03fe9d8e05c98d4beff457512",
+   "type": "accessory",
+   "volumeMm3": 12577.462
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    138.1598,
+    51.0393,
+    13.4688
+   ],
+   "drawnOrientation": "n/a",
+   "file": "models/shelves/shelf-3.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 1,
+     "r": 0
+    },
+    {
+     "q": 2,
+     "r": 0
+    },
+    {
+     "q": 3,
+     "r": 0
+    },
+    {
+     "q": 4,
+     "r": 0
+    },
+    {
+     "q": 5,
+     "r": 0
+    },
+    {
+     "q": 6,
+     "r": 0
+    }
+   ],
+   "group": "shelves",
+   "hardware": [],
+   "id": "shelf-3",
+   "measurement": {
+    "bores": {},
+    "confidence": 0.35,
+    "interfaceWidths": [],
+    "matingAxis": "n/a",
+    "method": "bbox-span",
+    "overhangAreaMm2": 0.0,
+    "overhangFraction": 0.0,
+    "socketWidths": [
+     13.45
+    ],
+    "tier": "insert-fed",
+    "triangles": 254,
+    "watertight": false
+   },
+   "name": "shelf-3",
+   "needsReview": true,
+   "print": {
+    "grams": 14.99,
+    "metres": 5.0266,
+    "minutes": 105.88,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": false
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "no wall interface; longest bbox edge 138.16 mm spans at most 7 cell(s) at 20.438 mm per step",
+     "plugs into an insert socket at [13.45] mm across flats",
+     "FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+    ]
+   },
+   "requires": [
+    {
+     "count": 7,
+     "partId": "insert-empty"
+    }
+   ],
+   "sha256": "79d131ab957b0a32eb146b1c8329371f20ef5252fcf0dfab6672d303952df63d",
+   "type": "accessory",
+   "volumeMm3": 16540.951
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    179.0352,
+    51.0253,
+    13.4512
+   ],
+   "drawnOrientation": "n/a",
+   "file": "models/shelves/shelf-4.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 1,
+     "r": 0
+    },
+    {
+     "q": 2,
+     "r": 0
+    },
+    {
+     "q": 3,
+     "r": 0
+    },
+    {
+     "q": 4,
+     "r": 0
+    },
+    {
+     "q": 5,
+     "r": 0
+    },
+    {
+     "q": 6,
+     "r": 0
+    },
+    {
+     "q": 7,
+     "r": 0
+    },
+    {
+     "q": 8,
+     "r": 0
+    }
+   ],
+   "group": "shelves",
+   "hardware": [],
+   "id": "shelf-4",
+   "measurement": {
+    "bores": {},
+    "confidence": 0.35,
+    "interfaceWidths": [],
+    "matingAxis": "n/a",
+    "method": "bbox-span",
+    "overhangAreaMm2": 0.0,
+    "overhangFraction": 0.0,
+    "socketWidths": [
+     13.45
+    ],
+    "tier": "insert-fed",
+    "triangles": 344,
+    "watertight": false
+   },
+   "name": "shelf-4",
+   "needsReview": true,
+   "print": {
+    "grams": 19.75,
+    "metres": 6.6221,
+    "minutes": 141.15,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": false
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "no wall interface; longest bbox edge 179.04 mm spans at most 9 cell(s) at 20.438 mm per step",
+     "plugs into an insert socket at [13.45] mm across flats",
+     "FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+    ]
+   },
+   "requires": [
+    {
+     "count": 9,
+     "partId": "insert-empty"
+    }
+   ],
+   "sha256": "10dd97328aca124c257a0fcf05d3369d21b2ab1df40bf31620e7f54b06e19467",
+   "type": "accessory",
+   "volumeMm3": 21723.087
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    46.188,
+    55.0,
+    40.0023
+   ],
+   "drawnOrientation": "n/a",
+   "file": "models/Hooks and holders/USB-holder.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 1,
+     "r": 0
+    },
+    {
+     "q": 2,
+     "r": 0
+    }
+   ],
+   "group": "Hooks and holders",
+   "hardware": [],
+   "id": "usb-holder",
+   "measurement": {
+    "bores": {},
+    "confidence": 0.35,
+    "interfaceWidths": [],
+    "matingAxis": "n/a",
+    "method": "bbox-span",
+    "overhangAreaMm2": 1156.45,
+    "overhangFraction": 0.06604,
+    "socketWidths": [],
+    "tier": "insert-fed",
+    "triangles": 7320,
+    "watertight": false
+   },
+   "name": "USB-holder",
+   "needsReview": true,
+   "print": {
+    "grams": 28.56,
+    "metres": 9.5744,
+    "minutes": 170.53,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": true
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "no wall interface; longest bbox edge 55.00 mm spans at most 3 cell(s) at 20.438 mm per step",
+     "no hexagonal interface of any size found; likely screws to an insert via an M3/M4/M5 hole",
+     "FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+    ]
+   },
+   "requires": [],
+   "sha256": "e9fbe2b870d1914f4025df250cb0609d5b69d130318010784aa038a48cac5c95",
+   "type": "accessory",
+   "volumeMm3": 62191.875
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    46.188,
+    63.0,
+    40.0023
+   ],
+   "drawnOrientation": "n/a",
+   "file": "models/Hooks and holders/USB-holder-without-screw.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 1,
+     "r": 0
+    },
+    {
+     "q": 2,
+     "r": 0
+    }
+   ],
+   "group": "Hooks and holders",
+   "hardware": [],
+   "id": "usb-holder-without-screw",
+   "measurement": {
+    "bores": {},
+    "confidence": 0.35,
+    "interfaceWidths": [],
+    "matingAxis": "n/a",
+    "method": "bbox-span",
+    "overhangAreaMm2": 827.05,
+    "overhangFraction": 0.04994,
+    "socketWidths": [
+     13.45
+    ],
+    "tier": "insert-fed",
+    "triangles": 6986,
+    "watertight": false
+   },
+   "name": "USB-holder-without-screw",
+   "needsReview": true,
+   "print": {
+    "grams": 28.27,
+    "metres": 9.4783,
+    "minutes": 164.72,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": true
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "no wall interface; longest bbox edge 63.00 mm spans at most 3 cell(s) at 20.438 mm per step",
+     "plugs into an insert socket at [13.45] mm across flats",
+     "FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+    ]
+   },
+   "requires": [
+    {
+     "count": 3,
+     "partId": "insert-empty"
+    }
+   ],
+   "sha256": "4648ee6e4c4f66c7cdf0d0be5fc5303b0c3d4fdf7137fce56c2e670f440d4718",
+   "type": "accessory",
+   "volumeMm3": 66603.267
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    200.0,
+    42.6389,
+    13.288
+   ],
+   "drawnOrientation": "n/a",
+   "file": "models/Hooks and holders/wranch-hoks-1.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 1,
+     "r": 0
+    },
+    {
+     "q": 2,
+     "r": 0
+    },
+    {
+     "q": 3,
+     "r": 0
+    },
+    {
+     "q": 4,
+     "r": 0
+    },
+    {
+     "q": 5,
+     "r": 0
+    },
+    {
+     "q": 6,
+     "r": 0
+    },
+    {
+     "q": 7,
+     "r": 0
+    },
+    {
+     "q": 8,
+     "r": 0
+    },
+    {
+     "q": 9,
+     "r": 0
+    }
+   ],
+   "group": "Hooks and holders",
+   "hardware": [],
+   "id": "wranch-hoks-1",
+   "measurement": {
+    "bores": {},
+    "confidence": 0.35,
+    "interfaceWidths": [],
+    "matingAxis": "n/a",
+    "method": "bbox-span",
+    "overhangAreaMm2": 7.49,
+    "overhangFraction": 0.00052,
+    "socketWidths": [],
+    "tier": "insert-fed",
+    "triangles": 1188,
+    "watertight": false
+   },
+   "name": "wranch-hoks-1",
+   "needsReview": true,
+   "print": {
+    "grams": 20.48,
+    "metres": 6.8677,
+    "minutes": 114.68,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": false
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "no wall interface; longest bbox edge 200.00 mm spans at most 10 cell(s) at 20.438 mm per step",
+     "no hexagonal interface of any size found; likely screws to an insert via an M3/M4/M5 hole",
+     "FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+    ]
+   },
+   "requires": [],
+   "sha256": "ad2531d9deba0aa865cc43e11ab428ab77384ab83bc91de40aca21084f3de2e1",
+   "type": "accessory",
+   "volumeMm3": 42619.559
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    200.0,
+    42.6389,
+    13.288
+   ],
+   "drawnOrientation": "n/a",
+   "file": "models/Hooks and holders/wranch-hoks-2.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 1,
+     "r": 0
+    },
+    {
+     "q": 2,
+     "r": 0
+    },
+    {
+     "q": 3,
+     "r": 0
+    },
+    {
+     "q": 4,
+     "r": 0
+    },
+    {
+     "q": 5,
+     "r": 0
+    },
+    {
+     "q": 6,
+     "r": 0
+    },
+    {
+     "q": 7,
+     "r": 0
+    },
+    {
+     "q": 8,
+     "r": 0
+    },
+    {
+     "q": 9,
+     "r": 0
+    }
+   ],
+   "group": "Hooks and holders",
+   "hardware": [],
+   "id": "wranch-hoks-2",
+   "measurement": {
+    "bores": {},
+    "confidence": 0.35,
+    "interfaceWidths": [],
+    "matingAxis": "n/a",
+    "method": "bbox-span",
+    "overhangAreaMm2": 7.49,
+    "overhangFraction": 0.00049,
+    "socketWidths": [],
+    "tier": "insert-fed",
+    "triangles": 916,
+    "watertight": false
+   },
+   "name": "wranch-hoks-2",
+   "needsReview": true,
+   "print": {
+    "grams": 22.13,
+    "metres": 7.4199,
+    "minutes": 122.25,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": false
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "no wall interface; longest bbox edge 200.00 mm spans at most 10 cell(s) at 20.438 mm per step",
+     "no hexagonal interface of any size found; likely screws to an insert via an M3/M4/M5 hole",
+     "FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+    ]
+   },
+   "requires": [],
+   "sha256": "075542d199a563e2bca2a431c077b63d14b5277bcf5c46ff3cca236fda6ff1d2",
+   "type": "accessory",
+   "volumeMm3": 47402.454
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    25.9808,
+    46.1,
+    10.0
+   ],
+   "drawnOrientation": "flat",
+   "file": "models/Parts for attaching honeycombs to the wall/hexagon-countersung-and-hole.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 1,
+     "r": 0
+    }
+   ],
+   "group": "Parts for attaching honeycombs to the wall",
+   "hardware": [
+    {
+     "count": 1,
+     "item": "Wall screw, 3.5 x 35 mm countersunk"
+    },
+    {
+     "count": 1,
+     "item": "Wall plug, 6 mm"
+    }
+   ],
+   "id": "hexagon-countersung-and-hole",
+   "measurement": {
+    "bores": {
+     "countersink": 1
+    },
+    "confidence": 0.9,
+    "interfaceWidths": [],
+    "matingAxis": "z",
+    "method": "bbox-gate+silhouette",
+    "overhangAreaMm2": 247.02,
+    "overhangFraction": 0.05801,
+    "socketWidths": [
+     13.4,
+     13.7,
+     16.5,
+     18.5
+    ],
+    "tier": "wall-clip",
+    "triangles": 1464,
+    "watertight": false
+   },
+   "name": "hexagon-countersung-and-hole",
+   "needsReview": false,
+   "print": {
+    "grams": 4.34,
+    "metres": 1.4564,
+    "minutes": 34.1,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": true
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.9,
+    "notes": [
+     "geometry reads as 'insert', folder says 'fastener'; both are consistent -- folder gives the purpose",
+     "bbox decomposes exactly onto the lattice (flat-drawn, 0+1 x 2+1 half-steps); mating face on z at z=1.400; 2 cell(s) filled, hexagons 95.5% solid",
+     "also carries insert-side socket(s) at [13.4, 13.7, 16.5, 18.5] mm -- accessories plug into this part"
+    ]
+   },
+   "requires": [],
+   "sha256": "072550acffcc2bcbae24b5dc78aca5705cb787cebf31cbd0c54fa2e6084341d7",
+   "type": "fastener",
+   "volumeMm3": 4726.205
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    25.9808,
+    46.1,
+    10.0
+   ],
+   "drawnOrientation": "flat",
+   "file": "models/Parts for attaching honeycombs to the wall/insert-countersung-m3.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 1,
+     "r": 0
+    }
+   ],
+   "group": "Parts for attaching honeycombs to the wall",
+   "hardware": [
+    {
+     "count": 1,
+     "item": "M3 bolt, 10-16 mm"
+    },
+    {
+     "count": 1,
+     "item": "M3 nut"
+    },
+    {
+     "count": 1,
+     "item": "Wall screw, 3.5 x 35 mm countersunk"
+    },
+    {
+     "count": 1,
+     "item": "Wall plug, 6 mm"
+    }
+   ],
+   "id": "insert-countersung-m3",
+   "measurement": {
+    "bores": {
+     "M3": 1,
+     "countersink": 1
+    },
+    "confidence": 0.9,
+    "interfaceWidths": [],
+    "matingAxis": "z",
+    "method": "bbox-gate+silhouette",
+    "overhangAreaMm2": 247.02,
+    "overhangFraction": 0.0572,
+    "socketWidths": [
+     5.8,
+     11.4,
+     16.5,
+     18.5
+    ],
+    "tier": "wall-clip",
+    "triangles": 1600,
+    "watertight": false
+   },
+   "name": "insert-countersung-m3",
+   "needsReview": false,
+   "print": {
+    "grams": 4.66,
+    "metres": 1.564,
+    "minutes": 37.05,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": true
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.9,
+    "notes": [
+     "geometry reads as 'insert', folder says 'fastener'; both are consistent -- folder gives the purpose",
+     "bbox decomposes exactly onto the lattice (flat-drawn, 0+1 x 2+1 half-steps); mating face on z at z=1.400; 2 cell(s) filled, hexagons 95.5% solid",
+     "also carries insert-side socket(s) at [5.8, 11.4, 16.5, 18.5] mm -- accessories plug into this part"
+    ]
+   },
+   "requires": [],
+   "sha256": "e6de7ced300fe78b5dde8f8b44a5668900a841b4c08971cda2d8ca163f443c52",
+   "type": "fastener",
+   "volumeMm3": 5820.02
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    25.9808,
+    22.5,
+    10.0
+   ],
+   "drawnOrientation": "flat",
+   "file": "models/Parts for attaching honeycombs to the wall/Insert-countersunk.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    }
+   ],
+   "group": "Parts for attaching honeycombs to the wall",
+   "hardware": [
+    {
+     "count": 1,
+     "item": "Wall screw, 3.5 x 35 mm countersunk"
+    },
+    {
+     "count": 1,
+     "item": "Wall plug, 6 mm"
+    }
+   ],
+   "id": "insert-countersunk",
+   "measurement": {
+    "bores": {
+     "countersink": 1
+    },
+    "confidence": 0.97,
+    "interfaceWidths": [
+     22.5
+    ],
+    "matingAxis": "z",
+    "method": "bbox-gate+silhouette",
+    "overhangAreaMm2": 128.64,
+    "overhangFraction": 0.05924,
+    "socketWidths": [
+     16.5,
+     18.5
+    ],
+    "tier": "wall-clip",
+    "triangles": 988,
+    "watertight": false
+   },
+   "name": "Insert-countersunk",
+   "needsReview": false,
+   "print": {
+    "grams": 2.29,
+    "metres": 0.7686,
+    "minutes": 18.65,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": true
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.9,
+    "notes": [
+     "geometry reads as 'insert', folder says 'fastener'; both are consistent -- folder gives the purpose",
+     "bbox decomposes exactly onto the lattice (flat-drawn, 0+1 x 0+1 half-steps); mating face on z at z=1.400; 1 cell(s) filled, hexagons 94.7% solid",
+     "wall interface hexagons present at [22.5] mm across flats",
+     "also carries insert-side socket(s) at [16.5, 18.5] mm -- accessories plug into this part"
+    ]
+   },
+   "requires": [],
+   "sha256": "32e8f5e8d1d1ad1db8547aa0024d52ac239cdd6ca77f282d716e6c642b9b4f5f",
+   "type": "fastener",
+   "volumeMm3": 2824.344
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    66.8572,
+    46.1,
+    10.0
+   ],
+   "drawnOrientation": "flat",
+   "file": "models/Parts for attaching honeycombs to the wall/Insert-countersunk-with-m3x3.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": -1,
+     "r": 1
+    },
+    {
+     "q": 0,
+     "r": 1
+    },
+    {
+     "q": -1,
+     "r": 2
+    }
+   ],
+   "group": "Parts for attaching honeycombs to the wall",
+   "hardware": [
+    {
+     "count": 3,
+     "item": "M3 bolt, 10-16 mm"
+    },
+    {
+     "count": 3,
+     "item": "M3 nut"
+    },
+    {
+     "count": 1,
+     "item": "Wall screw, 3.5 x 35 mm countersunk"
+    },
+    {
+     "count": 1,
+     "item": "Wall plug, 6 mm"
+    }
+   ],
+   "id": "insert-countersunk-with-m3x3",
+   "measurement": {
+    "bores": {
+     "M3": 3,
+     "countersink": 1
+    },
+    "confidence": 0.9,
+    "interfaceWidths": [],
+    "matingAxis": "z",
+    "method": "bbox-gate+silhouette",
+    "overhangAreaMm2": 512.7,
+    "overhangFraction": 0.05994,
+    "socketWidths": [
+     5.8,
+     11.4,
+     16.5,
+     18.5
+    ],
+    "tier": "wall-clip",
+    "triangles": 2884,
+    "watertight": false
+   },
+   "name": "Insert-countersunk-with-m3x3",
+   "needsReview": false,
+   "print": {
+    "grams": 9.44,
+    "metres": 3.1659,
+    "minutes": 73.93,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": true
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.9,
+    "notes": [
+     "geometry reads as 'insert', folder says 'fastener'; both are consistent -- folder gives the purpose",
+     "bbox decomposes exactly onto the lattice (flat-drawn, 2+1 x 2+1 half-steps); mating face on z at z=1.400; 4 cell(s) filled, hexagons 96.9% solid",
+     "also carries insert-side socket(s) at [5.8, 11.4, 16.5, 18.5] mm -- accessories plug into this part"
+    ]
+   },
+   "requires": [],
+   "sha256": "80a0111a99c6325cc8857997cd92f6ed3476a4048b9c84200249d6e234e52a4d",
+   "type": "fastener",
+   "volumeMm3": 11876.679
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    66.8572,
+    46.1,
+    10.0
+   ],
+   "drawnOrientation": "flat",
+   "file": "models/Parts for attaching honeycombs to the wall/insert-for-countersunk-hole-3.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": -1,
+     "r": 1
+    },
+    {
+     "q": 0,
+     "r": 1
+    },
+    {
+     "q": -1,
+     "r": 2
+    }
+   ],
+   "group": "Parts for attaching honeycombs to the wall",
+   "hardware": [
+    {
+     "count": 1,
+     "item": "Wall screw, 3.5 x 35 mm countersunk"
+    },
+    {
+     "count": 1,
+     "item": "Wall plug, 6 mm"
+    }
+   ],
+   "id": "insert-for-countersunk-hole-3",
+   "measurement": {
+    "bores": {
+     "countersink": 1
+    },
+    "confidence": 0.9,
+    "interfaceWidths": [],
+    "matingAxis": "z",
+    "method": "bbox-gate+silhouette",
+    "overhangAreaMm2": 512.7,
+    "overhangFraction": 0.06124,
+    "socketWidths": [
+     13.4,
+     13.7,
+     16.5,
+     18.5
+    ],
+    "tier": "wall-clip",
+    "triangles": 2548,
+    "watertight": false
+   },
+   "name": "insert-for-countersunk-hole-3",
+   "needsReview": false,
+   "print": {
+    "grams": 8.37,
+    "metres": 2.8061,
+    "minutes": 64.88,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": true
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.9,
+    "notes": [
+     "geometry reads as 'insert', folder says 'fastener'; both are consistent -- folder gives the purpose",
+     "bbox decomposes exactly onto the lattice (flat-drawn, 2+1 x 2+1 half-steps); mating face on z at z=1.400; 4 cell(s) filled, hexagons 96.9% solid",
+     "also carries insert-side socket(s) at [13.4, 13.7, 16.5, 18.5] mm -- accessories plug into this part"
+    ]
+   },
+   "requires": [],
+   "sha256": "ccf5f68020d93439566cf8e3d9334b3c7c304f2f3b9b5bbc30053fe4531995d1",
+   "type": "fastener",
+   "volumeMm3": 8594.905
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    46.419,
+    34.3,
+    10.0
+   ],
+   "drawnOrientation": "flat",
+   "file": "models/Fasteners and parts for attaching hooks and objects/double M4.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 0,
+     "r": 1
+    }
+   ],
+   "group": "Fasteners and parts for attaching hooks and objects",
+   "hardware": [
+    {
+     "count": 2,
+     "item": "M4 bolt, 10-16 mm"
+    },
+    {
+     "count": 2,
+     "item": "M4 nut"
+    }
+   ],
+   "id": "double-m4",
+   "measurement": {
+    "bores": {
+     "M4": 2
+    },
+    "confidence": 0.9,
+    "interfaceWidths": [],
+    "matingAxis": "z",
+    "method": "bbox-gate+silhouette",
+    "overhangAreaMm2": 221.77,
+    "overhangFraction": 0.05087,
+    "socketWidths": [
+     11.4,
+     16.5,
+     18.5
+    ],
+    "tier": "wall-clip",
+    "triangles": 1596,
+    "watertight": false
+   },
+   "name": "double M4",
+   "needsReview": false,
+   "print": {
+    "grams": 4.72,
+    "metres": 1.5823,
+    "minutes": 37.43,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": true
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "bbox decomposes exactly onto the lattice (flat-drawn, 1+1 x 1+1 half-steps); mating face on z at z=1.400; 2 cell(s) filled, hexagons 96.0% solid",
+     "also carries insert-side socket(s) at [11.4, 16.5, 18.5] mm -- accessories plug into this part"
+    ]
+   },
+   "requires": [],
+   "sha256": "5a657dc2f311379f7204da181f496a039529e946e1331d6a76ac553bcad0b9eb",
+   "type": "insert",
+   "volumeMm3": 5777.222
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    46.419,
+    34.3,
+    10.0
+   ],
+   "drawnOrientation": "flat",
+   "file": "models/Fasteners and parts for attaching hooks and objects/double M5.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 0,
+     "r": 1
+    }
+   ],
+   "group": "Fasteners and parts for attaching hooks and objects",
+   "hardware": [
+    {
+     "count": 2,
+     "item": "M5 bolt, 10-16 mm"
+    },
+    {
+     "count": 2,
+     "item": "M5 nut"
+    }
+   ],
+   "id": "double-m5",
+   "measurement": {
+    "bores": {
+     "M5": 2
+    },
+    "confidence": 0.9,
+    "interfaceWidths": [],
+    "matingAxis": "z",
+    "method": "bbox-gate+silhouette",
+    "overhangAreaMm2": 221.77,
+    "overhangFraction": 0.05066,
+    "socketWidths": [
+     11.4,
+     16.5,
+     18.5
+    ],
+    "tier": "wall-clip",
+    "triangles": 1632,
+    "watertight": false
+   },
+   "name": "double M5",
+   "needsReview": false,
+   "print": {
+    "grams": 4.67,
+    "metres": 1.5641,
+    "minutes": 37.57,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": true
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "bbox decomposes exactly onto the lattice (flat-drawn, 1+1 x 1+1 half-steps); mating face on z at z=1.400; 2 cell(s) filled, hexagons 96.0% solid",
+     "also carries insert-side socket(s) at [11.4, 16.5, 18.5] mm -- accessories plug into this part"
+    ]
+   },
+   "requires": [],
+   "sha256": "1dab158f566dbebfe1e7aee32fedb08d2976bd31bbf8b275b6e403229edd8498",
+   "type": "insert",
+   "volumeMm3": 5632.332
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    25.9808,
+    22.5,
+    10.0
+   ],
+   "drawnOrientation": "flat",
+   "file": "models/Fasteners and parts for attaching hooks and objects/insert-empty.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    }
+   ],
+   "group": "Fasteners and parts for attaching hooks and objects",
+   "hardware": [],
+   "id": "insert-empty",
+   "measurement": {
+    "bores": {},
+    "confidence": 0.97,
+    "interfaceWidths": [
+     22.5
+    ],
+    "matingAxis": "z",
+    "method": "bbox-gate+silhouette",
+    "overhangAreaMm2": 103.38,
+    "overhangFraction": 0.0488,
+    "socketWidths": [
+     13.4,
+     16.5,
+     18.5
+    ],
+    "tier": "wall-clip",
+    "triangles": 588,
+    "watertight": false
+   },
+   "name": "insert-empty",
+   "needsReview": false,
+   "print": {
+    "grams": 1.95,
+    "metres": 0.6534,
+    "minutes": 15.33,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": true
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "bbox decomposes exactly onto the lattice (flat-drawn, 0+1 x 0+1 half-steps); mating face on z at z=1.400; 1 cell(s) filled, hexagons 94.7% solid",
+     "wall interface hexagons present at [22.5] mm across flats",
+     "also carries insert-side socket(s) at [13.4, 16.5, 18.5] mm -- accessories plug into this part"
+    ]
+   },
+   "requires": [],
+   "sha256": "9382a07224ab348cf72ad01cd49c402bd30c23daaee11901df0bf92a2596f9ad",
+   "type": "insert",
+   "volumeMm3": 1872.098
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    46.419,
+    34.3,
+    10.0
+   ],
+   "drawnOrientation": "flat",
+   "file": "models/Fasteners and parts for attaching hooks and objects/insert-hollow-dual.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 0,
+     "r": 1
+    }
+   ],
+   "group": "Fasteners and parts for attaching hooks and objects",
+   "hardware": [],
+   "id": "insert-hollow-dual",
+   "measurement": {
+    "bores": {},
+    "confidence": 0.9,
+    "interfaceWidths": [],
+    "matingAxis": "z",
+    "method": "bbox-gate+silhouette",
+    "overhangAreaMm2": 221.77,
+    "overhangFraction": 0.05284,
+    "socketWidths": [
+     13.4,
+     13.7,
+     16.5,
+     18.5
+    ],
+    "tier": "wall-clip",
+    "triangles": 1156,
+    "watertight": false
+   },
+   "name": "insert-hollow-dual",
+   "needsReview": false,
+   "print": {
+    "grams": 3.99,
+    "metres": 1.3371,
+    "minutes": 30.92,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": true
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "bbox decomposes exactly onto the lattice (flat-drawn, 1+1 x 1+1 half-steps); mating face on z at z=1.400; 2 cell(s) filled, hexagons 96.0% solid",
+     "also carries insert-side socket(s) at [13.4, 13.7, 16.5, 18.5] mm -- accessories plug into this part"
+    ]
+   },
+   "requires": [],
+   "sha256": "0d01ebee504e47d3134322a6308942f875a6989d8c35cd50957b37744cc3ed8d",
+   "type": "insert",
+   "volumeMm3": 3771.36
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    46.419,
+    57.9,
+    10.0
+   ],
+   "drawnOrientation": "flat",
+   "file": "models/Fasteners and parts for attaching hooks and objects/insert-hollow-for.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 1,
+     "r": 0
+    },
+    {
+     "q": 0,
+     "r": 1
+    },
+    {
+     "q": 1,
+     "r": 1
+    }
+   ],
+   "group": "Fasteners and parts for attaching hooks and objects",
+   "hardware": [],
+   "id": "insert-hollow-for",
+   "measurement": {
+    "bores": {},
+    "confidence": 0.9,
+    "interfaceWidths": [],
+    "matingAxis": "z",
+    "method": "bbox-gate+silhouette",
+    "overhangAreaMm2": 487.46,
+    "overhangFraction": 0.05866,
+    "socketWidths": [
+     13.4,
+     13.7,
+     16.5,
+     18.5
+    ],
+    "tier": "wall-clip",
+    "triangles": 2304,
+    "watertight": false
+   },
+   "name": "insert-hollow-for",
+   "needsReview": false,
+   "print": {
+    "grams": 8.03,
+    "metres": 2.6939,
+    "minutes": 61.7,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": true
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "bbox decomposes exactly onto the lattice (flat-drawn, 1+1 x 3+1 half-steps); mating face on z at z=1.400; 4 cell(s) filled, hexagons 97.1% solid",
+     "also carries insert-side socket(s) at [13.4, 13.7, 16.5, 18.5] mm -- accessories plug into this part"
+    ]
+   },
+   "requires": [],
+   "sha256": "8baa891dd3928a974cd7d4b0f0e91b7aa657dc0fc61326be69502cc437d122b3",
+   "type": "insert",
+   "volumeMm3": 7639.333
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    46.419,
+    46.1,
+    10.0
+   ],
+   "drawnOrientation": "flat",
+   "file": "models/Fasteners and parts for attaching hooks and objects/insert-hollow-tre.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 1,
+     "r": 0
+    },
+    {
+     "q": 0,
+     "r": 1
+    }
+   ],
+   "group": "Fasteners and parts for attaching hooks and objects",
+   "hardware": [],
+   "id": "insert-hollow-tre",
+   "measurement": {
+    "bores": {},
+    "confidence": 0.9,
+    "interfaceWidths": [],
+    "matingAxis": "z",
+    "method": "bbox-gate+silhouette",
+    "overhangAreaMm2": 354.62,
+    "overhangFraction": 0.0567,
+    "socketWidths": [
+     13.4,
+     13.7,
+     16.5,
+     18.5
+    ],
+    "tier": "wall-clip",
+    "triangles": 1730,
+    "watertight": false
+   },
+   "name": "insert-hollow-tre",
+   "needsReview": false,
+   "print": {
+    "grams": 5.97,
+    "metres": 2.003,
+    "minutes": 46.12,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": true
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "bbox decomposes exactly onto the lattice (flat-drawn, 1+1 x 2+1 half-steps); mating face on z at z=1.400; 3 cell(s) filled, hexagons 96.4% solid",
+     "also carries insert-side socket(s) at [13.4, 13.7, 16.5, 18.5] mm -- accessories plug into this part"
+    ]
+   },
+   "requires": [],
+   "sha256": "b8ca6c1065d8b438393555b3a15e36a1be9d70983d7c898bbe95361d78008f1e",
+   "type": "insert",
+   "volumeMm3": 5705.346
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    25.9808,
+    22.5,
+    10.0
+   ],
+   "drawnOrientation": "flat",
+   "file": "models/Fasteners and parts for attaching hooks and objects/insert M4.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    }
+   ],
+   "group": "Fasteners and parts for attaching hooks and objects",
+   "hardware": [
+    {
+     "count": 1,
+     "item": "M4 bolt, 10-16 mm"
+    },
+    {
+     "count": 1,
+     "item": "M4 nut"
+    }
+   ],
+   "id": "insert-m4",
+   "measurement": {
+    "bores": {
+     "M4": 1
+    },
+    "confidence": 0.97,
+    "interfaceWidths": [
+     22.5
+    ],
+    "matingAxis": "z",
+    "method": "bbox-gate+silhouette",
+    "overhangAreaMm2": 103.38,
+    "overhangFraction": 0.04717,
+    "socketWidths": [
+     11.4,
+     16.5,
+     18.5
+    ],
+    "tier": "wall-clip",
+    "triangles": 876,
+    "watertight": false
+   },
+   "name": "insert M4",
+   "needsReview": false,
+   "print": {
+    "grams": 2.35,
+    "metres": 0.7864,
+    "minutes": 18.55,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": true
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "bbox decomposes exactly onto the lattice (flat-drawn, 0+1 x 0+1 half-steps); mating face on z at z=1.400; 1 cell(s) filled, hexagons 94.7% solid",
+     "wall interface hexagons present at [22.5] mm across flats",
+     "also carries insert-side socket(s) at [11.4, 16.5, 18.5] mm -- accessories plug into this part"
+    ]
+   },
+   "requires": [],
+   "sha256": "9c323e5d8ed9589b3774e87745c95cbaf6ff210f150a1e219cda9105a26ff52f",
+   "type": "insert",
+   "volumeMm3": 2872.821
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    25.9808,
+    22.5,
+    10.0
+   ],
+   "drawnOrientation": "flat",
+   "file": "models/Fasteners and parts for attaching hooks and objects/insert M5.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    }
+   ],
+   "group": "Fasteners and parts for attaching hooks and objects",
+   "hardware": [
+    {
+     "count": 1,
+     "item": "M5 bolt, 10-16 mm"
+    },
+    {
+     "count": 1,
+     "item": "M5 nut"
+    }
+   ],
+   "id": "insert-m5",
+   "measurement": {
+    "bores": {
+     "M5": 1
+    },
+    "confidence": 0.97,
+    "interfaceWidths": [
+     22.5
+    ],
+    "matingAxis": "z",
+    "method": "bbox-gate+silhouette",
+    "overhangAreaMm2": 103.38,
+    "overhangFraction": 0.04698,
+    "socketWidths": [
+     11.4,
+     16.5,
+     18.5
+    ],
+    "tier": "wall-clip",
+    "triangles": 904,
+    "watertight": false
+   },
+   "name": "insert M5",
+   "needsReview": false,
+   "print": {
+    "grams": 2.3,
+    "metres": 0.7707,
+    "minutes": 18.67,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": true
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "bbox decomposes exactly onto the lattice (flat-drawn, 0+1 x 0+1 half-steps); mating face on z at z=1.400; 1 cell(s) filled, hexagons 94.7% solid",
+     "wall interface hexagons present at [22.5] mm across flats",
+     "also carries insert-side socket(s) at [11.4, 16.5, 18.5] mm -- accessories plug into this part"
+    ]
+   },
+   "requires": [],
+   "sha256": "6bfb99dd40e4ce4bde5f1719f883f7d020bc4c2b102df3629a5f90b197f5a992",
+   "type": "insert",
+   "volumeMm3": 2800.345
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    25.9808,
+    22.5,
+    10.0
+   ],
+   "drawnOrientation": "flat",
+   "file": "models/Fasteners and parts for attaching hooks and objects/insert-with-M3.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    }
+   ],
+   "group": "Fasteners and parts for attaching hooks and objects",
+   "hardware": [
+    {
+     "count": 1,
+     "item": "M3 bolt, 10-16 mm"
+    },
+    {
+     "count": 1,
+     "item": "M3 nut"
+    }
+   ],
+   "id": "insert-with-m3",
+   "measurement": {
+    "bores": {
+     "M3": 1
+    },
+    "confidence": 0.97,
+    "interfaceWidths": [
+     22.5
+    ],
+    "matingAxis": "z",
+    "method": "bbox-gate+silhouette",
+    "overhangAreaMm2": 103.38,
+    "overhangFraction": 0.04761,
+    "socketWidths": [
+     5.8,
+     11.4,
+     16.5,
+     18.5
+    ],
+    "tier": "wall-clip",
+    "triangles": 764,
+    "watertight": false
+   },
+   "name": "insert-with-M3",
+   "needsReview": false,
+   "print": {
+    "grams": 2.34,
+    "metres": 0.7859,
+    "minutes": 18.23,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": true
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "bbox decomposes exactly onto the lattice (flat-drawn, 0+1 x 0+1 half-steps); mating face on z at z=1.400; 1 cell(s) filled, hexagons 94.7% solid",
+     "wall interface hexagons present at [22.5] mm across flats",
+     "also carries insert-side socket(s) at [5.8, 11.4, 16.5, 18.5] mm -- accessories plug into this part"
+    ]
+   },
+   "requires": [],
+   "sha256": "329c23eb5d6f437d5404230ca886aa0bdb282800a99d92cb0e3bed7b61efd18c",
+   "type": "insert",
+   "volumeMm3": 2963.726
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    46.419,
+    34.3,
+    10.0
+   ],
+   "drawnOrientation": "flat",
+   "file": "models/Fasteners and parts for attaching hooks and objects/Insert-with-M3-dual.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 0,
+     "r": 1
+    }
+   ],
+   "group": "Fasteners and parts for attaching hooks and objects",
+   "hardware": [
+    {
+     "count": 2,
+     "item": "M3 bolt, 10-16 mm"
+    },
+    {
+     "count": 2,
+     "item": "M3 nut"
+    }
+   ],
+   "id": "insert-with-m3-dual",
+   "measurement": {
+    "bores": {
+     "M3": 2
+    },
+    "confidence": 0.9,
+    "interfaceWidths": [],
+    "matingAxis": "z",
+    "method": "bbox-gate+silhouette",
+    "overhangAreaMm2": 221.77,
+    "overhangFraction": 0.05141,
+    "socketWidths": [
+     5.7,
+     5.8,
+     11.4,
+     16.5,
+     18.5
+    ],
+    "tier": "wall-clip",
+    "triangles": 1548,
+    "watertight": false
+   },
+   "name": "Insert-with-M3-dual",
+   "needsReview": false,
+   "print": {
+    "grams": 4.73,
+    "metres": 1.5852,
+    "minutes": 37.12,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": true
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "bbox decomposes exactly onto the lattice (flat-drawn, 1+1 x 1+1 half-steps); mating face on z at z=1.400; 2 cell(s) filled, hexagons 96.0% solid",
+     "also carries insert-side socket(s) at [5.7, 5.8, 11.4, 16.5, 18.5] mm -- accessories plug into this part"
+    ]
+   },
+   "requires": [],
+   "sha256": "e278c26600c252010c0b77b5e5cb9b624434c0dc0a372aa52073b328e94f230c",
+   "type": "insert",
+   "volumeMm3": 5961.342
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    374.6971,
+    389.4,
+    8.0
+   ],
+   "drawnOrientation": "flat",
+   "file": "models/375x389-fixed.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 1,
+     "r": 0
+    },
+    {
+     "q": 2,
+     "r": 0
+    },
+    {
+     "q": 3,
+     "r": 0
+    },
+    {
+     "q": 4,
+     "r": 0
+    },
+    {
+     "q": 5,
+     "r": 0
+    },
+    {
+     "q": 6,
+     "r": 0
+    },
+    {
+     "q": 7,
+     "r": 0
+    },
+    {
+     "q": 8,
+     "r": 0
+    },
+    {
+     "q": 9,
+     "r": 0
+    },
+    {
+     "q": 10,
+     "r": 0
+    },
+    {
+     "q": 11,
+     "r": 0
+    },
+    {
+     "q": 12,
+     "r": 0
+    },
+    {
+     "q": 13,
+     "r": 0
+    },
+    {
+     "q": 14,
+     "r": 0
+    },
+    {
+     "q": 15,
+     "r": 0
+    },
+    {
+     "q": -1,
+     "r": 1
+    },
+    {
+     "q": 0,
+     "r": 1
+    },
+    {
+     "q": 1,
+     "r": 1
+    },
+    {
+     "q": 2,
+     "r": 1
+    },
+    {
+     "q": 3,
+     "r": 1
+    },
+    {
+     "q": 4,
+     "r": 1
+    },
+    {
+     "q": 5,
+     "r": 1
+    },
+    {
+     "q": 6,
+     "r": 1
+    },
+    {
+     "q": 7,
+     "r": 1
+    },
+    {
+     "q": 8,
+     "r": 1
+    },
+    {
+     "q": 9,
+     "r": 1
+    },
+    {
+     "q": 10,
+     "r": 1
+    },
+    {
+     "q": 11,
+     "r": 1
+    },
+    {
+     "q": 12,
+     "r": 1
+    },
+    {
+     "q": 13,
+     "r": 1
+    },
+    {
+     "q": 14,
+     "r": 1
+    },
+    {
+     "q": -1,
+     "r": 2
+    },
+    {
+     "q": 0,
+     "r": 2
+    },
+    {
+     "q": 1,
+     "r": 2
+    },
+    {
+     "q": 2,
+     "r": 2
+    },
+    {
+     "q": 3,
+     "r": 2
+    },
+    {
+     "q": 4,
+     "r": 2
+    },
+    {
+     "q": 5,
+     "r": 2
+    },
+    {
+     "q": 6,
+     "r": 2
+    },
+    {
+     "q": 7,
+     "r": 2
+    },
+    {
+     "q": 8,
+     "r": 2
+    },
+    {
+     "q": 9,
+     "r": 2
+    },
+    {
+     "q": 10,
+     "r": 2
+    },
+    {
+     "q": 11,
+     "r": 2
+    },
+    {
+     "q": 12,
+     "r": 2
+    },
+    {
+     "q": 13,
+     "r": 2
+    },
+    {
+     "q": 14,
+     "r": 2
+    },
+    {
+     "q": -2,
+     "r": 3
+    },
+    {
+     "q": -1,
+     "r": 3
+    },
+    {
+     "q": 0,
+     "r": 3
+    },
+    {
+     "q": 1,
+     "r": 3
+    },
+    {
+     "q": 2,
+     "r": 3
+    },
+    {
+     "q": 3,
+     "r": 3
+    },
+    {
+     "q": 4,
+     "r": 3
+    },
+    {
+     "q": 5,
+     "r": 3
+    },
+    {
+     "q": 6,
+     "r": 3
+    },
+    {
+     "q": 7,
+     "r": 3
+    },
+    {
+     "q": 8,
+     "r": 3
+    },
+    {
+     "q": 9,
+     "r": 3
+    },
+    {
+     "q": 10,
+     "r": 3
+    },
+    {
+     "q": 11,
+     "r": 3
+    },
+    {
+     "q": 12,
+     "r": 3
+    },
+    {
+     "q": 13,
+     "r": 3
+    },
+    {
+     "q": -2,
+     "r": 4
+    },
+    {
+     "q": -1,
+     "r": 4
+    },
+    {
+     "q": 0,
+     "r": 4
+    },
+    {
+     "q": 1,
+     "r": 4
+    },
+    {
+     "q": 2,
+     "r": 4
+    },
+    {
+     "q": 3,
+     "r": 4
+    },
+    {
+     "q": 4,
+     "r": 4
+    },
+    {
+     "q": 5,
+     "r": 4
+    },
+    {
+     "q": 6,
+     "r": 4
+    },
+    {
+     "q": 7,
+     "r": 4
+    },
+    {
+     "q": 8,
+     "r": 4
+    },
+    {
+     "q": 9,
+     "r": 4
+    },
+    {
+     "q": 10,
+     "r": 4
+    },
+    {
+     "q": 11,
+     "r": 4
+    },
+    {
+     "q": 12,
+     "r": 4
+    },
+    {
+     "q": 13,
+     "r": 4
+    },
+    {
+     "q": -3,
+     "r": 5
+    },
+    {
+     "q": -2,
+     "r": 5
+    },
+    {
+     "q": -1,
+     "r": 5
+    },
+    {
+     "q": 0,
+     "r": 5
+    },
+    {
+     "q": 1,
+     "r": 5
+    },
+    {
+     "q": 2,
+     "r": 5
+    },
+    {
+     "q": 3,
+     "r": 5
+    },
+    {
+     "q": 4,
+     "r": 5
+    },
+    {
+     "q": 5,
+     "r": 5
+    },
+    {
+     "q": 6,
+     "r": 5
+    },
+    {
+     "q": 7,
+     "r": 5
+    },
+    {
+     "q": 8,
+     "r": 5
+    },
+    {
+     "q": 9,
+     "r": 5
+    },
+    {
+     "q": 10,
+     "r": 5
+    },
+    {
+     "q": 11,
+     "r": 5
+    },
+    {
+     "q": 12,
+     "r": 5
+    },
+    {
+     "q": -3,
+     "r": 6
+    },
+    {
+     "q": -2,
+     "r": 6
+    },
+    {
+     "q": -1,
+     "r": 6
+    },
+    {
+     "q": 0,
+     "r": 6
+    },
+    {
+     "q": 1,
+     "r": 6
+    },
+    {
+     "q": 2,
+     "r": 6
+    },
+    {
+     "q": 3,
+     "r": 6
+    },
+    {
+     "q": 4,
+     "r": 6
+    },
+    {
+     "q": 5,
+     "r": 6
+    },
+    {
+     "q": 6,
+     "r": 6
+    },
+    {
+     "q": 7,
+     "r": 6
+    },
+    {
+     "q": 8,
+     "r": 6
+    },
+    {
+     "q": 9,
+     "r": 6
+    },
+    {
+     "q": 10,
+     "r": 6
+    },
+    {
+     "q": 11,
+     "r": 6
+    },
+    {
+     "q": 12,
+     "r": 6
+    },
+    {
+     "q": -4,
+     "r": 7
+    },
+    {
+     "q": -3,
+     "r": 7
+    },
+    {
+     "q": -2,
+     "r": 7
+    },
+    {
+     "q": -1,
+     "r": 7
+    },
+    {
+     "q": 0,
+     "r": 7
+    },
+    {
+     "q": 1,
+     "r": 7
+    },
+    {
+     "q": 2,
+     "r": 7
+    },
+    {
+     "q": 3,
+     "r": 7
+    },
+    {
+     "q": 4,
+     "r": 7
+    },
+    {
+     "q": 5,
+     "r": 7
+    },
+    {
+     "q": 6,
+     "r": 7
+    },
+    {
+     "q": 7,
+     "r": 7
+    },
+    {
+     "q": 8,
+     "r": 7
+    },
+    {
+     "q": 9,
+     "r": 7
+    },
+    {
+     "q": 10,
+     "r": 7
+    },
+    {
+     "q": 11,
+     "r": 7
+    },
+    {
+     "q": -4,
+     "r": 8
+    },
+    {
+     "q": -3,
+     "r": 8
+    },
+    {
+     "q": -2,
+     "r": 8
+    },
+    {
+     "q": -1,
+     "r": 8
+    },
+    {
+     "q": 0,
+     "r": 8
+    },
+    {
+     "q": 1,
+     "r": 8
+    },
+    {
+     "q": 2,
+     "r": 8
+    },
+    {
+     "q": 3,
+     "r": 8
+    },
+    {
+     "q": 4,
+     "r": 8
+    },
+    {
+     "q": 5,
+     "r": 8
+    },
+    {
+     "q": 6,
+     "r": 8
+    },
+    {
+     "q": 7,
+     "r": 8
+    },
+    {
+     "q": 8,
+     "r": 8
+    },
+    {
+     "q": 9,
+     "r": 8
+    },
+    {
+     "q": 10,
+     "r": 8
+    },
+    {
+     "q": 11,
+     "r": 8
+    },
+    {
+     "q": -5,
+     "r": 9
+    },
+    {
+     "q": -4,
+     "r": 9
+    },
+    {
+     "q": -3,
+     "r": 9
+    },
+    {
+     "q": -2,
+     "r": 9
+    },
+    {
+     "q": -1,
+     "r": 9
+    },
+    {
+     "q": 0,
+     "r": 9
+    },
+    {
+     "q": 1,
+     "r": 9
+    },
+    {
+     "q": 2,
+     "r": 9
+    },
+    {
+     "q": 3,
+     "r": 9
+    },
+    {
+     "q": 4,
+     "r": 9
+    },
+    {
+     "q": 5,
+     "r": 9
+    },
+    {
+     "q": 6,
+     "r": 9
+    },
+    {
+     "q": 7,
+     "r": 9
+    },
+    {
+     "q": 8,
+     "r": 9
+    },
+    {
+     "q": 9,
+     "r": 9
+    },
+    {
+     "q": 10,
+     "r": 9
+    },
+    {
+     "q": -5,
+     "r": 10
+    },
+    {
+     "q": -4,
+     "r": 10
+    },
+    {
+     "q": -3,
+     "r": 10
+    },
+    {
+     "q": -2,
+     "r": 10
+    },
+    {
+     "q": -1,
+     "r": 10
+    },
+    {
+     "q": 0,
+     "r": 10
+    },
+    {
+     "q": 1,
+     "r": 10
+    },
+    {
+     "q": 2,
+     "r": 10
+    },
+    {
+     "q": 3,
+     "r": 10
+    },
+    {
+     "q": 4,
+     "r": 10
+    },
+    {
+     "q": 5,
+     "r": 10
+    },
+    {
+     "q": 6,
+     "r": 10
+    },
+    {
+     "q": 7,
+     "r": 10
+    },
+    {
+     "q": 8,
+     "r": 10
+    },
+    {
+     "q": 9,
+     "r": 10
+    },
+    {
+     "q": 10,
+     "r": 10
+    },
+    {
+     "q": -6,
+     "r": 11
+    },
+    {
+     "q": -5,
+     "r": 11
+    },
+    {
+     "q": -4,
+     "r": 11
+    },
+    {
+     "q": -3,
+     "r": 11
+    },
+    {
+     "q": -2,
+     "r": 11
+    },
+    {
+     "q": -1,
+     "r": 11
+    },
+    {
+     "q": 0,
+     "r": 11
+    },
+    {
+     "q": 1,
+     "r": 11
+    },
+    {
+     "q": 2,
+     "r": 11
+    },
+    {
+     "q": 3,
+     "r": 11
+    },
+    {
+     "q": 4,
+     "r": 11
+    },
+    {
+     "q": 5,
+     "r": 11
+    },
+    {
+     "q": 6,
+     "r": 11
+    },
+    {
+     "q": 7,
+     "r": 11
+    },
+    {
+     "q": 8,
+     "r": 11
+    },
+    {
+     "q": 9,
+     "r": 11
+    },
+    {
+     "q": -6,
+     "r": 12
+    },
+    {
+     "q": -5,
+     "r": 12
+    },
+    {
+     "q": -4,
+     "r": 12
+    },
+    {
+     "q": -3,
+     "r": 12
+    },
+    {
+     "q": -2,
+     "r": 12
+    },
+    {
+     "q": -1,
+     "r": 12
+    },
+    {
+     "q": 0,
+     "r": 12
+    },
+    {
+     "q": 1,
+     "r": 12
+    },
+    {
+     "q": 2,
+     "r": 12
+    },
+    {
+     "q": 3,
+     "r": 12
+    },
+    {
+     "q": 4,
+     "r": 12
+    },
+    {
+     "q": 5,
+     "r": 12
+    },
+    {
+     "q": 6,
+     "r": 12
+    },
+    {
+     "q": 7,
+     "r": 12
+    },
+    {
+     "q": 8,
+     "r": 12
+    },
+    {
+     "q": 9,
+     "r": 12
+    },
+    {
+     "q": -7,
+     "r": 13
+    },
+    {
+     "q": -6,
+     "r": 13
+    },
+    {
+     "q": -5,
+     "r": 13
+    },
+    {
+     "q": -4,
+     "r": 13
+    },
+    {
+     "q": -3,
+     "r": 13
+    },
+    {
+     "q": -2,
+     "r": 13
+    },
+    {
+     "q": -1,
+     "r": 13
+    },
+    {
+     "q": 0,
+     "r": 13
+    },
+    {
+     "q": 1,
+     "r": 13
+    },
+    {
+     "q": 2,
+     "r": 13
+    },
+    {
+     "q": 3,
+     "r": 13
+    },
+    {
+     "q": 4,
+     "r": 13
+    },
+    {
+     "q": 5,
+     "r": 13
+    },
+    {
+     "q": 6,
+     "r": 13
+    },
+    {
+     "q": 7,
+     "r": 13
+    },
+    {
+     "q": 8,
+     "r": 13
+    },
+    {
+     "q": -7,
+     "r": 14
+    },
+    {
+     "q": -6,
+     "r": 14
+    },
+    {
+     "q": -5,
+     "r": 14
+    },
+    {
+     "q": -4,
+     "r": 14
+    },
+    {
+     "q": -3,
+     "r": 14
+    },
+    {
+     "q": -2,
+     "r": 14
+    },
+    {
+     "q": -1,
+     "r": 14
+    },
+    {
+     "q": 0,
+     "r": 14
+    },
+    {
+     "q": 1,
+     "r": 14
+    },
+    {
+     "q": 2,
+     "r": 14
+    },
+    {
+     "q": 3,
+     "r": 14
+    },
+    {
+     "q": 4,
+     "r": 14
+    },
+    {
+     "q": 5,
+     "r": 14
+    },
+    {
+     "q": 6,
+     "r": 14
+    },
+    {
+     "q": 7,
+     "r": 14
+    },
+    {
+     "q": 8,
+     "r": 14
+    },
+    {
+     "q": -8,
+     "r": 15
+    },
+    {
+     "q": -7,
+     "r": 15
+    },
+    {
+     "q": -6,
+     "r": 15
+    },
+    {
+     "q": -5,
+     "r": 15
+    },
+    {
+     "q": -4,
+     "r": 15
+    },
+    {
+     "q": -3,
+     "r": 15
+    },
+    {
+     "q": -2,
+     "r": 15
+    },
+    {
+     "q": -1,
+     "r": 15
+    },
+    {
+     "q": 0,
+     "r": 15
+    },
+    {
+     "q": 1,
+     "r": 15
+    },
+    {
+     "q": 2,
+     "r": 15
+    },
+    {
+     "q": 3,
+     "r": 15
+    },
+    {
+     "q": 4,
+     "r": 15
+    },
+    {
+     "q": 5,
+     "r": 15
+    },
+    {
+     "q": 6,
+     "r": 15
+    },
+    {
+     "q": 7,
+     "r": 15
+    },
+    {
+     "q": -8,
+     "r": 16
+    },
+    {
+     "q": -7,
+     "r": 16
+    },
+    {
+     "q": -6,
+     "r": 16
+    },
+    {
+     "q": -5,
+     "r": 16
+    },
+    {
+     "q": -4,
+     "r": 16
+    },
+    {
+     "q": -3,
+     "r": 16
+    },
+    {
+     "q": -2,
+     "r": 16
+    },
+    {
+     "q": -1,
+     "r": 16
+    },
+    {
+     "q": 0,
+     "r": 16
+    },
+    {
+     "q": 1,
+     "r": 16
+    },
+    {
+     "q": 2,
+     "r": 16
+    },
+    {
+     "q": 3,
+     "r": 16
+    },
+    {
+     "q": 4,
+     "r": 16
+    },
+    {
+     "q": 5,
+     "r": 16
+    },
+    {
+     "q": 6,
+     "r": 16
+    },
+    {
+     "q": 7,
+     "r": 16
+    },
+    {
+     "q": -9,
+     "r": 17
+    },
+    {
+     "q": -8,
+     "r": 17
+    },
+    {
+     "q": -7,
+     "r": 17
+    },
+    {
+     "q": -6,
+     "r": 17
+    },
+    {
+     "q": -5,
+     "r": 17
+    },
+    {
+     "q": -4,
+     "r": 17
+    },
+    {
+     "q": -3,
+     "r": 17
+    },
+    {
+     "q": -2,
+     "r": 17
+    },
+    {
+     "q": -1,
+     "r": 17
+    },
+    {
+     "q": 0,
+     "r": 17
+    },
+    {
+     "q": 1,
+     "r": 17
+    },
+    {
+     "q": 2,
+     "r": 17
+    },
+    {
+     "q": 3,
+     "r": 17
+    },
+    {
+     "q": 4,
+     "r": 17
+    },
+    {
+     "q": 5,
+     "r": 17
+    },
+    {
+     "q": 6,
+     "r": 17
+    }
+   ],
+   "group": "",
+   "hardware": [],
+   "id": "375x389-fixed",
+   "measurement": {
+    "bores": {},
+    "confidence": 0.99,
+    "interfaceWidths": [
+     20.0
+    ],
+    "matingAxis": "z",
+    "method": "lattice-fit",
+    "overhangAreaMm2": 0.0,
+    "overhangFraction": 0.0,
+    "socketWidths": [],
+    "tier": "panel",
+    "triangles": 18964,
+    "watertight": false
+   },
+   "name": "375x389-fixed",
+   "needsReview": false,
+   "panel": {
+    "columns": 16,
+    "fitsBeds": [
+     "bed400"
+    ],
+    "heightMm": 389.4,
+    "rows": 18,
+    "widthMm": 374.6971
+   },
+   "print": {
+    "grams": 244.96,
+    "metres": 82.131,
+    "minutes": 1569.77,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": false
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "288 hexagonal bores, lattice residual 1.33e-04 mm at pitch 23.59983"
+    ]
+   },
+   "requires": [
+    {
+     "count": 9,
+     "partId": "insert-countersunk"
+    }
+   ],
+   "sha256": "c829e48e6ff49922b56a16cb496f5d8498342b5a833340ed66d5530339e3449a",
+   "type": "panel",
+   "volumeMm3": 259974.647
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    88.5651,
+    106.2,
+    8.0
+   ],
+   "drawnOrientation": "flat",
+   "file": "models/wall-honeycomb-106x89-fixed.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 1,
+     "r": 0
+    },
+    {
+     "q": 2,
+     "r": 0
+    },
+    {
+     "q": 3,
+     "r": 0
+    },
+    {
+     "q": -1,
+     "r": 1
+    },
+    {
+     "q": 0,
+     "r": 1
+    },
+    {
+     "q": 1,
+     "r": 1
+    },
+    {
+     "q": 2,
+     "r": 1
+    },
+    {
+     "q": -1,
+     "r": 2
+    },
+    {
+     "q": 0,
+     "r": 2
+    },
+    {
+     "q": 1,
+     "r": 2
+    },
+    {
+     "q": 2,
+     "r": 2
+    },
+    {
+     "q": -2,
+     "r": 3
+    },
+    {
+     "q": -1,
+     "r": 3
+    },
+    {
+     "q": 0,
+     "r": 3
+    },
+    {
+     "q": 1,
+     "r": 3
+    }
+   ],
+   "group": "",
+   "hardware": [],
+   "id": "wall-honeycomb-106x89-fixed",
+   "measurement": {
+    "bores": {},
+    "confidence": 0.99,
+    "interfaceWidths": [
+     20.0
+    ],
+    "matingAxis": "z",
+    "method": "lattice-fit",
+    "overhangAreaMm2": 0.0,
+    "overhangFraction": 0.0,
+    "socketWidths": [],
+    "tier": "panel",
+    "triangles": 1140,
+    "watertight": false
+   },
+   "name": "wall-honeycomb-106x89-fixed",
+   "needsReview": false,
+   "panel": {
+    "columns": 4,
+    "fitsBeds": [
+     "mini",
+     "bed220",
+     "bed235",
+     "mk3s",
+     "bed256",
+     "bed300",
+     "bed350",
+     "bed400"
+    ],
+    "heightMm": 106.2,
+    "rows": 4,
+    "widthMm": 88.5651
+   },
+   "print": {
+    "grams": 14.62,
+    "metres": 4.9006,
+    "minutes": 92.9,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": false
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "16 hexagonal bores, lattice residual 1.38e-04 mm at pitch 23.59985"
+    ]
+   },
+   "requires": [
+    {
+     "count": 4,
+     "partId": "insert-countersunk"
+    }
+   ],
+   "sha256": "8811fbf3142a8bfbff8fda19efdc2afb367bb6463347eeade13dd66c3bfdc820",
+   "type": "panel",
+   "volumeMm3": 14443.288
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    224.2,
+    190.7549,
+    8.0
+   ],
+   "drawnOrientation": "pointy",
+   "file": "models/wall-honeycomb-224x190size(mk3s).stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 1,
+     "r": 0
+    },
+    {
+     "q": 2,
+     "r": 0
+    },
+    {
+     "q": 3,
+     "r": 0
+    },
+    {
+     "q": 4,
+     "r": 0
+    },
+    {
+     "q": 5,
+     "r": 0
+    },
+    {
+     "q": 6,
+     "r": 0
+    },
+    {
+     "q": 7,
+     "r": 0
+    },
+    {
+     "q": 8,
+     "r": 0
+    },
+    {
+     "q": 0,
+     "r": 1
+    },
+    {
+     "q": 1,
+     "r": 1
+    },
+    {
+     "q": 2,
+     "r": 1
+    },
+    {
+     "q": 3,
+     "r": 1
+    },
+    {
+     "q": 4,
+     "r": 1
+    },
+    {
+     "q": 5,
+     "r": 1
+    },
+    {
+     "q": 6,
+     "r": 1
+    },
+    {
+     "q": 7,
+     "r": 1
+    },
+    {
+     "q": 8,
+     "r": 1
+    },
+    {
+     "q": -1,
+     "r": 2
+    },
+    {
+     "q": 0,
+     "r": 2
+    },
+    {
+     "q": 1,
+     "r": 2
+    },
+    {
+     "q": 2,
+     "r": 2
+    },
+    {
+     "q": 3,
+     "r": 2
+    },
+    {
+     "q": 4,
+     "r": 2
+    },
+    {
+     "q": 5,
+     "r": 2
+    },
+    {
+     "q": 6,
+     "r": 2
+    },
+    {
+     "q": 7,
+     "r": 2
+    },
+    {
+     "q": -1,
+     "r": 3
+    },
+    {
+     "q": 0,
+     "r": 3
+    },
+    {
+     "q": 1,
+     "r": 3
+    },
+    {
+     "q": 2,
+     "r": 3
+    },
+    {
+     "q": 3,
+     "r": 3
+    },
+    {
+     "q": 4,
+     "r": 3
+    },
+    {
+     "q": 5,
+     "r": 3
+    },
+    {
+     "q": 6,
+     "r": 3
+    },
+    {
+     "q": 7,
+     "r": 3
+    },
+    {
+     "q": -2,
+     "r": 4
+    },
+    {
+     "q": -1,
+     "r": 4
+    },
+    {
+     "q": 0,
+     "r": 4
+    },
+    {
+     "q": 1,
+     "r": 4
+    },
+    {
+     "q": 2,
+     "r": 4
+    },
+    {
+     "q": 3,
+     "r": 4
+    },
+    {
+     "q": 4,
+     "r": 4
+    },
+    {
+     "q": 5,
+     "r": 4
+    },
+    {
+     "q": 6,
+     "r": 4
+    },
+    {
+     "q": -2,
+     "r": 5
+    },
+    {
+     "q": -1,
+     "r": 5
+    },
+    {
+     "q": 0,
+     "r": 5
+    },
+    {
+     "q": 1,
+     "r": 5
+    },
+    {
+     "q": 2,
+     "r": 5
+    },
+    {
+     "q": 3,
+     "r": 5
+    },
+    {
+     "q": 4,
+     "r": 5
+    },
+    {
+     "q": 5,
+     "r": 5
+    },
+    {
+     "q": 6,
+     "r": 5
+    },
+    {
+     "q": -3,
+     "r": 6
+    },
+    {
+     "q": -2,
+     "r": 6
+    },
+    {
+     "q": -1,
+     "r": 6
+    },
+    {
+     "q": 0,
+     "r": 6
+    },
+    {
+     "q": 1,
+     "r": 6
+    },
+    {
+     "q": 2,
+     "r": 6
+    },
+    {
+     "q": 3,
+     "r": 6
+    },
+    {
+     "q": 4,
+     "r": 6
+    },
+    {
+     "q": 5,
+     "r": 6
+    },
+    {
+     "q": -3,
+     "r": 7
+    },
+    {
+     "q": -2,
+     "r": 7
+    },
+    {
+     "q": -1,
+     "r": 7
+    },
+    {
+     "q": 0,
+     "r": 7
+    },
+    {
+     "q": 1,
+     "r": 7
+    },
+    {
+     "q": 2,
+     "r": 7
+    },
+    {
+     "q": 3,
+     "r": 7
+    },
+    {
+     "q": 4,
+     "r": 7
+    },
+    {
+     "q": 5,
+     "r": 7
+    },
+    {
+     "q": -4,
+     "r": 8
+    },
+    {
+     "q": -3,
+     "r": 8
+    },
+    {
+     "q": -2,
+     "r": 8
+    },
+    {
+     "q": -1,
+     "r": 8
+    },
+    {
+     "q": 0,
+     "r": 8
+    },
+    {
+     "q": 1,
+     "r": 8
+    },
+    {
+     "q": 2,
+     "r": 8
+    },
+    {
+     "q": 3,
+     "r": 8
+    },
+    {
+     "q": 4,
+     "r": 8
+    }
+   ],
+   "group": "",
+   "hardware": [],
+   "id": "wall-honeycomb-224x190size-mk3s",
+   "measurement": {
+    "bores": {},
+    "confidence": 0.99,
+    "interfaceWidths": [
+     20.0
+    ],
+    "matingAxis": "z",
+    "method": "lattice-fit",
+    "overhangAreaMm2": 0.0,
+    "overhangFraction": 0.0,
+    "socketWidths": [],
+    "tier": "panel",
+    "triangles": 5460,
+    "watertight": false
+   },
+   "name": "wall-honeycomb-224x190size(mk3s)",
+   "needsReview": false,
+   "panel": {
+    "columns": 9,
+    "fitsBeds": [
+     "bed235",
+     "mk3s",
+     "bed256",
+     "bed300",
+     "bed350",
+     "bed400"
+    ],
+    "heightMm": 190.7549,
+    "rows": 9,
+    "widthMm": 224.2
+   },
+   "print": {
+    "grams": 70.57,
+    "metres": 23.6624,
+    "minutes": 450.8,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": false
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "81 hexagonal bores, lattice residual 1.78e-04 mm at pitch 23.60000"
+    ]
+   },
+   "requires": [
+    {
+     "count": 5,
+     "partId": "insert-countersunk"
+    }
+   ],
+   "sha256": "781c535fc9fa7f01ec84999994be48413aea7ac49938f19e23e672990ff8e461",
+   "type": "panel",
+   "volumeMm3": 73117.916
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    292.9451,
+    271.4,
+    8.0
+   ],
+   "drawnOrientation": "flat",
+   "file": "models/wall-honeycomb-293x271-(big-printer).stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 1,
+     "r": 0
+    },
+    {
+     "q": 2,
+     "r": 0
+    },
+    {
+     "q": 3,
+     "r": 0
+    },
+    {
+     "q": 4,
+     "r": 0
+    },
+    {
+     "q": 5,
+     "r": 0
+    },
+    {
+     "q": 6,
+     "r": 0
+    },
+    {
+     "q": 7,
+     "r": 0
+    },
+    {
+     "q": 8,
+     "r": 0
+    },
+    {
+     "q": 9,
+     "r": 0
+    },
+    {
+     "q": 10,
+     "r": 0
+    },
+    {
+     "q": -1,
+     "r": 1
+    },
+    {
+     "q": 0,
+     "r": 1
+    },
+    {
+     "q": 1,
+     "r": 1
+    },
+    {
+     "q": 2,
+     "r": 1
+    },
+    {
+     "q": 3,
+     "r": 1
+    },
+    {
+     "q": 4,
+     "r": 1
+    },
+    {
+     "q": 5,
+     "r": 1
+    },
+    {
+     "q": 6,
+     "r": 1
+    },
+    {
+     "q": 7,
+     "r": 1
+    },
+    {
+     "q": 8,
+     "r": 1
+    },
+    {
+     "q": 9,
+     "r": 1
+    },
+    {
+     "q": -1,
+     "r": 2
+    },
+    {
+     "q": 0,
+     "r": 2
+    },
+    {
+     "q": 1,
+     "r": 2
+    },
+    {
+     "q": 2,
+     "r": 2
+    },
+    {
+     "q": 3,
+     "r": 2
+    },
+    {
+     "q": 4,
+     "r": 2
+    },
+    {
+     "q": 5,
+     "r": 2
+    },
+    {
+     "q": 6,
+     "r": 2
+    },
+    {
+     "q": 7,
+     "r": 2
+    },
+    {
+     "q": 8,
+     "r": 2
+    },
+    {
+     "q": 9,
+     "r": 2
+    },
+    {
+     "q": -2,
+     "r": 3
+    },
+    {
+     "q": -1,
+     "r": 3
+    },
+    {
+     "q": 0,
+     "r": 3
+    },
+    {
+     "q": 1,
+     "r": 3
+    },
+    {
+     "q": 2,
+     "r": 3
+    },
+    {
+     "q": 3,
+     "r": 3
+    },
+    {
+     "q": 4,
+     "r": 3
+    },
+    {
+     "q": 5,
+     "r": 3
+    },
+    {
+     "q": 6,
+     "r": 3
+    },
+    {
+     "q": 7,
+     "r": 3
+    },
+    {
+     "q": 8,
+     "r": 3
+    },
+    {
+     "q": -2,
+     "r": 4
+    },
+    {
+     "q": -1,
+     "r": 4
+    },
+    {
+     "q": 0,
+     "r": 4
+    },
+    {
+     "q": 1,
+     "r": 4
+    },
+    {
+     "q": 2,
+     "r": 4
+    },
+    {
+     "q": 3,
+     "r": 4
+    },
+    {
+     "q": 4,
+     "r": 4
+    },
+    {
+     "q": 5,
+     "r": 4
+    },
+    {
+     "q": 6,
+     "r": 4
+    },
+    {
+     "q": 7,
+     "r": 4
+    },
+    {
+     "q": 8,
+     "r": 4
+    },
+    {
+     "q": -3,
+     "r": 5
+    },
+    {
+     "q": -2,
+     "r": 5
+    },
+    {
+     "q": -1,
+     "r": 5
+    },
+    {
+     "q": 0,
+     "r": 5
+    },
+    {
+     "q": 1,
+     "r": 5
+    },
+    {
+     "q": 2,
+     "r": 5
+    },
+    {
+     "q": 3,
+     "r": 5
+    },
+    {
+     "q": 4,
+     "r": 5
+    },
+    {
+     "q": 5,
+     "r": 5
+    },
+    {
+     "q": 6,
+     "r": 5
+    },
+    {
+     "q": 7,
+     "r": 5
+    },
+    {
+     "q": -3,
+     "r": 6
+    },
+    {
+     "q": -2,
+     "r": 6
+    },
+    {
+     "q": -1,
+     "r": 6
+    },
+    {
+     "q": 0,
+     "r": 6
+    },
+    {
+     "q": 1,
+     "r": 6
+    },
+    {
+     "q": 2,
+     "r": 6
+    },
+    {
+     "q": 3,
+     "r": 6
+    },
+    {
+     "q": 4,
+     "r": 6
+    },
+    {
+     "q": 5,
+     "r": 6
+    },
+    {
+     "q": 6,
+     "r": 6
+    },
+    {
+     "q": 7,
+     "r": 6
+    },
+    {
+     "q": -4,
+     "r": 7
+    },
+    {
+     "q": -3,
+     "r": 7
+    },
+    {
+     "q": -2,
+     "r": 7
+    },
+    {
+     "q": -1,
+     "r": 7
+    },
+    {
+     "q": 0,
+     "r": 7
+    },
+    {
+     "q": 1,
+     "r": 7
+    },
+    {
+     "q": 2,
+     "r": 7
+    },
+    {
+     "q": 3,
+     "r": 7
+    },
+    {
+     "q": 4,
+     "r": 7
+    },
+    {
+     "q": 5,
+     "r": 7
+    },
+    {
+     "q": 6,
+     "r": 7
+    },
+    {
+     "q": -4,
+     "r": 8
+    },
+    {
+     "q": -3,
+     "r": 8
+    },
+    {
+     "q": -2,
+     "r": 8
+    },
+    {
+     "q": -1,
+     "r": 8
+    },
+    {
+     "q": 0,
+     "r": 8
+    },
+    {
+     "q": 1,
+     "r": 8
+    },
+    {
+     "q": 2,
+     "r": 8
+    },
+    {
+     "q": 3,
+     "r": 8
+    },
+    {
+     "q": 4,
+     "r": 8
+    },
+    {
+     "q": 5,
+     "r": 8
+    },
+    {
+     "q": 6,
+     "r": 8
+    },
+    {
+     "q": -5,
+     "r": 9
+    },
+    {
+     "q": -4,
+     "r": 9
+    },
+    {
+     "q": -3,
+     "r": 9
+    },
+    {
+     "q": -2,
+     "r": 9
+    },
+    {
+     "q": -1,
+     "r": 9
+    },
+    {
+     "q": 0,
+     "r": 9
+    },
+    {
+     "q": 1,
+     "r": 9
+    },
+    {
+     "q": 2,
+     "r": 9
+    },
+    {
+     "q": 3,
+     "r": 9
+    },
+    {
+     "q": 4,
+     "r": 9
+    },
+    {
+     "q": 5,
+     "r": 9
+    },
+    {
+     "q": -5,
+     "r": 10
+    },
+    {
+     "q": -4,
+     "r": 10
+    },
+    {
+     "q": -3,
+     "r": 10
+    },
+    {
+     "q": -2,
+     "r": 10
+    },
+    {
+     "q": -1,
+     "r": 10
+    },
+    {
+     "q": 0,
+     "r": 10
+    },
+    {
+     "q": 1,
+     "r": 10
+    },
+    {
+     "q": 2,
+     "r": 10
+    },
+    {
+     "q": 3,
+     "r": 10
+    },
+    {
+     "q": 4,
+     "r": 10
+    },
+    {
+     "q": 5,
+     "r": 10
+    },
+    {
+     "q": -6,
+     "r": 11
+    },
+    {
+     "q": -5,
+     "r": 11
+    },
+    {
+     "q": -4,
+     "r": 11
+    },
+    {
+     "q": -3,
+     "r": 11
+    },
+    {
+     "q": -2,
+     "r": 11
+    },
+    {
+     "q": -1,
+     "r": 11
+    },
+    {
+     "q": 0,
+     "r": 11
+    },
+    {
+     "q": 1,
+     "r": 11
+    },
+    {
+     "q": 2,
+     "r": 11
+    },
+    {
+     "q": 3,
+     "r": 11
+    },
+    {
+     "q": 4,
+     "r": 11
+    },
+    {
+     "q": -6,
+     "r": 12
+    },
+    {
+     "q": -5,
+     "r": 12
+    },
+    {
+     "q": -4,
+     "r": 12
+    },
+    {
+     "q": -3,
+     "r": 12
+    },
+    {
+     "q": -2,
+     "r": 12
+    },
+    {
+     "q": -1,
+     "r": 12
+    },
+    {
+     "q": 0,
+     "r": 12
+    },
+    {
+     "q": 1,
+     "r": 12
+    },
+    {
+     "q": 2,
+     "r": 12
+    },
+    {
+     "q": 3,
+     "r": 12
+    },
+    {
+     "q": 4,
+     "r": 12
+    },
+    {
+     "q": -7,
+     "r": 13
+    },
+    {
+     "q": -6,
+     "r": 13
+    },
+    {
+     "q": -5,
+     "r": 13
+    },
+    {
+     "q": -4,
+     "r": 13
+    },
+    {
+     "q": -3,
+     "r": 13
+    },
+    {
+     "q": -2,
+     "r": 13
+    },
+    {
+     "q": -1,
+     "r": 13
+    },
+    {
+     "q": 0,
+     "r": 13
+    },
+    {
+     "q": 1,
+     "r": 13
+    },
+    {
+     "q": 2,
+     "r": 13
+    },
+    {
+     "q": 3,
+     "r": 13
+    }
+   ],
+   "group": "",
+   "hardware": [],
+   "id": "wall-honeycomb-293x271-big-printer",
+   "measurement": {
+    "bores": {},
+    "confidence": 0.99,
+    "interfaceWidths": [
+     20.0
+    ],
+    "matingAxis": "z",
+    "method": "lattice-fit",
+    "overhangAreaMm2": 0.0,
+    "overhangFraction": 0.0,
+    "socketWidths": [],
+    "tier": "panel",
+    "triangles": 10244,
+    "watertight": false
+   },
+   "name": "wall-honeycomb-293x271-(big-printer)",
+   "needsReview": false,
+   "panel": {
+    "columns": 11,
+    "fitsBeds": [
+     "bed300",
+     "bed350",
+     "bed400"
+    ],
+    "heightMm": 271.4,
+    "rows": 14,
+    "widthMm": 292.9451
+   },
+   "print": {
+    "grams": 132.43,
+    "metres": 44.4022,
+    "minutes": 848.23,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": false
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "154 hexagonal bores, lattice residual 1.28e-04 mm at pitch 23.59983"
+    ]
+   },
+   "requires": [
+    {
+     "count": 7,
+     "partId": "insert-countersunk"
+    }
+   ],
+   "sha256": "08e9ce1a67044060655a66ac53966ebb124ac4f5df11233a0be8476fc64433d7",
+   "type": "panel",
+   "volumeMm3": 139014.458
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    247.8,
+    211.1931,
+    8.0
+   ],
+   "drawnOrientation": "pointy",
+   "file": "models/wall-honeycomb-bambu-211x248-fixed.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 1,
+     "r": 0
+    },
+    {
+     "q": 2,
+     "r": 0
+    },
+    {
+     "q": 3,
+     "r": 0
+    },
+    {
+     "q": 4,
+     "r": 0
+    },
+    {
+     "q": 5,
+     "r": 0
+    },
+    {
+     "q": 6,
+     "r": 0
+    },
+    {
+     "q": 7,
+     "r": 0
+    },
+    {
+     "q": 8,
+     "r": 0
+    },
+    {
+     "q": 9,
+     "r": 0
+    },
+    {
+     "q": -1,
+     "r": 1
+    },
+    {
+     "q": 0,
+     "r": 1
+    },
+    {
+     "q": 1,
+     "r": 1
+    },
+    {
+     "q": 2,
+     "r": 1
+    },
+    {
+     "q": 3,
+     "r": 1
+    },
+    {
+     "q": 4,
+     "r": 1
+    },
+    {
+     "q": 5,
+     "r": 1
+    },
+    {
+     "q": 6,
+     "r": 1
+    },
+    {
+     "q": 7,
+     "r": 1
+    },
+    {
+     "q": 8,
+     "r": 1
+    },
+    {
+     "q": -1,
+     "r": 2
+    },
+    {
+     "q": 0,
+     "r": 2
+    },
+    {
+     "q": 1,
+     "r": 2
+    },
+    {
+     "q": 2,
+     "r": 2
+    },
+    {
+     "q": 3,
+     "r": 2
+    },
+    {
+     "q": 4,
+     "r": 2
+    },
+    {
+     "q": 5,
+     "r": 2
+    },
+    {
+     "q": 6,
+     "r": 2
+    },
+    {
+     "q": 7,
+     "r": 2
+    },
+    {
+     "q": 8,
+     "r": 2
+    },
+    {
+     "q": -2,
+     "r": 3
+    },
+    {
+     "q": -1,
+     "r": 3
+    },
+    {
+     "q": 0,
+     "r": 3
+    },
+    {
+     "q": 1,
+     "r": 3
+    },
+    {
+     "q": 2,
+     "r": 3
+    },
+    {
+     "q": 3,
+     "r": 3
+    },
+    {
+     "q": 4,
+     "r": 3
+    },
+    {
+     "q": 5,
+     "r": 3
+    },
+    {
+     "q": 6,
+     "r": 3
+    },
+    {
+     "q": 7,
+     "r": 3
+    },
+    {
+     "q": -2,
+     "r": 4
+    },
+    {
+     "q": -1,
+     "r": 4
+    },
+    {
+     "q": 0,
+     "r": 4
+    },
+    {
+     "q": 1,
+     "r": 4
+    },
+    {
+     "q": 2,
+     "r": 4
+    },
+    {
+     "q": 3,
+     "r": 4
+    },
+    {
+     "q": 4,
+     "r": 4
+    },
+    {
+     "q": 5,
+     "r": 4
+    },
+    {
+     "q": 6,
+     "r": 4
+    },
+    {
+     "q": 7,
+     "r": 4
+    },
+    {
+     "q": -3,
+     "r": 5
+    },
+    {
+     "q": -2,
+     "r": 5
+    },
+    {
+     "q": -1,
+     "r": 5
+    },
+    {
+     "q": 0,
+     "r": 5
+    },
+    {
+     "q": 1,
+     "r": 5
+    },
+    {
+     "q": 2,
+     "r": 5
+    },
+    {
+     "q": 3,
+     "r": 5
+    },
+    {
+     "q": 4,
+     "r": 5
+    },
+    {
+     "q": 5,
+     "r": 5
+    },
+    {
+     "q": 6,
+     "r": 5
+    },
+    {
+     "q": -3,
+     "r": 6
+    },
+    {
+     "q": -2,
+     "r": 6
+    },
+    {
+     "q": -1,
+     "r": 6
+    },
+    {
+     "q": 0,
+     "r": 6
+    },
+    {
+     "q": 1,
+     "r": 6
+    },
+    {
+     "q": 2,
+     "r": 6
+    },
+    {
+     "q": 3,
+     "r": 6
+    },
+    {
+     "q": 4,
+     "r": 6
+    },
+    {
+     "q": 5,
+     "r": 6
+    },
+    {
+     "q": 6,
+     "r": 6
+    },
+    {
+     "q": -4,
+     "r": 7
+    },
+    {
+     "q": -3,
+     "r": 7
+    },
+    {
+     "q": -2,
+     "r": 7
+    },
+    {
+     "q": -1,
+     "r": 7
+    },
+    {
+     "q": 0,
+     "r": 7
+    },
+    {
+     "q": 1,
+     "r": 7
+    },
+    {
+     "q": 2,
+     "r": 7
+    },
+    {
+     "q": 3,
+     "r": 7
+    },
+    {
+     "q": 4,
+     "r": 7
+    },
+    {
+     "q": 5,
+     "r": 7
+    },
+    {
+     "q": -4,
+     "r": 8
+    },
+    {
+     "q": -3,
+     "r": 8
+    },
+    {
+     "q": -2,
+     "r": 8
+    },
+    {
+     "q": -1,
+     "r": 8
+    },
+    {
+     "q": 0,
+     "r": 8
+    },
+    {
+     "q": 1,
+     "r": 8
+    },
+    {
+     "q": 2,
+     "r": 8
+    },
+    {
+     "q": 3,
+     "r": 8
+    },
+    {
+     "q": 4,
+     "r": 8
+    },
+    {
+     "q": 5,
+     "r": 8
+    },
+    {
+     "q": -5,
+     "r": 9
+    },
+    {
+     "q": -4,
+     "r": 9
+    },
+    {
+     "q": -3,
+     "r": 9
+    },
+    {
+     "q": -2,
+     "r": 9
+    },
+    {
+     "q": -1,
+     "r": 9
+    },
+    {
+     "q": 0,
+     "r": 9
+    },
+    {
+     "q": 1,
+     "r": 9
+    },
+    {
+     "q": 2,
+     "r": 9
+    },
+    {
+     "q": 3,
+     "r": 9
+    },
+    {
+     "q": 4,
+     "r": 9
+    }
+   ],
+   "group": "",
+   "hardware": [],
+   "id": "wall-honeycomb-bambu-211x248-fixed",
+   "measurement": {
+    "bores": {},
+    "confidence": 0.99,
+    "interfaceWidths": [
+     20.0
+    ],
+    "matingAxis": "z",
+    "method": "lattice-fit",
+    "overhangAreaMm2": 0.0,
+    "overhangFraction": 0.0,
+    "socketWidths": [],
+    "tier": "panel",
+    "triangles": 6708,
+    "watertight": false
+   },
+   "name": "wall-honeycomb-bambu-211x248-fixed",
+   "needsReview": false,
+   "panel": {
+    "columns": 10,
+    "fitsBeds": [
+     "bed256",
+     "bed300",
+     "bed350",
+     "bed400"
+    ],
+    "heightMm": 211.1931,
+    "rows": 10,
+    "widthMm": 247.8
+   },
+   "print": {
+    "grams": 86.67,
+    "metres": 29.0604,
+    "minutes": 554.9,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": false
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "100 hexagonal bores, lattice residual 1.35e-04 mm at pitch 23.59984"
+    ]
+   },
+   "requires": [
+    {
+     "count": 6,
+     "partId": "insert-countersunk"
+    }
+   ],
+   "sha256": "fe800be1c9fcffadfb55261d56b5ebf938edd7f506c6b2fc4ceb2466399e6a09",
+   "type": "panel",
+   "volumeMm3": 90269.403
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    211.1931,
+    200.6,
+    8.0
+   ],
+   "drawnOrientation": "flat",
+   "file": "models/wall-honeycomb-k1-211x201.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 1,
+     "r": 0
+    },
+    {
+     "q": 2,
+     "r": 0
+    },
+    {
+     "q": 3,
+     "r": 0
+    },
+    {
+     "q": 4,
+     "r": 0
+    },
+    {
+     "q": 5,
+     "r": 0
+    },
+    {
+     "q": 6,
+     "r": 0
+    },
+    {
+     "q": 7,
+     "r": 0
+    },
+    {
+     "q": -1,
+     "r": 1
+    },
+    {
+     "q": 0,
+     "r": 1
+    },
+    {
+     "q": 1,
+     "r": 1
+    },
+    {
+     "q": 2,
+     "r": 1
+    },
+    {
+     "q": 3,
+     "r": 1
+    },
+    {
+     "q": 4,
+     "r": 1
+    },
+    {
+     "q": 5,
+     "r": 1
+    },
+    {
+     "q": 6,
+     "r": 1
+    },
+    {
+     "q": -1,
+     "r": 2
+    },
+    {
+     "q": 0,
+     "r": 2
+    },
+    {
+     "q": 1,
+     "r": 2
+    },
+    {
+     "q": 2,
+     "r": 2
+    },
+    {
+     "q": 3,
+     "r": 2
+    },
+    {
+     "q": 4,
+     "r": 2
+    },
+    {
+     "q": 5,
+     "r": 2
+    },
+    {
+     "q": 6,
+     "r": 2
+    },
+    {
+     "q": -2,
+     "r": 3
+    },
+    {
+     "q": -1,
+     "r": 3
+    },
+    {
+     "q": 0,
+     "r": 3
+    },
+    {
+     "q": 1,
+     "r": 3
+    },
+    {
+     "q": 2,
+     "r": 3
+    },
+    {
+     "q": 3,
+     "r": 3
+    },
+    {
+     "q": 4,
+     "r": 3
+    },
+    {
+     "q": 5,
+     "r": 3
+    },
+    {
+     "q": -2,
+     "r": 4
+    },
+    {
+     "q": -1,
+     "r": 4
+    },
+    {
+     "q": 0,
+     "r": 4
+    },
+    {
+     "q": 1,
+     "r": 4
+    },
+    {
+     "q": 2,
+     "r": 4
+    },
+    {
+     "q": 3,
+     "r": 4
+    },
+    {
+     "q": 4,
+     "r": 4
+    },
+    {
+     "q": 5,
+     "r": 4
+    },
+    {
+     "q": -3,
+     "r": 5
+    },
+    {
+     "q": -2,
+     "r": 5
+    },
+    {
+     "q": -1,
+     "r": 5
+    },
+    {
+     "q": 0,
+     "r": 5
+    },
+    {
+     "q": 1,
+     "r": 5
+    },
+    {
+     "q": 2,
+     "r": 5
+    },
+    {
+     "q": 3,
+     "r": 5
+    },
+    {
+     "q": 4,
+     "r": 5
+    },
+    {
+     "q": -3,
+     "r": 6
+    },
+    {
+     "q": -2,
+     "r": 6
+    },
+    {
+     "q": -1,
+     "r": 6
+    },
+    {
+     "q": 0,
+     "r": 6
+    },
+    {
+     "q": 1,
+     "r": 6
+    },
+    {
+     "q": 2,
+     "r": 6
+    },
+    {
+     "q": 3,
+     "r": 6
+    },
+    {
+     "q": 4,
+     "r": 6
+    },
+    {
+     "q": -4,
+     "r": 7
+    },
+    {
+     "q": -3,
+     "r": 7
+    },
+    {
+     "q": -2,
+     "r": 7
+    },
+    {
+     "q": -1,
+     "r": 7
+    },
+    {
+     "q": 0,
+     "r": 7
+    },
+    {
+     "q": 1,
+     "r": 7
+    },
+    {
+     "q": 2,
+     "r": 7
+    },
+    {
+     "q": 3,
+     "r": 7
+    },
+    {
+     "q": -4,
+     "r": 8
+    },
+    {
+     "q": -3,
+     "r": 8
+    },
+    {
+     "q": -2,
+     "r": 8
+    },
+    {
+     "q": -1,
+     "r": 8
+    },
+    {
+     "q": 0,
+     "r": 8
+    },
+    {
+     "q": 1,
+     "r": 8
+    },
+    {
+     "q": 2,
+     "r": 8
+    },
+    {
+     "q": 3,
+     "r": 8
+    },
+    {
+     "q": -5,
+     "r": 9
+    },
+    {
+     "q": -4,
+     "r": 9
+    },
+    {
+     "q": -3,
+     "r": 9
+    },
+    {
+     "q": -2,
+     "r": 9
+    },
+    {
+     "q": -1,
+     "r": 9
+    },
+    {
+     "q": 0,
+     "r": 9
+    },
+    {
+     "q": 1,
+     "r": 9
+    },
+    {
+     "q": 2,
+     "r": 9
+    }
+   ],
+   "group": "",
+   "hardware": [],
+   "id": "wall-honeycomb-k1-211x201",
+   "measurement": {
+    "bores": {},
+    "confidence": 0.99,
+    "interfaceWidths": [
+     20.0
+    ],
+    "matingAxis": "z",
+    "method": "lattice-fit",
+    "overhangAreaMm2": 0.0,
+    "overhangFraction": 0.0,
+    "socketWidths": [],
+    "tier": "panel",
+    "triangles": 5396,
+    "watertight": false
+   },
+   "name": "wall-honeycomb-k1-211x201",
+   "needsReview": false,
+   "panel": {
+    "columns": 8,
+    "fitsBeds": [
+     "bed220",
+     "bed235",
+     "mk3s",
+     "bed256",
+     "bed300",
+     "bed350",
+     "bed400"
+    ],
+    "heightMm": 200.6,
+    "rows": 10,
+    "widthMm": 211.1931
+   },
+   "print": {
+    "grams": 69.6,
+    "metres": 23.337,
+    "minutes": 444.1,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": false
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "80 hexagonal bores, lattice residual 1.34e-04 mm at pitch 23.59983"
+    ]
+   },
+   "requires": [
+    {
+     "count": 5,
+     "partId": "insert-countersunk"
+    }
+   ],
+   "sha256": "09333734eab02675b648bf7810b5185fdf471714cd54eb47d0a6735fcf2c5975",
+   "type": "panel",
+   "volumeMm3": 72215.48
+  },
+  {
+   "anchor": {
+    "q": 0,
+    "r": 0
+   },
+   "bboxMm": [
+    177.0,
+    170.3171,
+    8.0
+   ],
+   "drawnOrientation": "pointy",
+   "file": "models/wall-honeycomb-part.stl",
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 1,
+     "r": 0
+    },
+    {
+     "q": 2,
+     "r": 0
+    },
+    {
+     "q": 3,
+     "r": 0
+    },
+    {
+     "q": 4,
+     "r": 0
+    },
+    {
+     "q": 5,
+     "r": 0
+    },
+    {
+     "q": 6,
+     "r": 0
+    },
+    {
+     "q": -1,
+     "r": 1
+    },
+    {
+     "q": 0,
+     "r": 1
+    },
+    {
+     "q": 1,
+     "r": 1
+    },
+    {
+     "q": 2,
+     "r": 1
+    },
+    {
+     "q": 3,
+     "r": 1
+    },
+    {
+     "q": 4,
+     "r": 1
+    },
+    {
+     "q": 5,
+     "r": 1
+    },
+    {
+     "q": -1,
+     "r": 2
+    },
+    {
+     "q": 0,
+     "r": 2
+    },
+    {
+     "q": 1,
+     "r": 2
+    },
+    {
+     "q": 2,
+     "r": 2
+    },
+    {
+     "q": 3,
+     "r": 2
+    },
+    {
+     "q": 4,
+     "r": 2
+    },
+    {
+     "q": 5,
+     "r": 2
+    },
+    {
+     "q": -2,
+     "r": 3
+    },
+    {
+     "q": -1,
+     "r": 3
+    },
+    {
+     "q": 0,
+     "r": 3
+    },
+    {
+     "q": 1,
+     "r": 3
+    },
+    {
+     "q": 2,
+     "r": 3
+    },
+    {
+     "q": 3,
+     "r": 3
+    },
+    {
+     "q": 4,
+     "r": 3
+    },
+    {
+     "q": -2,
+     "r": 4
+    },
+    {
+     "q": -1,
+     "r": 4
+    },
+    {
+     "q": 0,
+     "r": 4
+    },
+    {
+     "q": 1,
+     "r": 4
+    },
+    {
+     "q": 2,
+     "r": 4
+    },
+    {
+     "q": 3,
+     "r": 4
+    },
+    {
+     "q": 4,
+     "r": 4
+    },
+    {
+     "q": -3,
+     "r": 5
+    },
+    {
+     "q": -2,
+     "r": 5
+    },
+    {
+     "q": -1,
+     "r": 5
+    },
+    {
+     "q": 0,
+     "r": 5
+    },
+    {
+     "q": 1,
+     "r": 5
+    },
+    {
+     "q": 2,
+     "r": 5
+    },
+    {
+     "q": 3,
+     "r": 5
+    },
+    {
+     "q": -3,
+     "r": 6
+    },
+    {
+     "q": -2,
+     "r": 6
+    },
+    {
+     "q": -1,
+     "r": 6
+    },
+    {
+     "q": 0,
+     "r": 6
+    },
+    {
+     "q": 1,
+     "r": 6
+    },
+    {
+     "q": 2,
+     "r": 6
+    },
+    {
+     "q": 3,
+     "r": 6
+    },
+    {
+     "q": -4,
+     "r": 7
+    },
+    {
+     "q": -3,
+     "r": 7
+    },
+    {
+     "q": -2,
+     "r": 7
+    },
+    {
+     "q": -1,
+     "r": 7
+    },
+    {
+     "q": 0,
+     "r": 7
+    },
+    {
+     "q": 1,
+     "r": 7
+    },
+    {
+     "q": 2,
+     "r": 7
+    }
+   ],
+   "group": "",
+   "hardware": [],
+   "id": "wall-honeycomb-part",
+   "measurement": {
+    "bores": {},
+    "confidence": 0.99,
+    "interfaceWidths": [
+     20.0
+    ],
+    "matingAxis": "z",
+    "method": "lattice-fit",
+    "overhangAreaMm2": 0.0,
+    "overhangFraction": 0.0,
+    "socketWidths": [],
+    "tier": "panel",
+    "triangles": 3812,
+    "watertight": false
+   },
+   "name": "wall-honeycomb-part",
+   "needsReview": false,
+   "panel": {
+    "columns": 7,
+    "fitsBeds": [
+     "mini",
+     "bed220",
+     "bed235",
+     "mk3s",
+     "bed256",
+     "bed300",
+     "bed350",
+     "bed400"
+    ],
+    "heightMm": 170.3171,
+    "rows": 8,
+    "widthMm": 177.0
+   },
+   "print": {
+    "grams": 49.07,
+    "metres": 16.4525,
+    "minutes": 315.15,
+    "profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+    "source": "sliced",
+    "supports": false
+   },
+   "provenance": {
+    "basis": "both",
+    "confidence": 0.95,
+    "notes": [
+     "56 hexagonal bores, lattice residual 1.42e-04 mm at pitch 23.60000"
+    ]
+   },
+   "requires": [
+    {
+     "count": 5,
+     "partId": "insert-countersunk"
+    }
+   ],
+   "sha256": "791cb1ae215a9fae6c668209a17c7fe6741822aa8161bc02a0a1c12f46b1b656",
+   "type": "panel",
+   "volumeMm3": 50550.958
+  }
+ ],
+ "scannerVersion": "1.1.0",
+ "schemaVersion": 1,
+ "slicerProfile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797",
+ "unresolved": [
+  {
+   "bboxMm": [
+    46.188,
+    63.0,
+    40.0023
+   ],
+   "file": "models/Hooks and holders/USB-holder-without-screw.stl",
+   "id": "usb-holder-without-screw",
+   "reason": "no wall interface; longest bbox edge 63.00 mm spans at most 3 cell(s) at 20.438 mm per step; plugs into an insert socket at [13.45] mm across flats; FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+  },
+  {
+   "bboxMm": [
+    46.188,
+    55.0,
+    40.0023
+   ],
+   "file": "models/Hooks and holders/USB-holder.stl",
+   "id": "usb-holder",
+   "reason": "no wall interface; longest bbox edge 55.00 mm spans at most 3 cell(s) at 20.438 mm per step; no hexagonal interface of any size found; likely screws to an insert via an M3/M4/M5 hole; FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+  },
+  {
+   "bboxMm": [
+    39.1444,
+    33.902,
+    5.0
+   ],
+   "file": "models/Hooks and holders/box-and-usb-holder-cover.stl",
+   "id": "box-and-usb-holder-cover",
+   "reason": "no wall interface; longest bbox edge 39.14 mm spans at most 2 cell(s) at 20.438 mm per step; no hexagonal interface of any size found; likely screws to an insert via an M3/M4/M5 hole; FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+  },
+  {
+   "bboxMm": [
+    46.188,
+    63.0,
+    40.0024
+   ],
+   "file": "models/Hooks and holders/box-without-screw.stl",
+   "id": "box-without-screw",
+   "reason": "no wall interface; longest bbox edge 63.00 mm spans at most 3 cell(s) at 20.438 mm per step; plugs into an insert socket at [13.45] mm across flats; FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+  },
+  {
+   "bboxMm": [
+    46.188,
+    55.0,
+    40.0023
+   ],
+   "file": "models/Hooks and holders/box.stl",
+   "id": "box",
+   "reason": "no wall interface; longest bbox edge 55.00 mm spans at most 3 cell(s) at 20.438 mm per step; no hexagonal interface of any size found; likely screws to an insert via an M3/M4/M5 hole; FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+  },
+  {
+   "bboxMm": [
+    56.9398,
+    21.85,
+    16.0
+   ],
+   "file": "models/Hooks and holders/caliper-mount.stl",
+   "id": "caliper-mount",
+   "reason": "no wall interface; longest bbox edge 56.94 mm spans at most 3 cell(s) at 20.438 mm per step; no hexagonal interface of any size found; likely screws to an insert via an M3/M4/M5 hole; FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+  },
+  {
+   "bboxMm": [
+    9.2545,
+    20.0,
+    13.0
+   ],
+   "file": "models/Hooks and holders/hook-12mm-for-M3.stl",
+   "id": "hook-12mm-for-m3",
+   "reason": "no wall interface; longest bbox edge 20.00 mm spans at most 1 cell(s) at 20.438 mm per step; no hexagonal interface of any size found; likely screws to an insert via an M3/M4/M5 hole; FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+  },
+  {
+   "bboxMm": [
+    9.2545,
+    33.0,
+    13.0
+   ],
+   "file": "models/Hooks and holders/hook-25mm-for-M3.stl",
+   "id": "hook-25mm-for-m3",
+   "reason": "no wall interface; longest bbox edge 33.00 mm spans at most 2 cell(s) at 20.438 mm per step; no hexagonal interface of any size found; likely screws to an insert via an M3/M4/M5 hole; FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+  },
+  {
+   "bboxMm": [
+    32.7922,
+    27.5544,
+    13.5893
+   ],
+   "file": "models/Hooks and holders/hook-bottom.stl",
+   "id": "hook-bottom",
+   "reason": "no wall interface; longest bbox edge 32.79 mm spans at most 2 cell(s) at 20.438 mm per step; no hexagonal interface of any size found; likely screws to an insert via an M3/M4/M5 hole; FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+  },
+  {
+   "bboxMm": [
+    22.6072,
+    21.5582,
+    13.3542
+   ],
+   "file": "models/Hooks and holders/hook-keyboard-bottom.stl",
+   "id": "hook-keyboard-bottom",
+   "reason": "no wall interface; longest bbox edge 22.61 mm spans at most 1 cell(s) at 20.438 mm per step; no hexagonal interface of any size found; likely screws to an insert via an M3/M4/M5 hole; FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+  },
+  {
+   "bboxMm": [
+    24.1441,
+    26.7481,
+    13.4493
+   ],
+   "file": "models/Hooks and holders/hook-keyboard-side.stl",
+   "id": "hook-keyboard-side",
+   "reason": "no wall interface; longest bbox edge 26.75 mm spans at most 2 cell(s) at 20.438 mm per step; no hexagonal interface of any size found; likely screws to an insert via an M3/M4/M5 hole; FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+  },
+  {
+   "bboxMm": [
+    27.5543,
+    32.7922,
+    13.5894
+   ],
+   "file": "models/Hooks and holders/hook-side.stl",
+   "id": "hook-side",
+   "reason": "no wall interface; longest bbox edge 32.79 mm spans at most 2 cell(s) at 20.438 mm per step; no hexagonal interface of any size found; likely screws to an insert via an M3/M4/M5 hole; FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+  },
+  {
+   "bboxMm": [
+    17.8493,
+    89.4449,
+    22.7843
+   ],
+   "file": "models/Hooks and holders/hook-to-empty-long.stl",
+   "id": "hook-to-empty-long",
+   "reason": "no wall interface; longest bbox edge 89.44 mm spans at most 5 cell(s) at 20.438 mm per step; plugs into an insert socket at [13.74] mm across flats; FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+  },
+  {
+   "bboxMm": [
+    15.6116,
+    37.4537,
+    21.7443
+   ],
+   "file": "models/Hooks and holders/hook-to-empty.stl",
+   "id": "hook-to-empty",
+   "reason": "no wall interface; longest bbox edge 37.45 mm spans at most 2 cell(s) at 20.438 mm per step; plugs into an insert socket at [13.24] mm across flats; FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+  },
+  {
+   "bboxMm": [
+    15.4674,
+    25.0,
+    13.3976
+   ],
+   "file": "models/Hooks and holders/insert-cable holder.stl",
+   "id": "insert-cable-holder",
+   "reason": "no wall interface; longest bbox edge 25.00 mm spans at most 1 cell(s) at 20.438 mm per step; no hexagonal interface of any size found; likely screws to an insert via an M3/M4/M5 hole; FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+  },
+  {
+   "bboxMm": [
+    27.7128,
+    27.7,
+    22.5
+   ],
+   "file": "models/Hooks and holders/screw-holder.stl",
+   "id": "screw-holder",
+   "reason": "no wall interface; longest bbox edge 27.71 mm spans at most 2 cell(s) at 20.438 mm per step; no hexagonal interface of any size found; likely screws to an insert via an M3/M4/M5 hole; FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+  },
+  {
+   "bboxMm": [
+    29.2265,
+    25.3109,
+    6.0
+   ],
+   "file": "models/Hooks and holders/sd-card-holder-cover.stl",
+   "id": "sd-card-holder-cover",
+   "reason": "no wall interface; longest bbox edge 29.23 mm spans at most 2 cell(s) at 20.438 mm per step; no hexagonal interface of any size found; likely screws to an insert via an M3/M4/M5 hole; FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+  },
+  {
+   "bboxMm": [
+    35.0,
+    63.0,
+    30.3109
+   ],
+   "file": "models/Hooks and holders/sd-card-holder-without-screw.stl",
+   "id": "sd-card-holder-without-screw",
+   "reason": "no wall interface; longest bbox edge 63.00 mm spans at most 3 cell(s) at 20.438 mm per step; plugs into an insert socket at [13.45] mm across flats; FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+  },
+  {
+   "bboxMm": [
+    35.0,
+    55.0,
+    30.3109
+   ],
+   "file": "models/Hooks and holders/sd-card-holder.stl",
+   "id": "sd-card-holder",
+   "reason": "no wall interface; longest bbox edge 55.00 mm spans at most 3 cell(s) at 20.438 mm per step; no hexagonal interface of any size found; likely screws to an insert via an M3/M4/M5 hole; FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+  },
+  {
+   "bboxMm": [
+    200.0,
+    42.6389,
+    13.288
+   ],
+   "file": "models/Hooks and holders/wranch-hoks-1.stl",
+   "id": "wranch-hoks-1",
+   "reason": "no wall interface; longest bbox edge 200.00 mm spans at most 10 cell(s) at 20.438 mm per step; no hexagonal interface of any size found; likely screws to an insert via an M3/M4/M5 hole; FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+  },
+  {
+   "bboxMm": [
+    200.0,
+    42.6389,
+    13.288
+   ],
+   "file": "models/Hooks and holders/wranch-hoks-2.stl",
+   "id": "wranch-hoks-2",
+   "reason": "no wall interface; longest bbox edge 200.00 mm spans at most 10 cell(s) at 20.438 mm per step; no hexagonal interface of any size found; likely screws to an insert via an M3/M4/M5 hole; FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+  },
+  {
+   "bboxMm": [
+    21.362,
+    18.5,
+    12.0
+   ],
+   "file": "models/Other parts/countersunk-to-holee.stl",
+   "id": "countersunk-to-holee",
+   "reason": "no wall interface; longest bbox edge 21.36 mm spans at most 1 cell(s) at 20.438 mm per step; plugs into an insert socket at [11.35, 18.2, 18.5] mm across flats; FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+  },
+  {
+   "bboxMm": [
+    21.362,
+    18.5,
+    5.0
+   ],
+   "file": "models/Other parts/cover-contersunk.stl",
+   "id": "cover-contersunk",
+   "reason": "no wall interface; longest bbox edge 21.36 mm spans at most 1 cell(s) at 20.438 mm per step; plugs into an insert socket at [18.2, 18.5] mm across flats; FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+  },
+  {
+   "bboxMm": [
+    56.4072,
+    51.0078,
+    13.4512
+   ],
+   "file": "models/shelves/shelf-1.stl",
+   "id": "shelf-1",
+   "reason": "no wall interface; longest bbox edge 56.41 mm spans at most 3 cell(s) at 20.438 mm per step; plugs into an insert socket at [13.45] mm across flats; FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+  },
+  {
+   "bboxMm": [
+    97.2833,
+    51.0137,
+    13.4512
+   ],
+   "file": "models/shelves/shelf-2.stl",
+   "id": "shelf-2",
+   "reason": "no wall interface; longest bbox edge 97.28 mm spans at most 5 cell(s) at 20.438 mm per step; plugs into an insert socket at [13.45] mm across flats; FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+  },
+  {
+   "bboxMm": [
+    138.1598,
+    51.0393,
+    13.4688
+   ],
+   "file": "models/shelves/shelf-3.stl",
+   "id": "shelf-3",
+   "reason": "no wall interface; longest bbox edge 138.16 mm spans at most 7 cell(s) at 20.438 mm per step; plugs into an insert socket at [13.45] mm across flats; FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+  },
+  {
+   "bboxMm": [
+    179.0352,
+    51.0253,
+    13.4512
+   ],
+   "file": "models/shelves/shelf-4.stl",
+   "id": "shelf-4",
+   "reason": "no wall interface; longest bbox edge 179.04 mm spans at most 9 cell(s) at 20.438 mm per step; plugs into an insert socket at [13.45] mm across flats; FLAGGED: cell footprint is a bound from the bounding box, not a measurement. Confirm before relying on it."
+  }
+ ]
+}

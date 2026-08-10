@@ -1,0 +1,507 @@
+/* =============================================================================
+   Honeycomb Planner — design tokens
+   =============================================================================
+
+   This file is the ONLY place in the app where a colour literal may appear.
+   Everything else — components, canvas renderer, print stylesheet — consumes
+   these custom properties. See TOKENS.md for the consuming rules.
+
+   ARCHITECTURE
+   ------------
+   Two layers, deliberately:
+
+     1. PRIMITIVES  (--neutral-*, --blue-*, --red-*, ...)
+        Raw ramps. Theme-agnostic. Every hex in the product is written here,
+        exactly once. Never reference a primitive from a component — it has no
+        meaning, only a value.
+
+     2. SEMANTIC    (--surface-*, --text-*, --accent, --canvas-*, ...)
+        Roles. This is the public API. Components reference these and nothing
+        else. Theming is done by re-pointing semantic tokens at different
+        primitives; the two dark blocks below therefore contain no colour
+        literals at all, which makes them impossible to drift out of sync.
+
+   THEMING
+   -------
+   The complete LIGHT palette lives on bare `:root`. Dark is expressed twice,
+   with identical bodies:
+     - `@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) }`
+       so the OS preference applies unless the user has explicitly chosen light;
+     - `:root[data-theme="dark"]`
+       so an explicit toggle wins in both directions, including forcing dark on
+       a light OS.
+   No colour has its only definition inside a media query or an attribute block.
+
+   Dark is not inverted light. The neutral ramp is shared, but the two themes
+   pick different, independently-checked rungs of it, and the accent flips from
+   a deep azure (dark ink on light ground) to a light azure (light ink on dark
+   ground) so that it stays the *most* saturated thing on screen in both.
+
+   ACCESSIBILITY
+   -------------
+   Every foreground/background pair used by the product is measured, not
+   eyeballed. 98 pairs, all passing, tabulated at the bottom of TOKENS.md.
+   ============================================================================= */
+
+:root {
+  /* ===========================================================================
+     1. PRIMITIVES — raw values. Do not consume these directly.
+     ========================================================================= */
+
+  /* --- Neutral ramp -------------------------------------------------------
+     One cool-grey ramp (hue ~208°, saturation 4–10%) serving both themes.
+     Slightly blue rather than dead grey: printed PLA and a physical wall are
+     warm, so a cool chrome keeps the subject warmer than its container.
+     Steps are named by approximate darkness, 0 = white, 975 = near black.
+     Gaps in the numbering are deliberate — the ramp is uneven because the
+     places we need precision (the 3:1 and 4.5:1 crossings) are uneven. */
+  --neutral-0:   #FFFFFF;
+  --neutral-50:  #F7F8F9;
+  --neutral-100: #F0F2F4;
+  --neutral-150: #E5E8EB;
+  --neutral-200: #DCE0E4;
+  --neutral-250: #D5D9DE;
+  --neutral-300: #C6CCD2;  /* reserved: disabled fills, track backgrounds */
+  --neutral-400: #9CA4AC;
+  --neutral-450: #8B939B;
+  --neutral-500: #7C838A;  /* the 3:1 rung — works against BOTH themes' surfaces */
+  --neutral-550: #6E767E;
+  --neutral-600: #606870;
+  --neutral-650: #545C64;
+  --neutral-700: #4B535B;
+  --neutral-750: #3F4652;
+  --neutral-800: #333A41;  /* reserved: dark-theme dividers on raised surfaces */
+  --neutral-850: #262C31;
+  --neutral-875: #21272C;
+  --neutral-900: #1A1F23;
+  --neutral-925: #14181B;
+  --neutral-950: #0D1013;
+  --neutral-975: #0B0E10;
+
+  /* --- Accent: azure ------------------------------------------------------
+     One accent, one hue. Azure and not the obvious SaaS indigo: it reads as
+     instrument/blueprint rather than marketing, it is unambiguously distinct
+     from the amber used for warnings, and it survives being drawn as a 1px
+     outline over a grey hex grid, which is its main job.
+     Stored as channel triples so that alpha variants cannot drift from the
+     solid: rgb(var(--blue-600-rgb) / 0.2) and var(--blue-600) are one number. */
+  --blue-300-rgb: 166 214 246;
+  --blue-400-rgb: 127 195 240;
+  --blue-500-rgb:  87 174 232;
+  --blue-600-rgb:  15  97 147;
+  --blue-700-rgb:  11  78 120;
+  --blue-800-rgb:   8  60  93;
+  --blue-ink:     #07131C;  /* text/icons ON a light-azure fill (dark theme) */
+
+  /* Pre-composited accent tints. The canvas paints thousands of cells per
+     frame; an opaque fill is one operation, an alpha fill over an existing
+     fill is two. These are exactly accent @ 10% over the theme's cell colour.
+     Recompute them if the accent or the cell colour ever changes. */
+  --blue-tint-light: #DAE4EA;  /* = blue-600 @10% over neutral-100 */
+  --blue-tint-dark:  #202D37;  /* = blue-500 @10% over neutral-900 */
+
+  /* --- Status ramps -------------------------------------------------------
+     Three hues, two rungs each: a dark rung for light surfaces, a light rung
+     for dark surfaces. Amber (not orange) for warning so it cannot be confused
+     with the azure accent; the green is pulled toward teal-free true green so
+     it cannot be confused with it either. */
+  --red-500-rgb:   240 134 123;
+  --red-700-rgb:   176  36  28;
+  --amber-500-rgb: 223 167  72;
+  --amber-800-rgb: 138  82   0;
+  --green-500-rgb:  95 201 138;
+  --green-700-rgb:  19 107  58;
+
+  /* --- Shadow inks --------------------------------------------------------
+     Light theme casts a cool grey shadow (a black shadow on a cool surface
+     reads as dirt); dark theme casts true black, because anything else glows. */
+  --ink-cool-rgb:  15 20 25;
+  --ink-black-rgb:  0  0  0;
+
+  /* ===========================================================================
+     2. SEMANTIC — the public API. LIGHT THEME (the default).
+     ========================================================================= */
+
+  color-scheme: light;
+
+  /* --- Surfaces -----------------------------------------------------------
+     Four elevation levels, lowest to highest. In light, higher = lighter.
+       0  app shell, gutters, the ground the canvas sits on
+       1  chrome panels: top bar, left catalogue, right parts list
+       2  raised within a panel: list rows, inputs, wells
+       3  detached: popovers, menus, dialogs
+     Elevation is expressed by surface colour first and by shadow only where an
+     element genuinely floats. Do not stack shadows to fake depth. */
+  --surface-0: var(--neutral-150);
+  --surface-1: var(--neutral-100);
+  --surface-2: var(--neutral-50);
+  --surface-3: var(--neutral-0);
+
+  /* --- Text ---------------------------------------------------------------
+     primary   body, values, labels you must read
+     secondary supporting text, column headers, inactive tabs
+     tertiary  metadata, hints, units — still >= 4.5:1, still readable
+     disabled  unavailable controls only. NEVER for merely quiet text. */
+  --text-primary:   var(--neutral-925);
+  --text-secondary: var(--neutral-700);
+  --text-tertiary:  var(--neutral-600);
+  --text-disabled:  var(--neutral-500);
+
+  /* --- Borders ------------------------------------------------------------
+     subtle   decorative hairlines INSIDE a surface (row rules, card edges).
+              Below 3:1 on purpose — it must never be the only thing telling
+              you a control exists.
+     default  the boundary of an interactive control. Measured >= 3:1 against
+              every surface in both themes. This is the one you reach for on
+              inputs, buttons and drop targets.
+     strong   emphasis: dividers between major regions, hovered control edges. */
+  --border-subtle:  var(--neutral-200);
+  --border-default: var(--neutral-500);
+  --border-strong:  var(--neutral-650);
+
+  /* --- Accent -------------------------------------------------------------
+     Reserved for: selection, the active/current item, focus, and the primary
+     action in a group. If more than ~2% of the pixels on screen are accent,
+     something is wrong. */
+  --accent-rgb:    var(--blue-600-rgb);
+  --accent:        rgb(var(--accent-rgb));
+  --accent-hover:  rgb(var(--blue-700-rgb));
+  --accent-active: rgb(var(--blue-800-rgb));
+  --accent-on:     var(--neutral-0);   /* text/icons on an accent fill */
+
+  /* Alpha strengths for tinted backgrounds. Dark needs more alpha to register
+     against a dark ground, which is why these are tokens and not constants. */
+  --tint-alpha:        0.10;
+  --tint-border-alpha: 0.38;
+
+  --accent-bg:     rgb(var(--accent-rgb) / var(--tint-alpha));         /* selected row */
+  --accent-border: rgb(var(--accent-rgb) / var(--tint-border-alpha));  /* edge of same */
+
+  /* --- Status -------------------------------------------------------------
+     Each has a foreground (text/icon/stroke) and a low-alpha background for
+     callouts and inline badges, plus a matching border. The -fg is legible on
+     bare surfaces AND on its own -bg; both are measured.
+     Status colour is never the sole carrier of meaning — pair it with a word
+     (Issue codes come from `Issue['code']` in src/core/types.ts). */
+  --danger-rgb:  var(--red-700-rgb);
+  --warning-rgb: var(--amber-800-rgb);
+  --success-rgb: var(--green-700-rgb);
+
+  --danger-fg:      rgb(var(--danger-rgb));
+  --danger-bg:      rgb(var(--danger-rgb) / var(--tint-alpha));
+  --danger-border:  rgb(var(--danger-rgb) / var(--tint-border-alpha));
+  --warning-fg:     rgb(var(--warning-rgb));
+  --warning-bg:     rgb(var(--warning-rgb) / var(--tint-alpha));
+  --warning-border: rgb(var(--warning-rgb) / var(--tint-border-alpha));
+  --success-fg:     rgb(var(--success-rgb));
+  --success-bg:     rgb(var(--success-rgb) / var(--tint-alpha));
+  --success-border: rgb(var(--success-rgb) / var(--tint-border-alpha));
+
+  /* --- Canvas -------------------------------------------------------------
+     The wall is the subject, so it gets its own vocabulary rather than
+     borrowing chrome colours. Read these with getComputedStyle() — see
+     TOKENS.md, "Consuming tokens from the canvas".
+
+     Depth reads inward: wall (darkest, the void behind everything) < panel
+     tint (printed plate material) < cell (the open hexagon). That ordering is
+     the reverse of chrome elevation on purpose — the canvas is a hole in the
+     app, not a card on top of it. */
+  --canvas-wall:       var(--neutral-250);  /* wall area with no panel on it */
+  --canvas-panel-tint: var(--neutral-150);  /* the plate between cells */
+  --canvas-cell:       var(--neutral-100);  /* a hexagonal cell interior */
+  --canvas-cell-hover: var(--blue-tint-light);
+  --canvas-grid:       var(--neutral-550);  /* lattice lines. Theme-invariant:
+                                               this rung clears 3:1 against the
+                                               canvas colours of BOTH themes. */
+  --canvas-seam:       var(--neutral-750);  /* boundary between two panels —
+                                               heavier than grid because
+                                               crossing it is an error (D6) */
+  --canvas-label:       var(--text-primary);
+  --canvas-label-muted: var(--text-tertiary);
+
+  --canvas-selection:      var(--accent);
+  --canvas-selection-fill: rgb(var(--accent-rgb) / 0.18);
+  --canvas-ghost-valid:        var(--accent);
+  --canvas-ghost-valid-fill:   rgb(var(--accent-rgb) / 0.22);
+  --canvas-ghost-invalid:      var(--danger-fg);
+  --canvas-ghost-invalid-fill: rgb(var(--danger-rgb) / 0.22);
+
+  /* --- Focus --------------------------------------------------------------
+     One ring, everywhere, accent-coloured, drawn as an outline so it never
+     changes layout and never gets clipped by overflow on a sibling. */
+  --focus-ring-color:  var(--accent);
+  --focus-ring-width:  2px;
+  --focus-ring-offset: 2px;
+
+  /* Text selection. Heavier than --accent-bg because it sits *behind* live
+     text and has to survive being only a few characters wide. Derived from
+     --accent-rgb, so it follows the theme with no second definition. */
+  --selection-bg: rgb(var(--accent-rgb) / 0.28);
+
+  /* ===========================================================================
+     3. TYPE
+     ========================================================================= */
+
+  /* System stacks only — the app ships no webfonts, so there is no flash, no
+     network dependency, and the UI matches the OS it is running on. */
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+               Arial, "Noto Sans", sans-serif, "Apple Color Emoji",
+               "Segoe UI Emoji";
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", "Cascadia Mono",
+               "Segoe UI Mono", "Roboto Mono", Menlo, Consolas,
+               "Liberation Mono", monospace;
+
+  /* Modular scale, ~1.15 near the base and widening at the top. Base is 13px
+     because this is a dense tool with a 2400 mm wall to fit on a laptop, not a
+     reading surface. In rem, so OS/browser font scaling still works. */
+  --font-size-2xs: 0.6875rem;  /* 11px — uppercase micro labels, axis ticks */
+  --font-size-xs:  0.75rem;    /* 12px — metadata, units, table captions      */
+  --font-size-sm:  0.8125rem;  /* 13px — BASE. Body, controls, list rows      */
+  --font-size-md:  0.875rem;   /* 14px — emphasised body, dialog body         */
+  --font-size-lg:  1rem;       /* 16px — panel titles                          */
+  --font-size-xl:  1.25rem;    /* 20px — section headings                      */
+  --font-size-2xl: 1.5rem;     /* 24px — view title                            */
+  --font-size-3xl: 2rem;       /* 32px — BOM totals, the one big number        */
+  --font-size-body: var(--font-size-sm);  /* alias: "the default size"        */
+
+  --line-height-none:    1;      /* single-line controls, numeric badges */
+  --line-height-tight:   1.2;    /* headings                             */
+  --line-height-snug:    1.35;   /* list rows, table cells               */
+  --line-height-normal:  1.5;    /* body, paragraphs                     */
+  --line-height-relaxed: 1.65;   /* long-form help text                  */
+
+  --font-weight-regular:  400;
+  --font-weight-medium:   500;   /* the emphasis weight — use before bold */
+  --font-weight-semibold: 600;
+  --font-weight-bold:     700;
+
+  --letter-spacing-tight:  -0.01em;  /* >= 24px text only */
+  --letter-spacing-normal: 0;
+  --letter-spacing-wide:   0.02em;   /* 11px text, which needs air */
+  --letter-spacing-caps:   0.06em;   /* uppercase micro labels */
+
+  /* Tabular figures. Mandatory for anything in a column that a user compares:
+     part counts, millimetres, grams, minutes. Without this the parts list
+     jitters as quantities change. */
+  --font-numeric-tabular:     tabular-nums lining-nums;
+  --font-numeric-proportional: proportional-nums;
+
+  /* ===========================================================================
+     4. SPACE — 4px base, 8 steps. Nothing off this scale, anywhere.
+     ========================================================================= */
+  --space-0:   0;
+  --space-0-5: 0.125rem;  /*  2px — optical nudges and hairline gaps only */
+  --space-1:   0.25rem;   /*  4px */
+  --space-2:   0.5rem;    /*  8px */
+  --space-3:   0.75rem;   /* 12px — default gap inside a control */
+  --space-4:   1rem;      /* 16px — default gap between controls */
+  --space-5:   1.5rem;    /* 24px — gap between groups */
+  --space-6:   2rem;      /* 32px */
+  --space-7:   3rem;      /* 48px */
+  --space-8:   4rem;      /* 64px */
+
+  /* ===========================================================================
+     5. SHAPE — radius and border widths
+     ========================================================================= */
+  /* Small radii only. A 12px corner on a 28px control is a toy; these are the
+     radii of a machined edge break, not a bubble. In px: a corner should not
+     grow when the user increases their font size. */
+  --radius-none: 0;
+  --radius-sm:   2px;   /* inputs, buttons, chips */
+  --radius-md:   4px;   /* cards, popovers, dialogs */
+  --radius-lg:   6px;   /* the one big container, if ever */
+  --radius-pill: 999px; /* count badges only */
+
+  --border-width-hair:  1px;
+  --border-width-thick: 2px;  /* selected/active edges, focus */
+
+  /* ===========================================================================
+     6. ELEVATION — three shadows, all quiet.
+     ========================================================================= */
+  /* Shadow means "this genuinely floats above the page": menu, dialog, drag
+     preview. It never means "this is a card". Cards get a border.
+     Alphas are tokens because a dark theme needs a much heavier shadow to
+     register at all — reusing light-theme alphas on dark produces nothing. */
+  --shadow-rgb: var(--ink-cool-rgb);
+  --shadow-a1: 0.06;
+  --shadow-a2: 0.10;
+  --shadow-a3: 0.16;
+
+  --shadow-none: none;
+  --shadow-sm: 0 1px 2px rgb(var(--shadow-rgb) / var(--shadow-a1));
+  --shadow-md: 0 2px 4px rgb(var(--shadow-rgb) / var(--shadow-a1)),
+               0 4px 12px rgb(var(--shadow-rgb) / var(--shadow-a2));
+  --shadow-lg: 0 2px 6px rgb(var(--shadow-rgb) / var(--shadow-a2)),
+               0 12px 32px rgb(var(--shadow-rgb) / var(--shadow-a3));
+
+  --scrim-alpha: 0.45;
+  --scrim: rgb(var(--shadow-rgb) / var(--scrim-alpha));  /* behind modals */
+
+  /* ===========================================================================
+     7. MOTION
+     ========================================================================= */
+  /* Three durations. Anything longer than --duration-slow is an animation the
+     user is waiting on, and this app should not have any.
+     Dragging a part is driven by the pointer, not by a transition: never put a
+     transition on a property the pointer is already controlling. */
+  --duration-fast: 90ms;   /* hover, focus, checkbox — must feel instant */
+  --duration-base: 160ms;  /* panel/menu open, tab change */
+  --duration-slow: 260ms;  /* dialog, drawer, the largest movement we allow */
+
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);  /* moves within the page */
+  --ease-enter:    cubic-bezier(0, 0, 0.2, 1);    /* things arriving (decel) */
+  --ease-exit:     cubic-bezier(0.4, 0, 1, 1);    /* things leaving (accel) */
+
+  /* ===========================================================================
+     8. SIZE & LAYOUT — so the shell has no magic numbers either.
+     ========================================================================= */
+  /* Touch: every interactive element must present a >= 44px hit target on a
+     coarse pointer. Visual height may stay smaller on a mouse; base.css
+     enforces the target, and `.hit-area` expands it without changing layout. */
+  --tap-target-min: 2.75rem;  /* 44px */
+
+  --control-height-sm: 1.5rem;   /* 24px — icon-only toolbar toggles (fine pointer) */
+  --control-height-md: 2rem;     /* 32px — default button/input */
+  --control-height-lg: 2.25rem;  /* 36px — primary action, touch-comfortable */
+
+  --icon-size-sm: 1rem;     /* 16px */
+  --icon-size-md: 1.25rem;  /* 20px */
+
+  --topbar-height:      2.75rem;  /* 44px — slim, and already a tap target */
+  --panel-width-left:   15rem;    /* 240px — catalogue */
+  --panel-width-right:  20rem;    /* 320px — parts list needs room for numbers */
+  --panel-width-min:    12rem;
+  --statusbar-height:   1.75rem;
+
+  /* Stacking. Every z-index in the app comes from here. */
+  --z-canvas:  0;
+  --z-chrome:  10;
+  --z-sticky:  20;
+  --z-popover: 30;
+  --z-overlay: 40;
+  --z-modal:   50;
+  --z-toast:   60;
+  --z-tooltip: 70;
+}
+
+/* =============================================================================
+   DARK — OS preference. Applies unless the user explicitly chose light.
+   Body is identical to the [data-theme="dark"] block below; keep them in step.
+   Contains no colour literals: it only re-points semantic roles at primitives.
+   ============================================================================= */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    /* Surfaces. Note surface-0 is NOT black: a true-black shell makes the
+       canvas look like a hole and makes OLED smearing visible while panning. */
+    --surface-0: var(--neutral-950);
+    --surface-1: var(--neutral-925);
+    --surface-2: var(--neutral-900);
+    --surface-3: var(--neutral-875);
+
+    /* Text. The lightest rung is neutral-150, not white: pure white on a near
+       black ground haloes at 13px. */
+    --text-primary:   var(--neutral-150);
+    --text-secondary: var(--neutral-400);
+    --text-tertiary:  var(--neutral-450);
+    /* --text-disabled is neutral-500 in both themes — see :root. */
+
+    --border-subtle:  var(--neutral-850);
+    --border-strong:  var(--neutral-400);
+    /* --border-default is neutral-500 in both themes — see :root. */
+
+    --accent-rgb:    var(--blue-500-rgb);
+    --accent-hover:  rgb(var(--blue-400-rgb));
+    --accent-active: rgb(var(--blue-300-rgb));
+    --accent-on:     var(--blue-ink);
+
+    --danger-rgb:  var(--red-500-rgb);
+    --warning-rgb: var(--amber-500-rgb);
+    --success-rgb: var(--green-500-rgb);
+
+    /* Tints must carry more alpha on a dark ground to be visible at all. */
+    --tint-alpha:        0.16;
+    --tint-border-alpha: 0.42;
+
+    --canvas-wall:       var(--neutral-975);
+    --canvas-panel-tint: var(--neutral-875);
+    --canvas-cell:       var(--neutral-900);
+    --canvas-cell-hover: var(--blue-tint-dark);
+    --canvas-seam:       var(--neutral-400);
+    /* --canvas-grid is neutral-550 in both themes — see :root. */
+
+    --shadow-rgb: var(--ink-black-rgb);
+    --shadow-a1: 0.34;
+    --shadow-a2: 0.46;
+    --shadow-a3: 0.62;
+    --scrim-alpha: 0.66;
+  }
+}
+
+/* =============================================================================
+   DARK — explicit choice. Wins over a light OS preference.
+   Identical body to the media block above.
+   ============================================================================= */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --surface-0: var(--neutral-950);
+  --surface-1: var(--neutral-925);
+  --surface-2: var(--neutral-900);
+  --surface-3: var(--neutral-875);
+
+  --text-primary:   var(--neutral-150);
+  --text-secondary: var(--neutral-400);
+  --text-tertiary:  var(--neutral-450);
+  /* --text-disabled is neutral-500 in both themes — see :root. */
+
+  --border-subtle:  var(--neutral-850);
+  --border-strong:  var(--neutral-400);
+  /* --border-default is neutral-500 in both themes — see :root. */
+
+  --accent-rgb:    var(--blue-500-rgb);
+  --accent-hover:  rgb(var(--blue-400-rgb));
+  --accent-active: rgb(var(--blue-300-rgb));
+  --accent-on:     var(--blue-ink);
+
+  --danger-rgb:  var(--red-500-rgb);
+  --warning-rgb: var(--amber-500-rgb);
+  --success-rgb: var(--green-500-rgb);
+
+  --tint-alpha:        0.16;
+  --tint-border-alpha: 0.42;
+
+  --canvas-wall:       var(--neutral-975);
+  --canvas-panel-tint: var(--neutral-875);
+  --canvas-cell:       var(--neutral-900);
+  --canvas-cell-hover: var(--blue-tint-dark);
+  --canvas-seam:       var(--neutral-400);
+  /* --canvas-grid is neutral-550 in both themes — see :root. */
+
+  --shadow-rgb: var(--ink-black-rgb);
+  --shadow-a1: 0.34;
+  --shadow-a2: 0.46;
+  --shadow-a3: 0.62;
+  --scrim-alpha: 0.66;
+}
+
+/* `:root[data-theme="light"]` needs no block: bare :root already IS light, and
+   the `:not([data-theme="light"])` guard above stops the OS overriding it. */
+
+/* =============================================================================
+   REDUCED MOTION
+   Neutralise the motion tokens at source, so every transition and animation
+   built from them collapses without each component having to remember.
+   base.css adds a belt-and-braces global override for anything hand-rolled.
+   ============================================================================= */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 1ms;
+    --duration-base: 1ms;
+    --duration-slow: 1ms;
+    --ease-standard: linear;
+    --ease-enter:    linear;
+    --ease-exit:     linear;
+  }
+}

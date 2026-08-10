@@ -1,0 +1,534 @@
+/* =============================================================================
+   BomPanel — the right-hand parts list
+   =============================================================================
+
+   Every value in this file comes from a semantic token in tokens.css. There is
+   no colour literal, no raw length and no raw duration here; the two local
+   custom properties at the top are column widths composed from the space scale,
+   so the four columns of three separate tables line up as one grid.
+
+   Structure: a three-row grid. The head and the totals are rows of that grid,
+   not sticky overlays, so they cannot be scrolled away and cannot overlap the
+   list. Only the middle row scrolls.
+   ============================================================================= */
+
+.bom-panel {
+  /* Column widths, from the space scale. The name column takes what is left. */
+  --bom-col-qty: var(--space-6);
+  --bom-col-time: var(--space-8);
+  --bom-col-filament: var(--space-8);
+
+  display: grid;
+  grid-template-rows: auto minmax(var(--space-0), 1fr) auto;
+  block-size: 100%;
+  inline-size: var(--panel-width-right);
+  min-inline-size: var(--panel-width-min);
+  overflow: hidden;
+
+  background-color: var(--surface-1);
+  color: var(--text-primary);
+  border-inline-start: var(--border-width-hair) solid var(--border-strong);
+}
+
+/* -----------------------------------------------------------------------------
+   Head
+   -------------------------------------------------------------------------- */
+
+.bom-panel__head {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-block-end: var(--border-width-hair) solid var(--border-subtle);
+}
+
+.bom-panel__identity {
+  display: grid;
+  gap: var(--space-0-5);
+  min-inline-size: var(--space-0);
+}
+
+.bom-panel__title {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+}
+
+.bom-panel__doc,
+.bom-panel__wall {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: var(--line-height-snug);
+}
+
+.bom-panel__doc {
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.bom-panel__wall {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-2xs);
+  letter-spacing: var(--letter-spacing-wide);
+}
+
+.bom-panel__exports {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.bom-export {
+  min-block-size: var(--control-height-md);
+  padding-inline: var(--space-3);
+  border: var(--border-width-hair) solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background-color: var(--surface-2);
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-none);
+  transition:
+    background-color var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+
+.bom-export:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+/* The one primary action in the group: this list exists to be printed. */
+.bom-export--primary {
+  background-color: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-on);
+}
+
+.bom-export--primary:hover {
+  background-color: var(--accent-hover);
+  border-color: var(--accent-hover);
+  color: var(--accent-on);
+}
+
+.bom-export--primary:active {
+  background-color: var(--accent-active);
+  border-color: var(--accent-active);
+}
+
+/* -----------------------------------------------------------------------------
+   Scroll region
+   -------------------------------------------------------------------------- */
+
+.bom-panel__scroll {
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-inline: var(--space-4);
+  padding-block: var(--space-3) var(--space-4);
+  display: grid;
+  align-content: start;
+  gap: var(--space-5);
+}
+
+/* -----------------------------------------------------------------------------
+   Issues — errors first, then warnings. The code is never shown; the wording is.
+   -------------------------------------------------------------------------- */
+
+.bom-issues {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.bom-issues__title {
+  color: var(--text-secondary);
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: var(--letter-spacing-caps);
+  text-transform: uppercase;
+}
+
+.bom-issues__list {
+  display: grid;
+  gap: var(--space-2);
+  padding-inline-start: var(--space-0);
+  list-style: none;
+}
+
+.bom-issue {
+  display: grid;
+  grid-template-columns: minmax(var(--space-0), 1fr) auto;
+  align-items: start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: var(--border-width-hair) solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.bom-issue--error {
+  background-color: var(--danger-bg);
+  border-color: var(--danger-border);
+}
+
+.bom-issue--warning {
+  background-color: var(--warning-bg);
+  border-color: var(--warning-border);
+}
+
+.bom-issue__body {
+  display: grid;
+  gap: var(--space-1);
+  min-inline-size: var(--space-0);
+}
+
+/* The word, so colour is never the only thing saying how bad this is. */
+.bom-issue__level {
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--letter-spacing-caps);
+  line-height: var(--line-height-none);
+  text-transform: uppercase;
+}
+
+.bom-issue--error .bom-issue__level {
+  color: var(--danger-fg);
+}
+
+.bom-issue--warning .bom-issue__level {
+  color: var(--warning-fg);
+}
+
+.bom-issue__title {
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-snug);
+}
+
+.bom-issue__detail,
+.bom-issue__advice {
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-normal);
+  overflow-wrap: anywhere;
+}
+
+.bom-issue__detail {
+  color: var(--text-secondary);
+}
+
+.bom-issue__advice {
+  color: var(--text-tertiary);
+}
+
+.bom-issue__dismiss {
+  display: grid;
+  place-items: center;
+  inline-size: var(--icon-size-md);
+  block-size: var(--icon-size-md);
+  border-radius: var(--radius-sm);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-md);
+  line-height: var(--line-height-none);
+  transition: color var(--duration-fast) var(--ease-standard);
+}
+
+.bom-issue__dismiss:hover {
+  color: var(--text-primary);
+}
+
+/* -----------------------------------------------------------------------------
+   Sections
+   -------------------------------------------------------------------------- */
+
+.bom-section {
+  display: grid;
+  gap: var(--space-1);
+  min-inline-size: var(--space-0);
+}
+
+/* Sticky so you always know which list you are looking at halfway down a
+   sixty-line BOM. Opaque, or the rows scroll through it. */
+.bom-section__title {
+  position: sticky;
+  inset-block-start: var(--space-0);
+  z-index: var(--z-sticky);
+
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding-block: var(--space-2);
+
+  background-color: var(--surface-1);
+  border-block-end: var(--border-width-hair) solid var(--border-strong);
+  color: var(--text-secondary);
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: var(--letter-spacing-caps);
+  text-transform: uppercase;
+}
+
+.bom-section__count {
+  color: var(--text-tertiary);
+  font-weight: var(--font-weight-regular);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.bom-section__note,
+.bom-section__empty {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-snug);
+}
+
+.bom-section__empty {
+  padding-block: var(--space-2);
+}
+
+/* -----------------------------------------------------------------------------
+   Lines
+   -------------------------------------------------------------------------- */
+
+.bom-table {
+  table-layout: fixed;
+  inline-size: 100%;
+  font-variant-numeric: var(--font-numeric-tabular);
+}
+
+.bom-table__col--qty {
+  inline-size: var(--bom-col-qty);
+}
+
+.bom-table__col--time {
+  inline-size: var(--bom-col-time);
+}
+
+.bom-table__col--filament {
+  inline-size: var(--bom-col-filament);
+}
+
+.bom-table :where(th, td) {
+  padding: var(--space-2) var(--space-1);
+  vertical-align: baseline;
+  border-block-end: var(--border-width-hair) solid var(--border-subtle);
+}
+
+.bom-table :where(th, td):first-child {
+  padding-inline-start: var(--space-0);
+}
+
+.bom-table :where(th, td):last-child {
+  padding-inline-end: var(--space-0);
+}
+
+.bom-table thead th {
+  padding-block: var(--space-1);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-regular);
+  letter-spacing: var(--letter-spacing-wide);
+  border-block-end-color: var(--border-subtle);
+}
+
+/* Every number the user compares down a column: right-aligned, tabular, and
+   never allowed to wrap mid-figure. */
+.bom-table__num {
+  text-align: end;
+  white-space: nowrap;
+  font-variant-numeric: var(--font-numeric-tabular);
+}
+
+.bom-line__qty {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.bom-line__time,
+.bom-line__filament {
+  color: var(--text-secondary);
+}
+
+.bom-line__part {
+  min-inline-size: var(--space-0);
+}
+
+.bom-line__heading {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.bom-line__name {
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-snug);
+  overflow-wrap: anywhere;
+}
+
+.bom-line__name--button {
+  text-align: start;
+  border-radius: var(--radius-sm);
+  transition: color var(--duration-fast) var(--ease-standard);
+}
+
+.bom-line__name--button:hover {
+  color: var(--accent);
+}
+
+/* Bounding-box footprint: worth knowing, not worth alarming anyone about, so it
+   is the same weight as the surrounding metadata and carries its explanation in
+   the title. base.css gives abbr[title] the dotted underline and help cursor. */
+.bom-line__review {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-2xs);
+  letter-spacing: var(--letter-spacing-wide);
+}
+
+.bom-line__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-2);
+}
+
+.bom-line__file {
+  font-size: var(--font-size-2xs);
+  line-height: var(--line-height-snug);
+  overflow-wrap: anywhere;
+}
+
+.bom-line__flag {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-2xs);
+  letter-spacing: var(--letter-spacing-wide);
+}
+
+/* Metres under grams: one right-aligned filament column, two units. */
+.bom-line__sub {
+  display: block;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-2xs);
+  line-height: var(--line-height-snug);
+}
+
+/* -----------------------------------------------------------------------------
+   Empty state
+   -------------------------------------------------------------------------- */
+
+.bom-empty {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  background-color: var(--surface-2);
+  border: var(--border-width-hair) solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.bom-empty__title {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-medium);
+}
+
+.bom-empty__body {
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-relaxed);
+}
+
+.bom-empty__hint {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-2xs);
+  letter-spacing: var(--letter-spacing-wide);
+}
+
+/* -----------------------------------------------------------------------------
+   Totals — the block the user reads before committing an evening to the printer
+   -------------------------------------------------------------------------- */
+
+.bom-totals {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  background-color: var(--surface-2);
+  border-block-start: var(--border-width-hair) solid var(--border-strong);
+}
+
+.bom-totals__list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(var(--space-0), 1fr));
+  gap: var(--space-3);
+}
+
+.bom-totals__item {
+  display: grid;
+  gap: var(--space-0-5);
+  min-inline-size: var(--space-0);
+}
+
+.bom-totals__item--lead {
+  grid-column: 1 / -1;
+}
+
+.bom-totals__label {
+  color: var(--text-secondary);
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: var(--letter-spacing-caps);
+  text-transform: uppercase;
+}
+
+.bom-totals__value {
+  color: var(--text-primary);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-tight);
+}
+
+/* The one big number in the product. */
+.bom-totals__value--lead {
+  font-size: var(--font-size-3xl);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--letter-spacing-tight);
+  line-height: var(--line-height-none);
+}
+
+.bom-totals__sub {
+  display: block;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-regular);
+  letter-spacing: var(--letter-spacing-wide);
+  line-height: var(--line-height-snug);
+}
+
+.bom-totals__note {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-2xs);
+}
+
+/* -----------------------------------------------------------------------------
+   Touch
+   -------------------------------------------------------------------------- */
+
+/* base.css already grows every <button> to the minimum target on a coarse
+   pointer. Links are not buttons, so the file link needs it spelled out, and the
+   rows need the room to hold it. */
+@media (pointer: coarse) {
+  .bom-line__file,
+  .bom-line__name--button {
+    display: inline-flex;
+    align-items: center;
+    min-block-size: var(--tap-target-min);
+  }
+
+  /* The dismiss control stays visually small on touch too: `.hit-area` already
+     gives it a full-size hit rectangle, so the global coarse-pointer growth is
+     undone here rather than being allowed to deform the callout. */
+  .bom-issue__dismiss {
+    min-block-size: var(--icon-size-md);
+  }
+}

@@ -1,0 +1,72 @@
+[
+ {
+  "file": "models/wall-honeycomb-part.stl",
+  "orientation": "pointy",
+  "columns": 7,
+  "rows": 8,
+  "cells": 56,
+  "width_mm": 177.0,
+  "height_mm": 170.3183,
+  "measured_cells": 56
+ },
+ {
+  "file": "models/wall-honeycomb-106x89-fixed.stl",
+  "orientation": "flat",
+  "columns": 4,
+  "rows": 4,
+  "cells": 16,
+  "width_mm": 88.5655,
+  "height_mm": 106.2,
+  "measured_cells": 16
+ },
+ {
+  "file": "models/wall-honeycomb-224x190size(mk3s).stl",
+  "orientation": "pointy",
+  "columns": 9,
+  "rows": 9,
+  "cells": 81,
+  "width_mm": 224.2,
+  "height_mm": 190.7565,
+  "measured_cells": 81
+ },
+ {
+  "file": "models/wall-honeycomb-293x271-(big-printer).stl",
+  "orientation": "flat",
+  "columns": 14,
+  "rows": 11,
+  "cells": 154,
+  "width_mm": 292.9475,
+  "height_mm": 271.4,
+  "measured_cells": 154
+ },
+ {
+  "file": "models/wall-honeycomb-bambu-211x248-fixed.stl",
+  "orientation": "pointy",
+  "columns": 10,
+  "rows": 10,
+  "cells": 100,
+  "width_mm": 247.8,
+  "height_mm": 211.1947,
+  "measured_cells": 100
+ },
+ {
+  "file": "models/wall-honeycomb-k1-211x201.stl",
+  "orientation": "flat",
+  "columns": 10,
+  "rows": 8,
+  "cells": 80,
+  "width_mm": 211.1947,
+  "height_mm": 200.6,
+  "measured_cells": 80
+ },
+ {
+  "file": "models/375x389-fixed.stl",
+  "orientation": "flat",
+  "columns": 18,
+  "rows": 16,
+  "cells": 288,
+  "width_mm": 374.7003,
+  "height_mm": 389.4,
+  "measured_cells": 288
+ }
+]

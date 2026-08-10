@@ -1,0 +1,80 @@
+/* The wall surface. Everything here consumes tokens; no literals. */
+
+.wall-canvas {
+  position: relative;
+  inline-size: 100%;
+  block-size: 100%;
+  overflow: hidden;
+  background: var(--canvas-wall);
+  contain: strict;
+}
+
+.wall-canvas__surface {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  /* Load-bearing on tablets: without it a one-finger drag scrolls the page
+     instead of moving the part under the finger. */
+  touch-action: none;
+  cursor: crosshair;
+  outline: none;
+}
+
+.wall-canvas__surface:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+
+.wall-canvas__tools {
+  position: absolute;
+  inset-block-end: var(--space-4);
+  inset-inline-end: var(--space-4);
+  display: flex;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border: var(--border-width-hair) solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  box-shadow: var(--shadow-sm);
+}
+
+.wall-canvas__tools button {
+  min-inline-size: var(--control-height-sm);
+  min-block-size: var(--control-height-sm);
+  padding-inline: var(--space-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-none);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-standard),
+              color var(--duration-fast) var(--ease-standard);
+}
+
+.wall-canvas__tools button:hover {
+  background: var(--surface-3);
+  color: var(--text-primary);
+}
+
+.wall-canvas__tools button:active {
+  background: var(--accent-bg);
+}
+
+.wall-canvas__tools button:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+@media (pointer: coarse) {
+  .wall-canvas__tools button {
+    min-inline-size: var(--control-height-lg);
+    min-block-size: var(--control-height-lg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wall-canvas__tools button { transition: none; }
+}

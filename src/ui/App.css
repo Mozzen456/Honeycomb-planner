@@ -1,0 +1,216 @@
+/* App shell layout. Tokens only — no colour, size or duration literals. */
+
+.app {
+  display: grid;
+  grid-template-rows: var(--topbar-height) 1fr;
+  block-size: 100dvh;
+  background: var(--surface-0);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  overflow: hidden;
+}
+
+/* ---------- top bar ---------- */
+
+.app__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding-inline: var(--space-4);
+  border-block-end: var(--border-width-hair) solid var(--border-subtle);
+  background: var(--surface-1);
+  min-inline-size: 0;
+}
+
+.app__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 0 0 auto;
+}
+
+/* A single hexagon as the mark. The product is a hex grid; anything else would
+   be decoration for its own sake. */
+.app__mark {
+  inline-size: var(--space-4);
+  block-size: var(--space-4);
+  background: var(--accent);
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+}
+
+.app__name {
+  inline-size: 22ch;
+  padding: var(--space-1) var(--space-2);
+  border: var(--border-width-hair) solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-medium);
+}
+
+.app__name:hover { border-color: var(--border-subtle); }
+.app__name:focus { border-color: var(--accent); outline: none; }
+
+.app__wall-controls,
+.app__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-inline-size: 0;
+}
+
+.app__wall-controls { flex: 1 1 auto; }
+.app__actions { flex: 0 0 auto; }
+
+.app__wall-controls label,
+.app__actions label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1-5, var(--space-1));
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+}
+
+/* Wide enough for a five-digit millimetre value AND the spin buttons. At 7ch
+   the browser clipped "2400" to "24", which reads as a wrong wall size rather
+   than a narrow field. */
+.app__wall-controls input[type='number'] {
+  inline-size: 9ch;
+  padding-inline-end: var(--space-1);
+  font-variant-numeric: var(--font-numeric-tabular);
+}
+
+.app__unit {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+}
+
+.app__primary {
+  background: var(--accent);
+  color: var(--accent-on);
+  border-color: var(--accent);
+  font-weight: var(--font-weight-medium);
+}
+
+.app__primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.app__primary:active { background: var(--accent-active); }
+
+/* File inputs are unstylable, so the input is hidden and the label is the
+   control. The label keeps the real focus ring via :focus-within. */
+.app__import {
+  position: relative;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  block-size: var(--control-height-md);
+  padding-inline: var(--space-3);
+  border: var(--border-width-hair) solid var(--border-default);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+.app__import:hover { background: var(--surface-2); color: var(--text-primary); }
+.app__import:focus-within {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+.app__import input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* ---------- body ---------- */
+
+.app__body {
+  display: grid;
+  grid-template-columns: minmax(15rem, 17rem) minmax(0, 1fr) minmax(19rem, 23rem);
+  min-block-size: 0;
+  overflow: hidden;
+}
+
+.app__rail {
+  border-inline-end: var(--border-width-hair) solid var(--border-subtle);
+  background: var(--surface-1);
+  min-block-size: 0;
+  overflow: hidden;
+}
+
+.app__stage {
+  position: relative;
+  min-inline-size: 0;
+  min-block-size: 0;
+  background: var(--canvas-wall);
+}
+
+.app__bom {
+  border-inline-start: var(--border-width-hair) solid var(--border-subtle);
+  background: var(--surface-1);
+  min-block-size: 0;
+  overflow: hidden;
+}
+
+/* ---------- overlays ---------- */
+
+.app__toast {
+  position: absolute;
+  inset-block-start: var(--space-4);
+  inset-inline-start: 50%;
+  transform: translateX(-50%);
+  max-inline-size: 44ch;
+  padding: var(--space-2) var(--space-4);
+  border: var(--border-width-hair) solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  box-shadow: var(--shadow-md);
+}
+
+.app__toast--error { border-color: var(--danger-border); background: var(--danger-bg); color: var(--danger-fg); }
+.app__toast--warn  { border-color: var(--warning-border); background: var(--warning-bg); color: var(--warning-fg); }
+.app__toast--ok    { border-color: var(--success-border); background: var(--success-bg); color: var(--success-fg); }
+
+.app__hint {
+  position: absolute;
+  inset-block-end: var(--space-4);
+  inset-inline-start: var(--space-4);
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-2xs);
+  pointer-events: none;
+  user-select: none;
+}
+
+.visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Narrow / tablet: the catalogue collapses to a strip above the stage so the
+   wall and the parts list keep the room. */
+@media (max-width: 68rem) {
+  .app__body { grid-template-columns: minmax(0, 1fr) minmax(17rem, 21rem); }
+  .app__rail {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    max-block-size: 12rem;
+    border-inline-end: none;
+    border-block-end: var(--border-width-hair) solid var(--border-subtle);
+  }
+  .app__body { grid-template-rows: auto minmax(0, 1fr); }
+  .app__stage, .app__bom { grid-row: 2; }
+}
