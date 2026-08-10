@@ -40,6 +40,10 @@ const catalog: Catalog = {
   parts: [
     part('single', [{ q: 0, r: 0 }]),
     part('pair', [{ q: 0, r: 0 }, { q: 1, r: 0 }]),
+    // Inserts plug INTO the hole, so two of them cannot share a cell. Everything
+    // else mounts on top and may overlap freely — that is what the wall is for.
+    part('plug', [{ q: 0, r: 0 }], { type: 'insert' }),
+    part('plug2', [{ q: 0, r: 0 }, { q: 1, r: 0 }], { type: 'insert' }),
     part('panel-a', [], {
       type: 'panel',
       panel: { columns: 10, rows: 10, widthMm: 200, heightMm: 200, fitsBeds: ['bed256'] },
@@ -68,21 +72,40 @@ describe('placement', () => {
     expect(store.getState().doc.items).toHaveLength(1);
   });
 
-  it('refuses an overlap and says why, naming the blocker', () => {
-    store.addItem('single', { q: 2, r: 2 });
+  it('LETS accessories stack on the same cell — the wall is for mounting things on', () => {
+    expect(store.addItem('single', { q: 2, r: 2 }).ok).toBe(true);
     const r = store.addItem('single', { q: 2, r: 2 });
+    expect(r.ok).toBe(true);
+    // And it does so silently: warning on every second drop would cry wolf.
+    expect(r.warnings ?? []).toEqual([]);
+    expect(store.getState().doc.items).toHaveLength(2);
+  });
+
+  it('lets a multi-cell accessory partially overlap another', () => {
+    store.addItem('pair', { q: 2, r: 2 });        // occupies (2,2) and (3,2)
+    expect(store.addItem('pair', { q: 3, r: 2 }).ok).toBe(true);
+    expect(store.getState().doc.items).toHaveLength(2);
+  });
+
+  it('refuses a second insert in the same hole, and says which', () => {
+    store.addItem('plug', { q: 2, r: 2 });
+    const r = store.addItem('plug', { q: 2, r: 2 });
     expect(r.ok).toBe(false);
-    expect(r.reason).toMatch(/overlaps/i);
+    expect(r.reason).toMatch(/one insert per hole/i);
     expect(r.blockedCells).toHaveLength(1);
-    // The refused item must not be in the document.
     expect(store.getState().doc.items).toHaveLength(1);
   });
 
-  it('refuses a partial overlap of a multi-cell part', () => {
-    store.addItem('pair', { q: 2, r: 2 });        // occupies (2,2) and (3,2)
-    const r = store.addItem('pair', { q: 3, r: 2 }); // wants (3,2) and (4,2)
+  it('refuses a partially clashing multi-cell insert, naming only the taken cell', () => {
+    store.addItem('plug2', { q: 2, r: 2 });          // (2,2) and (3,2)
+    const r = store.addItem('plug2', { q: 3, r: 2 }); // wants (3,2) and (4,2)
     expect(r.ok).toBe(false);
     expect(r.blockedCells?.map(hexKey)).toEqual(['3,2']);
+  });
+
+  it('lets an accessory sit over an insert — that is how it mounts', () => {
+    store.addItem('plug', { q: 2, r: 2 });
+    expect(store.addItem('single', { q: 2, r: 2 }).ok).toBe(true);
   });
 
   it('refuses a part hanging off the panel edge, distinct from an overlap', () => {
@@ -120,9 +143,10 @@ describe('moving', () => {
   });
 
   it('moves a group as one rigid body, or not at all', () => {
-    store.addItem('single', { q: 1, r: 1 });
-    store.addItem('single', { q: 2, r: 1 });
-    store.addItem('single', { q: 4, r: 1 }); // the obstacle
+    // Inserts, because only they can genuinely block each other now.
+    store.addItem('plug', { q: 1, r: 1 });
+    store.addItem('plug', { q: 2, r: 1 });
+    store.addItem('plug', { q: 4, r: 1 }); // the obstacle
     const [a, b, obstacle] = store.getState().doc.items;
     store.groupItems([a!.id, b!.id]);
 
@@ -229,15 +253,15 @@ describe('undo / redo', () => {
   });
 
   it('a refused drop does not create an undo step', () => {
-    store.addItem('single', { q: 2, r: 2 });
+    store.addItem('plug', { q: 2, r: 2 });
     const depthBefore = store.getState().canUndo;
     const before = JSON.stringify(store.getState().doc);
-    store.addItem('single', { q: 2, r: 2 }); // refused
+    expect(store.addItem('plug', { q: 2, r: 2 }).ok).toBe(false); // refused
     store.undo();
     // One undo should take us back past the successful add, not past a phantom.
     expect(store.getState().doc.items).toHaveLength(0);
     expect(depthBefore).toBe(true);
-    expect(before).toContain('single');
+    expect(before).toContain('plug');
   });
 });
 
@@ -257,12 +281,15 @@ describe('grouping and duplication', () => {
     expect([...groups].every((g) => g !== undefined)).toBe(true);
   });
 
-  it('refuses a duplicate that would overlap', () => {
-    store.addItem('single', { q: 1, r: 1 });
-    const ids = store.getState().doc.items.map((i) => i.id);
-    const r = store.duplicateItems(ids, { q: 0, r: 0 });
-    expect(r.ok).toBe(false);
+  it('refuses duplicating an insert onto itself, but allows it for an accessory', () => {
+    store.addItem('plug', { q: 1, r: 1 });
+    const plugIds = store.getState().doc.items.map((i) => i.id);
+    expect(store.duplicateItems(plugIds, { q: 0, r: 0 }).ok).toBe(false);
     expect(store.getState().doc.items).toHaveLength(1);
+
+    store.addItem('single', { q: 5, r: 5 });
+    const accId = store.getState().doc.items.filter((i) => i.partId === 'single').map((i) => i.id);
+    expect(store.duplicateItems(accId, { q: 0, r: 0 }).ok).toBe(true);
   });
 
   it('selecting one member of a group expands to the whole group', () => {

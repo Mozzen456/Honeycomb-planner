@@ -71,12 +71,26 @@ Two rules the whole thing depends on:
 
 ---
 
+## Two views of the same wall
+
+**3D is the default.** The wall is a thing you mount objects *on*, so the question at the wall is
+how far something stands out and whether it fouls its neighbour — which a plan cannot show. Panels
+are drawn as real 8 mm plates with hexagonal holes; every part stands proud at its measured depth.
+
+**Plan** is one click away and is faster for aiming precisely. Both drive the same document, so
+they cannot disagree.
+
+Right-drag orbits, shift-drag pans, the wheel zooms.
+
 ## What the app enforces
 
-- **Overlap is refused at drop time, with a visible reason** — never silently allowed and
-  discovered after printing.
-- **Off-panel is refused**, and distinguished from overlap ("hangs off the panel edge — 2 cells
-  unsupported" is a different problem from "overlaps USB-holder").
+- **Things may overlap, freely and silently.** Accessories bolt onto an insert and stand proud of
+  the panel — mounting things on top of each other is what the wall is *for*. Warning about it
+  would cry wolf on every second drop.
+- **One insert per hole.** The single genuine impossibility: two parts that plug *into* a cell
+  cannot share it, and that is refused with a reason naming the occupant.
+- **Off-panel is refused**, and distinguished from a clash ("hangs off the panel edge — 2 cells
+  unsupported" is a different problem from a hole that is already filled).
 - **Seam crossing is flagged, not blocked.** An accessory spanning two panels is the classic HSW
   mistake, but sometimes it is fine — so you get told, and you decide.
 - **Groups move and rotate as one rigid body.** If any member cannot land, none of them move.

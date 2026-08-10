@@ -19,6 +19,7 @@ import type { Catalog, Hex, Rotation } from '../core/types';
 import { BomPanel } from './BomPanel';
 import { CatalogPanel } from './CatalogPanel';
 import { WallCanvas, ghostCells, type DragPayload } from './WallCanvas';
+import { WallView3D } from './WallView3D';
 import './App.css';
 
 const catalog = catalogJson as unknown as Catalog;
@@ -38,6 +39,13 @@ export function App() {
   const [toast, setToast] = useState<{ text: string; kind: 'error' | 'warn' | 'ok' } | null>(null);
   const [filter, setFilter] = useState('');
   const [theme, setTheme] = useState<Theme>('system');
+  /**
+   * 3D is the default view. The wall is a physical object you hang things ON,
+   * and a plan view hides the question that actually matters at the wall: how
+   * far does this stick out, and does it foul its neighbour. The 2D plan stays
+   * available because it is faster to aim precisely in.
+   */
+  const [view, setView] = useState<'3d' | '2d'>('3d');
 
   useEffect(() => store.subscribe(setState), [store]);
 
@@ -360,6 +368,23 @@ export function App() {
           <button type="button" className="app__primary" onClick={autoTile}>
             Solve panels
           </button>
+
+          <div className="app__viewtoggle" role="group" aria-label="View">
+            <button
+              type="button"
+              aria-pressed={view === '3d'}
+              onClick={() => setView('3d')}
+            >
+              3D
+            </button>
+            <button
+              type="button"
+              aria-pressed={view === '2d'}
+              onClick={() => setView('2d')}
+            >
+              Plan
+            </button>
+          </div>
         </div>
 
         <div className="app__actions">
@@ -402,31 +427,50 @@ export function App() {
         </aside>
 
         <main className="app__stage">
-          <WallCanvas
-            doc={state.doc}
-            catalog={catalog}
-            selection={state.selection}
-            drag={drag}
-            dragRef={dragRef}
-            invalidCells={dropCheck.ok ? undefined : dropCheck.blockedCells}
-            placementValid={dropCheck.ok}
-            onDragMove={onDragMove}
-            onDrop={onDrop}
-            onDragCancel={cancelDrag}
-            onStartItemDrag={beginItemDrag}
-            onSelect={(ids, additive) => {
-              const expanded = store.expandSelection(ids);
-              store.select(additive ? [...state.selection, ...expanded] : expanded);
-            }}
-          />
+          {view === '3d' ? (
+            <WallView3D
+              doc={state.doc}
+              catalog={catalog}
+              selection={state.selection}
+              drag={drag}
+              dragRef={dragRef}
+              placementValid={dropCheck.ok}
+              onDragMove={onDragMove}
+              onDrop={onDrop}
+              onDragCancel={cancelDrag}
+              onStartItemDrag={beginItemDrag}
+              onSelect={(ids, additive) => {
+                const expanded = store.expandSelection(ids);
+                store.select(additive ? [...state.selection, ...expanded] : expanded);
+              }}
+            />
+          ) : (
+            <WallCanvas
+              doc={state.doc}
+              catalog={catalog}
+              selection={state.selection}
+              drag={drag}
+              dragRef={dragRef}
+              invalidCells={dropCheck.ok ? undefined : dropCheck.blockedCells}
+              placementValid={dropCheck.ok}
+              onDragMove={onDragMove}
+              onDrop={onDrop}
+              onDragCancel={cancelDrag}
+              onStartItemDrag={beginItemDrag}
+              onSelect={(ids, additive) => {
+                const expanded = store.expandSelection(ids);
+                store.select(additive ? [...state.selection, ...expanded] : expanded);
+              }}
+            />
+          )}
           {toast && (
             <div className={`app__toast app__toast--${toast.kind}`} role="status">
               {toast.text}
             </div>
           )}
-          <div className="app__hint" aria-hidden="true">
-            drag to place · R rotate · Ctrl+D duplicate · Ctrl+G group · Alt+drag pan
-          </div>
+          {/* Each view owns its own corner text. A shell-level hint here sat on
+              top of the canvas's scale readout, both 11px mono, both anchored
+              bottom-left. */}
         </main>
 
         <aside className="app__bom">

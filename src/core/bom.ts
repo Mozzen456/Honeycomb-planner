@@ -306,13 +306,30 @@ export function validate(doc: LayoutDoc, catalog: Catalog): Issue[] {
 
   // --- overlap ------------------------------------------------------------
   const itemFootprints = items.map((item) => ({ id: item.id, cells: itemCells(item, catalog) }));
+
+  // Sharing a cell is only an ERROR when both things plug INTO it — there is
+  // one hexagonal hole and one insert can sit in it. Accessories bolt onto an
+  // insert and stand proud of the panel, and mounting things on top of one
+  // another is what the system is for, so those overlaps are advisory.
+  const itemsById = new Map(items.map((i) => [i.id, i]));
+  const plugsIn = (itemId: string): boolean => {
+    const it = itemsById.get(itemId);
+    const p = it ? catalog.parts.find((x) => x.id === it.partId) : undefined;
+    return p !== undefined && (p.type === 'insert' || p.type === 'fastener');
+  };
+
   for (const clash of collisions(occupancyOf(itemFootprints))) {
+    // Only the impossible case is reported. Two accessories sharing cells is
+    // ordinary — they bolt on at different depths — and reporting it would put
+    // a warning on the parts list for a layout that is perfectly fine.
+    if (!plugsIn(clash.a) || !plugsIn(clash.b)) continue;
+    const n = clash.cells.length;
     issues.push({
       level: 'error',
       code: 'overlap',
-      message: `Items "${clash.a}" and "${clash.b}" occupy the same cell${
-        clash.cells.length === 1 ? '' : 's'
-      } (${clash.cells.length}).`,
+      message:
+        `Two inserts share the same hole: "${clash.a}" and "${clash.b}" ` +
+        `on ${n} cell${n === 1 ? '' : 's'}.`,
       itemIds: [clash.a, clash.b],
       cells: clash.cells,
     });

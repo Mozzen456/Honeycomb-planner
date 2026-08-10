@@ -1,0 +1,73 @@
+/* 3D wall surface. Tokens only — no colour, size or duration literals. */
+
+.wall3d {
+  position: relative;
+  inline-size: 100%;
+  block-size: 100%;
+  overflow: hidden;
+  background: var(--canvas-wall);
+  /* Load-bearing on tablets: without it a one-finger drag scrolls the page
+     instead of moving the part under the finger. */
+  touch-action: none;
+  cursor: grab;
+}
+
+.wall3d canvas {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+}
+
+.wall3d__tools {
+  position: absolute;
+  inset-block-end: var(--space-4);
+  inset-inline-end: var(--space-4);
+  display: flex;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border: var(--border-width-hair) solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  box-shadow: var(--shadow-sm);
+}
+
+.wall3d__tools button {
+  min-block-size: var(--control-height-sm);
+  padding-inline: var(--space-3);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-none);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-standard),
+              color var(--duration-fast) var(--ease-standard);
+}
+
+.wall3d__tools button:hover { background: var(--surface-3); color: var(--text-primary); }
+.wall3d__tools button:active { background: var(--accent-bg); }
+.wall3d__tools button:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.wall3d__hint {
+  position: absolute;
+  inset-block-end: var(--space-4);
+  inset-inline-start: var(--space-4);
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-2xs);
+  pointer-events: none;
+  user-select: none;
+}
+
+@media (pointer: coarse) {
+  .wall3d__tools button { min-block-size: var(--control-height-lg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wall3d__tools button { transition: none; }
+}

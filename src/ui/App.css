@@ -51,7 +51,10 @@
 }
 
 .app__name:hover { border-color: var(--border-subtle); }
-.app__name:focus { border-color: var(--accent); outline: none; }
+.app__name:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
 
 .app__wall-controls,
 .app__actions {
@@ -68,7 +71,7 @@
 .app__actions label {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1-5, var(--space-1));
+  gap: var(--space-2);
   color: var(--text-tertiary);
   font-size: var(--font-size-xs);
   white-space: nowrap;
@@ -81,22 +84,104 @@
   inline-size: 9ch;
   padding-inline-end: var(--space-1);
   font-variant-numeric: var(--font-numeric-tabular);
+  /* The label around them is tertiary grey; without this the two most important
+     editable numbers in the bar inherit it and read as disabled. */
+  color: var(--text-primary);
 }
+
+.app__wall-controls select { color: var(--text-primary); }
 
 .app__unit {
   color: var(--text-tertiary);
   font-size: var(--font-size-xs);
 }
 
+/* ---------- buttons ----------
+   base.css deliberately strips every <button> and leaves the component to the
+   app. Nothing ever defined it, so the top bar shipped 20px unpadded text
+   beside 32px rounded inputs — the single loudest "unfinished" tell in the
+   product. This is that missing component; .app__import and the BOM's export
+   row should consume it too rather than hand-rolling it a third time. */
+.app__bar button,
+.app__import {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  block-size: var(--control-height-md);
+  padding-inline: var(--space-3);
+  border: var(--border-width-hair) solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-none);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-standard),
+              color var(--duration-fast) var(--ease-standard),
+              border-color var(--duration-fast) var(--ease-standard);
+}
+
+.app__bar button:hover:not(:disabled),
+.app__import:hover {
+  background: var(--surface-2);
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+
+.app__bar button:active:not(:disabled) { background: var(--surface-3); }
+
+.app__bar button:disabled {
+  color: var(--text-disabled);
+  cursor: default;
+}
+
+.app__bar button:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
 .app__primary {
   background: var(--accent);
   color: var(--accent-on);
   border-color: var(--accent);
-  font-weight: var(--font-weight-medium);
 }
 
-.app__primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
-.app__primary:active { background: var(--accent-active); }
+.app__bar .app__primary:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  color: var(--accent-on);
+}
+.app__bar .app__primary:active { background: var(--accent-active); }
+
+/* The standard ring is the accent colour, which vanishes on an accent-filled
+   button. Offsetting it outward keeps one ring for the whole app while still
+   being visible here. */
+.app__bar .app__primary:focus-visible {
+  outline-offset: var(--space-0-5);
+}
+
+/* Segmented 3D / Plan switch. */
+.app__viewtoggle {
+  display: inline-flex;
+  border: var(--border-width-hair) solid var(--border-default);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.app__bar .app__viewtoggle button {
+  border: none;
+  border-radius: var(--radius-none);
+  background: transparent;
+  padding-inline: var(--space-3);
+}
+
+.app__bar .app__viewtoggle button[aria-pressed='true'] {
+  background: var(--accent-bg);
+  color: var(--accent);
+}
 
 /* File inputs are unstylable, so the input is hidden and the label is the
    control. The label keeps the real focus ring via :focus-within. */
@@ -129,15 +214,19 @@
 
 /* ---------- body ---------- */
 
+/* The panels own their width via the tokens; the grid uses the SAME tokens so
+   the two cannot disagree. They previously did, leaving each panel floating in
+   a dead gutter with two parallel borders of different weights 32px apart —
+   which reads as a rendering bug. The rail and BOM slots carry no border of
+   their own: the panels already draw one. */
 .app__body {
   display: grid;
-  grid-template-columns: minmax(15rem, 17rem) minmax(0, 1fr) minmax(19rem, 23rem);
+  grid-template-columns: var(--panel-width-left) minmax(0, 1fr) var(--panel-width-right);
   min-block-size: 0;
   overflow: hidden;
 }
 
 .app__rail {
-  border-inline-end: var(--border-width-hair) solid var(--border-subtle);
   background: var(--surface-1);
   min-block-size: 0;
   overflow: hidden;
@@ -151,11 +240,14 @@
 }
 
 .app__bom {
-  border-inline-start: var(--border-width-hair) solid var(--border-subtle);
   background: var(--surface-1);
   min-block-size: 0;
   overflow: hidden;
 }
+
+/* The BOM must reach the window edge — it stopped 47px short because the slot
+   was wider than the panel inside it. */
+.app__bom > * { inline-size: 100%; }
 
 /* ---------- overlays ---------- */
 
@@ -201,16 +293,44 @@
 }
 
 /* Narrow / tablet: the catalogue collapses to a strip above the stage so the
-   wall and the parts list keep the room. */
+   wall and the parts list keep the room.
+   The panel inside it must be told to fill that strip. It was not, so it kept
+   its 240px width inside a 990px rail and its scroll area collapsed to 37px —
+   the catalogue rendered NO tiles at all, which made the app unusable on the
+   tablet it was supposed to support. */
 @media (max-width: 68rem) {
-  .app__body { grid-template-columns: minmax(0, 1fr) minmax(17rem, 21rem); }
+  .app__body {
+    grid-template-columns: minmax(0, 1fr) var(--panel-width-right);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
   .app__rail {
     grid-column: 1 / -1;
     grid-row: 1;
-    max-block-size: 12rem;
-    border-inline-end: none;
+    max-block-size: 14rem;
     border-block-end: var(--border-width-hair) solid var(--border-subtle);
   }
-  .app__body { grid-template-rows: auto minmax(0, 1fr); }
+  .app__rail > * { inline-size: 100%; max-inline-size: none; }
   .app__stage, .app__bom { grid-row: 2; }
+
+  /* Lay the tiles out in columns that scroll sideways, so a short strip still
+     shows parts instead of only its own headings. */
+  .app__rail .catalog-group__list {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 13rem;
+    grid-template-rows: repeat(2, auto);
+    gap: var(--space-1);
+    overflow-x: auto;
+  }
+}
+
+/* Phone-ish: the parts list goes under the wall rather than beside it. */
+@media (max-width: 46rem) {
+  .app__body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) minmax(12rem, 40vh);
+  }
+  .app__rail { grid-column: 1; grid-row: 1; }
+  .app__stage { grid-column: 1; grid-row: 2; }
+  .app__bom { grid-column: 1; grid-row: 3; }
 }

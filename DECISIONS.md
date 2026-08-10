@@ -260,6 +260,66 @@ in the draw effect's dependencies moved.
 `matchMedia`, and bumps a counter to force a repaint. This also covers the system flipping theme
 while the app is open.
 
+## D18. Overlap is allowed — I had the model of the system wrong
+
+The first build refused any two items that shared a cell, and called it the
+whole value of the app. That was wrong, and it was wrong about the physical
+system rather than about the code.
+
+HSW is a wall you mount things **on**. An accessory bolts to an insert and
+stands proud of the panel; two accessories sharing a cell in plan view are at
+different depths and do not fight. Refusing that placement blocks the normal
+way the system is used.
+
+**Decision:** exclusivity applies only to parts that go *into* a hole — those
+whose catalogue `type` is `insert` or `fastener`. Two of those in one cell is
+still a hard refusal ("one insert per hole"), because there is one hole.
+Everything else may overlap freely.
+
+And it does so **silently**. My first pass warned on every overlap; with 26
+parts placed the parts list filled with advisories for a layout that was
+completely fine, which is how a warning system trains people to ignore it. The
+BOM likewise only reports the insert-in-insert case, at `error`; ordinary
+overlap produces no issue at all.
+
+---
+
+## D19. Three dimensions, because depth is the question the plan cannot answer
+
+A flat plan tells you which cells are used. Standing at the wall, the question
+is *how far does this stick out, and does it foul its neighbour* — which a plan
+cannot show, and which matters more now that parts are allowed to overlap.
+
+**Decision:** the 3D view is the default; the 2D plan stays one click away
+because it is faster to aim precisely in. Both drive the same document — hex
+coordinates in, the same `store` commands out — so neither can drift from the
+other.
+
+Implementation notes worth keeping:
+
+- **One extruded geometry per distinct panel size, drawn as an `InstancedMesh`.**
+  The plate is built as one `ExtrudeGeometry` over per-cell hexagonal rings, so
+  a 64-panel garage wall is two draw calls rather than 5,800 meshes. The plate's
+  zig-zag boundary comes out correct for free, because the outer hexagons *are*
+  the lattice's unit cells and neighbours share edges exactly.
+- **Parts are drawn at their measured depth** from `bboxMm`, one block per
+  occupied cell rather than one box over the bounding area — so a multi-cell
+  part stays honest about which cells it actually uses.
+- **Colours are read from the token layer**, not hardcoded, so the 3D view
+  follows the theme. That needed a fix: the tokens resolve to
+  `rgb(15  97 147)` — doubled whitespace, from `rgb(var(--accent-rgb))` over a
+  space-separated triple — which three.js's colour parser rejects *silently*,
+  leaving every material white. Every accent part came out the same grey as the
+  plate. The string is now normalised through a canvas 2D context first, which
+  makes it immune to whatever colour syntax the tokens use next.
+- **Lighting is deliberately mid-range.** Too bright and a Lambert surface
+  washes to white so the parts stop reading against the plate; too dim and the
+  dark theme's plate — only two ramp steps above the void — vanishes entirely.
+- The 3D scene needs the same `MutationObserver` on `data-theme` that D16 added
+  to the 2D canvas, for the same reason.
+
+---
+
 ## D17. Visual hierarchy on the wall
 
 Two things read wrong once there was something to look at:

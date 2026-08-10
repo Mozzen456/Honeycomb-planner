@@ -199,29 +199,51 @@ export class Store {
    * Overlap is refused at drop time rather than allowed and discovered later —
    * the whole value of the app is that the parts list matches reality.
    */
-  checkPlacement(cells: readonly Hex[], ignoreIds: ReadonlySet<string> = new Set()): DropResult {
+  checkPlacement(
+    cells: readonly Hex[],
+    ignoreIds: ReadonlySet<string> = new Set(),
+    exclusiveCells: ReadonlySet<string> = new Set(),
+  ): DropResult {
     const occupied = this.occupiedCells(ignoreIds);
-    const blocked: Hex[] = [];
-    let blockerName = '';
+    const overlapping: Hex[] = [];
+    const clashing: Hex[] = [];
+    let overlapName = '';
+    let clashName = '';
+
     for (const c of cells) {
-      const other = occupied.get(hexKey(c));
-      if (other !== undefined) {
-        blocked.push(c);
-        if (!blockerName) {
-          const it = this.current.doc.items.find((i) => i.id === other);
-          const p = it ? this.part(it.partId) : undefined;
-          blockerName = p?.name ?? 'another item';
-        }
+      const key = hexKey(c);
+      const other = occupied.get(key);
+      if (other === undefined) continue;
+      const it = this.current.doc.items.find((i) => i.id === other);
+      const p = it ? this.part(it.partId) : undefined;
+      const name = p?.name ?? 'another item';
+
+      // Two things that plug INTO a cell cannot share it — there is one hole.
+      // Anything else is mounted ON the wall and simply stands in front of what
+      // is behind it, which is how the system is meant to be used.
+      if (exclusiveCells.has(key) && p !== undefined && isExclusive(p)) {
+        clashing.push(c);
+        if (!clashName) clashName = name;
+      } else {
+        overlapping.push(c);
+        if (!overlapName) overlapName = name;
       }
     }
-    if (blocked.length > 0) {
+
+    if (clashing.length > 0) {
       return {
         ok: false,
-        reason: `Overlaps ${blockerName} — ${blocked.length} cell${blocked.length > 1 ? 's' : ''} already taken`,
-        blockedCells: blocked,
+        reason: `${clashName} already fills ${clashing.length === 1 ? 'that cell' : `${clashing.length} of those cells`} — one insert per hole`,
+        blockedCells: clashing,
       };
     }
 
+    // No warning for a plain overlap. Mounting things on top of each other is
+    // what the wall is FOR, so flagging it would cry wolf on every second drop
+    // and bury the advisories that do matter. `overlapName` is kept for the
+    // error path above, which is the case that is genuinely impossible.
+    void overlapName;
+    void overlapping;
     const warnings: string[] = [];
     const panelCells = this.panelCellSet();
     if (panelCells.size > 0) {
@@ -279,7 +301,7 @@ export class Store {
     const part = this.part(partId);
     if (!part) return { ok: false, reason: `Unknown part "${partId}"` };
     const cells = partCells(part, at, rotation);
-    const check = this.checkPlacement(cells);
+    const check = this.checkPlacement(cells, new Set(), exclusiveCellsOf(part, cells));
     if (!check.ok) return check;
 
     const item: PlacedItem = { id: newId('i'), partId, at, rotation };
@@ -296,6 +318,7 @@ export class Store {
     const moving = new Set(ids);
     const next: PlacedItem[] = [];
     const allCells: Hex[] = [];
+    const excl = new Set<string>();
     for (const item of this.current.doc.items) {
       if (!moving.has(item.id)) {
         next.push(item);
@@ -305,10 +328,14 @@ export class Store {
       const moved = { ...item, at };
       next.push(moved);
       const part = this.part(item.partId);
-      if (part) allCells.push(...partCells(part, at, item.rotation));
+      if (part) {
+        const cs = partCells(part, at, item.rotation);
+        allCells.push(...cs);
+        for (const k of exclusiveCellsOf(part, cs)) excl.add(k);
+      }
     }
     // A group moves as one rigid body: if any member cannot land, none do.
-    const check = this.checkPlacement(allCells, moving);
+    const check = this.checkPlacement(allCells, moving, excl);
     if (!check.ok) return check;
 
     this.commit(ids.length > 1 ? `Move ${ids.length} items` : 'Move item', {
@@ -353,6 +380,7 @@ export class Store {
     const pivot = pivotNearestCentroid(members);
     const next: PlacedItem[] = [];
     const allCells: Hex[] = [];
+    const excl = new Set<string>();
     for (const item of this.current.doc.items) {
       if (!set.has(item.id)) {
         next.push(item);
@@ -364,9 +392,13 @@ export class Store {
       const rotation = (((item.rotation + steps) % 6) + 6) % 6 as Rotation;
       next.push({ ...item, at, rotation });
       const part = this.part(item.partId);
-      if (part) allCells.push(...partCells(part, at, rotation));
+      if (part) {
+        const cs = partCells(part, at, rotation);
+        allCells.push(...cs);
+        for (const k of exclusiveCellsOf(part, cs)) excl.add(k);
+      }
     }
-    const check = this.checkPlacement(allCells, set);
+    const check = this.checkPlacement(allCells, set, excl);
     if (!check.ok) {
       return { ...check, reason: `Cannot rotate — ${check.reason ?? 'no room'}` };
     }
@@ -398,6 +430,7 @@ export class Store {
     const groupMap = new Map<string, string>();
     const copies: PlacedItem[] = [];
     const allCells: Hex[] = [];
+    const excl = new Set<string>();
     for (const m of members) {
       const at = { q: m.at.q + delta.q, r: m.at.r + delta.r };
       let groupId = m.groupId;
@@ -413,9 +446,13 @@ export class Store {
       if (groupId !== undefined) copy.groupId = groupId;
       copies.push(copy);
       const part = this.part(m.partId);
-      if (part) allCells.push(...partCells(part, at, m.rotation));
+      if (part) {
+        const cs = partCells(part, at, m.rotation);
+        allCells.push(...cs);
+        for (const k of exclusiveCellsOf(part, cs)) excl.add(k);
+      }
     }
-    const check = this.checkPlacement(allCells);
+    const check = this.checkPlacement(allCells, new Set(), excl);
     if (!check.ok) return { ...check, reason: `Cannot duplicate — ${check.reason ?? 'no room'}` };
 
     const groups = [...this.current.doc.groups, ...[...groupMap.values()].map((id) => ({ id }))];
@@ -488,6 +525,23 @@ export class Store {
 function clampDim(v: number): number {
   if (!Number.isFinite(v)) return 100;
   return Math.min(20000, Math.max(50, Math.round(v)));
+}
+
+/**
+ * Does this part go INTO a cell, or ON the wall in front of it?
+ *
+ * Inserts and wall fasteners occupy the hexagonal hole itself, so two of them
+ * cannot share a cell. Accessories bolt or clip onto an insert and stand proud
+ * of the panel — the whole point of the system is mounting things on top, so
+ * their footprints are allowed to overlap and the app only advises.
+ */
+export function isExclusive(part: CatalogPart): boolean {
+  return part.type === 'insert' || part.type === 'fastener';
+}
+
+/** Cells of a placement that need a hole to themselves. */
+export function exclusiveCellsOf(part: CatalogPart, cells: readonly Hex[]): Set<string> {
+  return isExclusive(part) ? new Set(cells.map(hexKey)) : new Set<string>();
 }
 
 /**
