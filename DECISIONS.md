@@ -284,6 +284,58 @@ overlap produces no issue at all.
 
 ---
 
+## D21. "Why is it so thick" — three separate causes, none of them the panel
+
+Worth writing down because my first two guesses were both wrong, and the real
+answer was only findable by measuring.
+
+**1. The plate was built as N independent hexagonal rings.** One `ExtrudeGeometry`
+per cell, each an outer 23.6 hexagon with a 22.0 hole. Adjacent rings share
+their outer edge exactly — which means every cell boundary carried *two
+coincident 8 mm-tall side walls*, inside solid material, that have no business
+existing. Rendered at an angle those read as thick dark borders and the plate
+looked like a tray of hexagonal cups. That is what "thick" was.
+
+Now it is one shape per panel: the union outline, with one hole per cell. The
+only vertical faces left are the panel silhouette and the bores.
+
+**Tracing that outline had two bugs of its own**, both found by checking the
+polygon's area against `cells × cellArea` rather than by looking at it:
+
+- Boundary edges were stored in a map keyed by start vertex, one entry each. On
+  a castellated edge two boundary edges can leave the *same* vertex, so one was
+  overwritten — 58 edges chained into 41 points and an outline 7 % short. Fixed
+  by keeping a list per vertex and, where there is a choice, taking the tightest
+  clockwise turn from the reversed incoming direction, which is the rule that
+  keeps the interior on the left.
+- Adjacent cells do not compute a shared corner to the same float. ROW_STEP is
+  the typed 20.438, not the 20.43829 that makes hexagons tile exactly (D4), so
+  the two copies land 0.0003 mm apart and could straddle a rounding boundary.
+  Vertices are now snapped to a 0.25 mm grid before matching — real corners are
+  at least 6.8 mm apart, so nothing legitimate can collide.
+
+**2. Parts were extruded by `max(bbox)`,** which is the wrong axis for nearly
+everything in this set. A 10 mm insert stood 26 mm off the wall; `wranch-hoks`
+would have been drawn as a **200 mm column** instead of the 13.29 mm bar it is.
+The scanner now measures `projectionMm` from the part's mating axis where one
+was detected (17 of 44 parts), and otherwise from the face with the most
+material against the wall. Recorded with its basis, so a guess is visible as a
+guess.
+
+**3. The rib and the shoulder were the same tone.** Face-on, a real panel shows
+a 1.6 mm rib and then, 2 mm back, a 1 mm shoulder each side down to the 20.0
+throat. Both read as "wall" unless the recessed one is visibly recessed, so the
+plate looked like a 3.6 mm wall — twice what it looks like in the hand. The
+front face is now lit brightly against a darker body, which is what the real
+part does. The geometry did not change; only whether the eye can tell the two
+apart.
+
+The bore is now modelled properly as well: a 6 mm body at the 20 mm throat and a
+2 mm front face at the 22 mm mouth, which is the measured stepped profile from
+HSW-SPEC §3 rather than a straight hole.
+
+---
+
 ## D20. The same double-count bug, twice — so the guard is now general
 
 D11 fixed a wall-screw double count: a panel and the insert it required both contributed the

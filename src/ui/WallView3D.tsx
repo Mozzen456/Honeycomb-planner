@@ -19,7 +19,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import * as THREE from 'three';
 
 import { itemCells } from '../core/bom';
-import { PANEL_DEPTH, PITCH } from '../core/constants';
+import { CELL, PANEL_DEPTH, PITCH } from '../core/constants';
 import { hexKey, hexToMm, panelCells, placeFootprint } from '../core/hex';
 import type { Catalog, CatalogPart, Hex, LayoutDoc, Rotation } from '../core/types';
 import './WallView3D.css';
@@ -45,63 +45,181 @@ export interface WallView3DProps {
   onStartItemDrag: (itemIds: string[], grabOffset: Hex) => void;
 }
 
-/** Hexagon outline in the XY plane, given its across-flats width. */
-function hexShape(acrossFlats: number): THREE.Shape {
+/** The six neighbour directions, in the same order as the corner indices below. */
+const DIRS: readonly Hex[] = [
+  { q: 1, r: 0 }, { q: 0, r: 1 }, { q: -1, r: 1 },
+  { q: -1, r: 0 }, { q: 0, r: -1 }, { q: 1, r: -1 },
+];
+
+/** Corner k of a pointy-top cell, in wall millimetres. */
+function corner(centre: { x: number; y: number }, k: number, acrossFlats: number) {
   const R = acrossFlats / Math.sqrt(3);
-  const s = new THREE.Shape();
-  for (let i = 0; i < 6; i++) {
-    const a = (Math.PI / 180) * (60 * i - 90);
-    const x = R * Math.cos(a);
-    const y = R * Math.sin(a);
-    if (i === 0) s.moveTo(x, y);
-    else s.lineTo(x, y);
-  }
-  s.closePath();
-  return s;
+  const a = (Math.PI / 180) * (60 * (((k % 6) + 6) % 6) - 90);
+  return new THREE.Vector2(centre.x + R * Math.cos(a), centre.y + R * Math.sin(a));
 }
 
 /**
- * One panel as a single extruded solid: the plate, with a hexagonal hole
- * through every cell.
+ * The outline of a set of cells: the boundary of their union.
  *
- * Built by unioning per-cell outer hexagons and punching per-cell holes. The
- * outer hexagons of neighbouring cells share edges exactly (they are the
- * lattice's own unit cells), so the result reads as one continuous plate with
- * the correct zig-zag boundary rather than as a rectangle.
+ * An edge is on the boundary exactly when the neighbour across it is not in the
+ * set. Walking each cell's own boundary counter-clockwise makes the shared
+ * edges cancel, so chaining what is left yields the panel's real zig-zag
+ * silhouette — no rectangle approximation, and no seam down the middle.
  */
-function buildPanelGeometry(columns: number, rows: number): THREE.BufferGeometry {
-  const cells = panelCells({ q: 0, r: 0 }, columns, rows);
-  const shapes: THREE.Shape[] = [];
+function unionOutline(cells: readonly Hex[]): THREE.Vector2[] {
+  const inSet = new Set(cells.map(hexKey));
+
+  /**
+   * Vertices are snapped to a 0.25 mm grid before being matched.
+   *
+   * Two things force this. Real distinct corners are at least 6.8 mm apart, so
+   * nothing legitimate can collide. But adjacent cells do NOT compute a shared
+   * corner to the same float: ROW_STEP is the typed 20.438 rather than the
+   * 20.43829 that makes hexagons tile exactly (D4), so the two copies sit
+   * 0.0003 mm apart. Matching on rounded coordinates let that straddle a
+   * rounding boundary, the chain broke, and the outline came back open — 58
+   * boundary edges chaining into 41 points and a plate 7% short of its area.
+   */
+  const SNAP = 0.25;
+  const key = (v: THREE.Vector2) => `${Math.round(v.x / SNAP)},${Math.round(v.y / SNAP)}`;
+
+  const outgoing = new Map<string, Array<{ a: THREE.Vector2; b: THREE.Vector2 }>>();
+  let edgeCount = 0;
   for (const c of cells) {
-    const p = hexToMm(c);
-    const outer = hexShape(PITCH);
-    outer.getPoints(); // force curve cache before translating points
-    const moved = new THREE.Shape(
-      outer.getPoints(6).map((v) => new THREE.Vector2(v.x + p.x, v.y + p.y)),
-    );
-    const holePts = hexShape(22.0)
-      .getPoints(6)
-      .map((v) => new THREE.Vector2(v.x + p.x, v.y + p.y));
-    moved.holes.push(new THREE.Path(holePts));
-    shapes.push(moved);
+    const centre = hexToMm(c);
+    for (let k = 0; k < 6; k++) {
+      const d = DIRS[k]!;
+      if (inSet.has(hexKey({ q: c.q + d.q, r: c.r + d.r }))) continue;
+      // Direction k's edge runs from corner k+1 to corner k+2, counter-clockwise.
+      const a = corner(centre, k + 1, PITCH);
+      const b = corner(centre, k + 2, PITCH);
+      const ka = key(a);
+      const list = outgoing.get(ka);
+      if (list) list.push({ a, b });
+      else outgoing.set(ka, [{ a, b }]);
+      edgeCount++;
+    }
   }
-  const geo = new THREE.ExtrudeGeometry(shapes, {
-    depth: PANEL_DEPTH,
-    bevelEnabled: false,
-    curveSegments: 1,
-  });
-  geo.computeVertexNormals();
-  return geo;
+  if (edgeCount === 0) return [];
+
+  // Start at the lowest, then leftmost vertex — guaranteed to be on the outer
+  // boundary rather than inside a notch.
+  let startKey = '';
+  let startPt: THREE.Vector2 | null = null;
+  for (const [k, list] of outgoing) {
+    const p = list[0]!.a;
+    if (!startPt || p.y < startPt.y - 1e-9 || (Math.abs(p.y - startPt.y) < 1e-9 && p.x < startPt.x)) {
+      startPt = p;
+      startKey = k;
+    }
+  }
+  if (!startPt) return [];
+
+  const loop: THREE.Vector2[] = [startPt];
+  const used = new Set<{ a: THREE.Vector2; b: THREE.Vector2 }>();
+  let cur = startKey;
+  let din: { x: number; y: number } | null = null;
+
+  for (let guard = 0; guard < edgeCount + 2; guard++) {
+    const cands = (outgoing.get(cur) ?? []).filter((e) => !used.has(e));
+    if (cands.length === 0) break;
+    let pick = cands[0]!;
+    if (cands.length > 1 && din) {
+      // A castellated edge can have two boundary edges leaving one vertex.
+      // Taking the tightest clockwise turn from the reversed incoming direction
+      // keeps the interior on the left, which is what traces the OUTER loop.
+      const back = Math.atan2(-din.y, -din.x);
+      let best = Infinity;
+      for (const e of cands) {
+        const ang = Math.atan2(e.b.y - e.a.y, e.b.x - e.a.x);
+        let t = back - ang;
+        while (t <= 1e-9) t += 2 * Math.PI;
+        while (t > 2 * Math.PI) t -= 2 * Math.PI;
+        if (t < best) {
+          best = t;
+          pick = e;
+        }
+      }
+    }
+    used.add(pick);
+    din = { x: pick.b.x - pick.a.x, y: pick.b.y - pick.a.y };
+    loop.push(pick.b);
+    cur = key(pick.b);
+    if (cur === startKey) break;
+  }
+  return loop;
 }
 
-/** Extent of a part along the wall normal, from its measured bounding box. */
-function projection(part: CatalogPart): number {
-  const [a, b, c] = part.bboxMm;
-  // The mating face is the one that sits against the wall, so the part sticks
-  // out by whichever dimension is NOT in the wall plane. For a wall-clip that
-  // is the 10 mm insert height; for a hook it is the long axis.
-  const dims = [a ?? 10, b ?? 10, c ?? 10].sort((x, y) => x - y);
-  return Math.max(6, dims[2] ?? 10);
+/**
+ * One panel as TWO extruded solids: the 6 mm body bored to the 20 mm throat,
+ * and a 2 mm front face bored to the 22 mm mouth.
+ *
+ * The previous version built one extrusion PER CELL — an independent hexagonal
+ * ring each. Adjacent rings share their outer edge, so every cell boundary
+ * carried two coincident 8 mm-tall side walls that are inside solid material
+ * and should not exist. Rendered at an angle those walls read as thick dark
+ * borders, and the plate looked like a tray of hexagonal cups rather than a
+ * perforated sheet. That is the "why is it so thick".
+ *
+ * Now it is one shape: the union outline, with one hole per cell. The only
+ * vertical faces left are the panel silhouette and the bores, so the web reads
+ * as the 1.6 mm rib it actually is (23.6 pitch − 22.0 mouth), and the step down
+ * to the 20 mm throat is visible inside each hole.
+ */
+function buildPanelGeometry(
+  columns: number,
+  rows: number,
+): { back: THREE.BufferGeometry; front: THREE.BufferGeometry } {
+  const cells = panelCells({ q: 0, r: 0 }, columns, rows);
+  const outline = unionOutline(cells);
+
+  const make = (holeAcrossFlats: number, depth: number) => {
+    const shape = new THREE.Shape(outline);
+    for (const c of cells) {
+      const centre = hexToMm(c);
+      const pts: THREE.Vector2[] = [];
+      // Clockwise, so it reads as a hole against the counter-clockwise outline.
+      for (let k = 5; k >= 0; k--) pts.push(corner(centre, k, holeAcrossFlats));
+      shape.holes.push(new THREE.Path(pts));
+    }
+    const g = new THREE.ExtrudeGeometry([shape], {
+      depth,
+      bevelEnabled: false,
+      curveSegments: 1,
+    });
+    g.computeVertexNormals();
+    return g;
+  };
+
+  const back = make(CELL.throatAcrossFlats, PANEL_DEPTH - CELL.mouthDepth);
+  const front = make(CELL.mouthAcrossFlats, CELL.mouthDepth);
+  front.translate(0, 0, PANEL_DEPTH - CELL.mouthDepth);
+  return { back, front };
+}
+
+/**
+ * How far a part stands off the wall, and how big it is in the wall plane.
+ *
+ * Both come from `projectionMm`, measured by the scanner from the part's mating
+ * axis (or, where there is none, from the face with the most material against
+ * the wall). The obvious shortcut — the largest bounding-box dimension — is
+ * wrong for nearly every part here: it stood a 10 mm insert 26 mm off the wall,
+ * and would have drawn the 200 mm wrench rack as a 200 mm column instead of the
+ * 13 mm bar it is.
+ */
+function partBox(part: CatalogPart): { depth: number; w: number; h: number } {
+  const bbox = part.bboxMm ?? [20, 20, 10];
+  const proj = (part as unknown as { projectionMm?: number }).projectionMm;
+  const depth = Number.isFinite(proj) && (proj as number) > 0
+    ? (proj as number)
+    : Math.min(...bbox);
+
+  // The two dimensions that are not the projection are the wall-plane size.
+  const rest = [...bbox];
+  const i = rest.findIndex((v) => Math.abs(v - depth) < 1e-6);
+  if (i >= 0) rest.splice(i, 1);
+  const [w, h] = [rest[0] ?? 20, rest[1] ?? 20];
+  return { depth: Math.max(2, depth), w: Math.max(4, w), h: Math.max(4, h) };
 }
 
 export function WallView3D(props: WallView3DProps) {
@@ -314,19 +432,34 @@ export function WallView3D(props: WallView3DProps) {
       bySize.set(k, e);
     }
 
-    const material = new THREE.MeshLambertMaterial({ color: theme.panel });
+    // Two tones, and the gap between them is doing real work.
+    //
+    // Face-on, a real panel shows a 1.6 mm rib (23.6 pitch − 22.0 mouth) and
+    // then, 2 mm back, a 1 mm shoulder each side down to the 20.0 throat. Both
+    // are "wall" to the eye unless the recessed one is visibly recessed — and
+    // with them nearly the same tone the plate read as a 3.6 mm wall, i.e.
+    // twice as thick as it looks in the hand. Lighting the front face brightly
+    // and letting the shoulder sit back in shadow is what the real part does.
+    const darker = theme.panel.clone().lerp(new THREE.Color(0x000000), 0.28);
+    const bodyMat = new THREE.MeshLambertMaterial({ color: darker });
+    const faceMat = new THREE.MeshLambertMaterial({
+      color: theme.panel.clone().lerp(new THREE.Color(0xffffff), 0.18),
+    });
+
     for (const { columns, rows, origins } of bySize.values()) {
-      const geo = buildPanelGeometry(columns, rows);
-      const mesh = new THREE.InstancedMesh(geo, material, origins.length);
-      const m4 = new THREE.Matrix4();
-      origins.forEach((o, i) => {
-        const p = hexToMm(o);
-        m4.makeTranslation(p.x, p.y, 0);
-        mesh.setMatrixAt(i, m4);
-      });
-      mesh.instanceMatrix.needsUpdate = true;
-      mesh.frustumCulled = false;
-      s.panelGroup.add(mesh);
+      const { back, front } = buildPanelGeometry(columns, rows);
+      for (const [geo, mat] of [[back, bodyMat], [front, faceMat]] as const) {
+        const mesh = new THREE.InstancedMesh(geo, mat, origins.length);
+        const m4 = new THREE.Matrix4();
+        origins.forEach((o, i) => {
+          const p = hexToMm(o);
+          m4.makeTranslation(p.x, p.y, 0);
+          mesh.setMatrixAt(i, m4);
+        });
+        mesh.instanceMatrix.needsUpdate = true;
+        mesh.frustumCulled = false;
+        s.panelGroup.add(mesh);
+      }
     }
   }, [doc.panels, ready, readTheme, themeTick]);
 
@@ -350,23 +483,44 @@ export function WallView3D(props: WallView3DProps) {
       if (!part) continue;
       const cells = itemCells(it, catalog);
       if (cells.length === 0) continue;
-      const depth = projection(part);
+      const { depth, w, h } = partBox(part);
       const colour = sel.has(it.id) ? theme.selected : theme.item;
       const mat = new THREE.MeshLambertMaterial({ color: colour });
 
-      // One block per occupied cell, standing proud of the panel face. Drawing
-      // per cell (rather than one box over the bounding area) keeps a
-      // multi-cell part honest about which cells it actually uses.
+      // The body: one box at the part's real size, standing proud of the face.
+      let cx = 0;
+      let cy = 0;
       for (const c of cells) {
         const p = hexToMm(c);
-        const geo = new THREE.CylinderGeometry(
-          (PITCH * 0.92) / Math.sqrt(3), (PITCH * 0.92) / Math.sqrt(3), depth, 6,
+        cx += p.x;
+        cy += p.y;
+      }
+      cx /= cells.length;
+      cy /= cells.length;
+
+      const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, depth), mat);
+      body.position.set(cx, cy, PANEL_DEPTH + depth / 2);
+      body.rotation.z = (Math.PI / 3) * it.rotation;
+      body.userData['itemId'] = it.id;
+      s.itemGroup.add(body);
+
+      // A thin collar in each occupied cell, so a multi-cell part still shows
+      // WHICH cells it uses — the body alone would hide that.
+      for (const c of cells) {
+        const p = hexToMm(c);
+        const collar = new THREE.Mesh(
+          new THREE.CylinderGeometry(
+            (CELL.mouthAcrossFlats * 0.96) / Math.sqrt(3),
+            (CELL.mouthAcrossFlats * 0.96) / Math.sqrt(3),
+            CELL.mouthDepth * 1.2,
+            6,
+          ),
+          mat,
         );
-        geo.rotateX(Math.PI / 2);
-        const mesh = new THREE.Mesh(geo, mat);
-        mesh.position.set(p.x, p.y, PANEL_DEPTH + depth / 2);
-        mesh.userData['itemId'] = it.id;
-        s.itemGroup.add(mesh);
+        collar.geometry.rotateX(Math.PI / 2);
+        collar.position.set(p.x, p.y, PANEL_DEPTH - CELL.mouthDepth * 0.4);
+        collar.userData['itemId'] = it.id;
+        s.itemGroup.add(collar);
       }
     }
   }, [doc.items, selection, catalog, partOf, ready, readTheme, themeTick]);
@@ -389,16 +543,21 @@ export function WallView3D(props: WallView3DProps) {
 
     const cells = ghost3DCells(drag, hover, catalog, doc);
     const part = drag.partId ? partOf(drag.partId) : undefined;
-    const depth = part ? projection(part) : 20;
+    const depth = part ? partBox(part).depth : 12;
     const mat = new THREE.MeshLambertMaterial({
       color: placementValid ? theme.ok : theme.bad,
       transparent: true,
-      opacity: 0.65,
+      opacity: 0.6,
     });
+    // The ghost shows CELLS, not the body: while aiming, which holes it lands
+    // in is the question, and a solid body would hide the ones underneath it.
     for (const c of cells) {
       const p = hexToMm(c);
       const geo = new THREE.CylinderGeometry(
-        (PITCH * 0.92) / Math.sqrt(3), (PITCH * 0.92) / Math.sqrt(3), depth, 6,
+        (CELL.mouthAcrossFlats * 0.96) / Math.sqrt(3),
+        (CELL.mouthAcrossFlats * 0.96) / Math.sqrt(3),
+        depth,
+        6,
       );
       geo.rotateX(Math.PI / 2);
       const mesh = new THREE.Mesh(geo, mat);

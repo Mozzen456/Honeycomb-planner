@@ -1,5 +1,5 @@
 {
- "generatedAt": "2026-08-10T22:59:42Z",
+ "generatedAt": "2026-08-11T05:37:38Z",
  "parts": [
   {
    "anchor": {
@@ -32,11 +32,14 @@
     "method": "bbox-gate+silhouette",
     "overhangAreaMm2": 2214.87,
     "overhangFraction": 0.21622,
+    "projectionBasis": "mating-axis",
+    "projectionConfident": true,
     "socketWidths": [
      13.4
     ],
     "tier": "wall-clip",
     "triangles": 956,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "20-micro-sd-card-holder",
@@ -49,6 +52,7 @@
     "source": "sliced",
     "supports": true
    },
+   "projectionMm": 50.0,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,
@@ -94,11 +98,14 @@
     "method": "bbox-gate+silhouette",
     "overhangAreaMm2": 523.74,
     "overhangFraction": 0.10751,
+    "projectionBasis": "mating-axis",
+    "projectionConfident": true,
     "socketWidths": [
      13.4
     ],
     "tier": "wall-clip",
     "triangles": 640,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "5-micro-sd-card-holder",
@@ -111,6 +118,7 @@
     "source": "sliced",
     "supports": true
    },
+   "projectionMm": 30.0,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,
@@ -164,9 +172,12 @@
     "method": "bbox-span",
     "overhangAreaMm2": 67.95,
     "overhangFraction": 0.00531,
+    "projectionBasis": "contact-area",
+    "projectionConfident": false,
     "socketWidths": [],
     "tier": "insert-fed",
     "triangles": 948,
+    "wallFaceAxis": "y",
     "watertight": false
    },
    "name": "box",
@@ -179,6 +190,7 @@
     "source": "sliced",
     "supports": false
    },
+   "projectionMm": 55.0,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,
@@ -231,9 +243,12 @@
     "method": "bbox-span",
     "overhangAreaMm2": 22.14,
     "overhangFraction": 0.01005,
+    "projectionBasis": "contact-area",
+    "projectionConfident": false,
     "socketWidths": [],
     "tier": "insert-fed",
     "triangles": 484,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "box-and-usb-holder-cover",
@@ -246,6 +261,7 @@
     "source": "sliced",
     "supports": false
    },
+   "projectionMm": 5.0,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,
@@ -297,11 +313,14 @@
     "method": "bbox-span",
     "overhangAreaMm2": 47.61,
     "overhangFraction": 0.00364,
+    "projectionBasis": "contact-area",
+    "projectionConfident": false,
     "socketWidths": [
      13.45
     ],
     "tier": "insert-fed",
     "triangles": 452,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "box-without-screw",
@@ -314,6 +333,7 @@
     "source": "sliced",
     "supports": false
    },
+   "projectionMm": 40.0024,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,
@@ -372,9 +392,12 @@
     "method": "bbox-span",
     "overhangAreaMm2": 24.87,
     "overhangFraction": 0.00887,
+    "projectionBasis": "contact-area",
+    "projectionConfident": false,
     "socketWidths": [],
     "tier": "insert-fed",
     "triangles": 1002,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "caliper-mount",
@@ -387,6 +410,7 @@
     "source": "sliced",
     "supports": false
    },
+   "projectionMm": 16.0,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,
@@ -432,6 +456,8 @@
     "method": "bbox-span",
     "overhangAreaMm2": 25.26,
     "overhangFraction": 0.0183,
+    "projectionBasis": "contact-area",
+    "projectionConfident": false,
     "socketWidths": [
      11.35,
      18.2,
@@ -439,6 +465,7 @@
     ],
     "tier": "insert-fed",
     "triangles": 680,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "countersunk-to-holee",
@@ -451,6 +478,7 @@
     "source": "sliced",
     "supports": false
    },
+   "projectionMm": 12.0,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,
@@ -499,12 +527,15 @@
     "method": "bbox-span",
     "overhangAreaMm2": 0.0,
     "overhangFraction": 0.0,
+    "projectionBasis": "contact-area",
+    "projectionConfident": false,
     "socketWidths": [
      18.2,
      18.5
     ],
     "tier": "insert-fed",
     "triangles": 460,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "cover-contersunk",
@@ -517,6 +548,7 @@
     "source": "sliced",
     "supports": false
    },
+   "projectionMm": 5.0,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,
@@ -567,9 +599,12 @@
     "method": "bbox-span",
     "overhangAreaMm2": 94.47,
     "overhangFraction": 0.08887,
+    "projectionBasis": "contact-area",
+    "projectionConfident": false,
     "socketWidths": [],
     "tier": "insert-fed",
     "triangles": 784,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "hook-12mm-for-M3",
@@ -582,6 +617,7 @@
     "source": "sliced",
     "supports": true
    },
+   "projectionMm": 13.0,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,
@@ -636,9 +672,12 @@
     "method": "bbox-span",
     "overhangAreaMm2": 158.13,
     "overhangFraction": 0.0948,
+    "projectionBasis": "contact-area",
+    "projectionConfident": false,
     "socketWidths": [],
     "tier": "insert-fed",
     "triangles": 790,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "hook-25mm-for-M3",
@@ -651,6 +690,7 @@
     "source": "sliced",
     "supports": true
    },
+   "projectionMm": 13.0,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,
@@ -703,9 +743,12 @@
     "method": "bbox-span",
     "overhangAreaMm2": 10.6,
     "overhangFraction": 0.007,
+    "projectionBasis": "contact-area",
+    "projectionConfident": false,
     "socketWidths": [],
     "tier": "insert-fed",
     "triangles": 116,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "hook-bottom",
@@ -718,6 +761,7 @@
     "source": "sliced",
     "supports": false
    },
+   "projectionMm": 13.5893,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,
@@ -761,9 +805,12 @@
     "method": "bbox-span",
     "overhangAreaMm2": 9.86,
     "overhangFraction": 0.00874,
+    "projectionBasis": "contact-area",
+    "projectionConfident": false,
     "socketWidths": [],
     "tier": "insert-fed",
     "triangles": 100,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "hook-keyboard-bottom",
@@ -776,6 +823,7 @@
     "source": "sliced",
     "supports": false
    },
+   "projectionMm": 13.3542,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,
@@ -823,9 +871,12 @@
     "method": "bbox-span",
     "overhangAreaMm2": 9.86,
     "overhangFraction": 0.00739,
+    "projectionBasis": "contact-area",
+    "projectionConfident": false,
     "socketWidths": [],
     "tier": "insert-fed",
     "triangles": 108,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "hook-keyboard-side",
@@ -838,6 +889,7 @@
     "source": "sliced",
     "supports": false
    },
+   "projectionMm": 13.4493,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,
@@ -885,9 +937,12 @@
     "method": "bbox-span",
     "overhangAreaMm2": 9.86,
     "overhangFraction": 0.00635,
+    "projectionBasis": "contact-area",
+    "projectionConfident": false,
     "socketWidths": [],
     "tier": "insert-fed",
     "triangles": 136,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "hook-side",
@@ -900,6 +955,7 @@
     "source": "sliced",
     "supports": false
    },
+   "projectionMm": 13.5894,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,
@@ -947,11 +1003,14 @@
     "method": "bbox-span",
     "overhangAreaMm2": 57.67,
     "overhangFraction": 0.0268,
+    "projectionBasis": "contact-area",
+    "projectionConfident": false,
     "socketWidths": [
      13.24
     ],
     "tier": "insert-fed",
     "triangles": 4548,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "hook-to-empty",
@@ -964,6 +1023,7 @@
     "source": "sliced",
     "supports": true
    },
+   "projectionMm": 21.7443,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,
@@ -1028,11 +1088,14 @@
     "method": "bbox-span",
     "overhangAreaMm2": 75.74,
     "overhangFraction": 0.01589,
+    "projectionBasis": "contact-area",
+    "projectionConfident": false,
     "socketWidths": [
      13.74
     ],
     "tier": "insert-fed",
     "triangles": 2682,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "hook-to-empty-long",
@@ -1045,6 +1108,7 @@
     "source": "sliced",
     "supports": false
    },
+   "projectionMm": 22.7843,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,
@@ -1093,9 +1157,12 @@
     "method": "bbox-span",
     "overhangAreaMm2": 3.74,
     "overhangFraction": 0.00237,
+    "projectionBasis": "contact-area",
+    "projectionConfident": false,
     "socketWidths": [],
     "tier": "insert-fed",
     "triangles": 1082,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "insert-cable holder",
@@ -1108,6 +1175,7 @@
     "source": "sliced",
     "supports": false
    },
+   "projectionMm": 13.3976,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,
@@ -1157,9 +1225,12 @@
     "method": "bbox-span",
     "overhangAreaMm2": 7.97,
     "overhangFraction": 0.00337,
+    "projectionBasis": "contact-area",
+    "projectionConfident": false,
     "socketWidths": [],
     "tier": "insert-fed",
     "triangles": 528,
+    "wallFaceAxis": "y",
     "watertight": false
    },
    "name": "screw-holder",
@@ -1172,6 +1243,7 @@
     "source": "sliced",
     "supports": false
    },
+   "projectionMm": 27.7,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,
@@ -1230,9 +1302,12 @@
     "method": "bbox-span",
     "overhangAreaMm2": 227.59,
     "overhangFraction": 0.01392,
+    "projectionBasis": "contact-area",
+    "projectionConfident": false,
     "socketWidths": [],
     "tier": "insert-fed",
     "triangles": 2860,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "sd-card-holder",
@@ -1245,6 +1320,7 @@
     "source": "sliced",
     "supports": false
    },
+   "projectionMm": 30.3109,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,
@@ -1297,9 +1373,12 @@
     "method": "bbox-span",
     "overhangAreaMm2": 5.17,
     "overhangFraction": 0.00394,
+    "projectionBasis": "contact-area",
+    "projectionConfident": false,
     "socketWidths": [],
     "tier": "insert-fed",
     "triangles": 548,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "sd-card-holder-cover",
@@ -1312,6 +1391,7 @@
     "source": "sliced",
     "supports": false
    },
+   "projectionMm": 6.0,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,
@@ -1363,11 +1443,14 @@
     "method": "bbox-span",
     "overhangAreaMm2": 39.03,
     "overhangFraction": 0.00213,
+    "projectionBasis": "contact-area",
+    "projectionConfident": false,
     "socketWidths": [
      13.45
     ],
     "tier": "insert-fed",
     "triangles": 830,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "sd-card-holder-without-screw",
@@ -1380,6 +1463,7 @@
     "source": "sliced",
     "supports": false
    },
+   "projectionMm": 30.3109,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,
@@ -1436,11 +1520,14 @@
     "method": "bbox-span",
     "overhangAreaMm2": 0.0,
     "overhangFraction": 0.0,
+    "projectionBasis": "contact-area",
+    "projectionConfident": false,
     "socketWidths": [
      13.45
     ],
     "tier": "insert-fed",
     "triangles": 258,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "shelf-1",
@@ -1453,6 +1540,7 @@
     "source": "sliced",
     "supports": false
    },
+   "projectionMm": 13.4512,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,
@@ -1517,11 +1605,14 @@
     "method": "bbox-span",
     "overhangAreaMm2": 0.0,
     "overhangFraction": 0.0,
+    "projectionBasis": "contact-area",
+    "projectionConfident": false,
     "socketWidths": [
      13.45
     ],
     "tier": "insert-fed",
     "triangles": 224,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "shelf-2",
@@ -1534,6 +1625,7 @@
     "source": "sliced",
     "supports": false
    },
+   "projectionMm": 13.4512,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,
@@ -1606,11 +1698,14 @@
     "method": "bbox-span",
     "overhangAreaMm2": 0.0,
     "overhangFraction": 0.0,
+    "projectionBasis": "contact-area",
+    "projectionConfident": false,
     "socketWidths": [
      13.45
     ],
     "tier": "insert-fed",
     "triangles": 254,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "shelf-3",
@@ -1623,6 +1718,7 @@
     "source": "sliced",
     "supports": false
    },
+   "projectionMm": 13.4688,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,
@@ -1703,11 +1799,14 @@
     "method": "bbox-span",
     "overhangAreaMm2": 0.0,
     "overhangFraction": 0.0,
+    "projectionBasis": "contact-area",
+    "projectionConfident": false,
     "socketWidths": [
      13.45
     ],
     "tier": "insert-fed",
     "triangles": 344,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "shelf-4",
@@ -1720,6 +1819,7 @@
     "source": "sliced",
     "supports": false
    },
+   "projectionMm": 13.4512,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,
@@ -1778,9 +1878,12 @@
     "method": "bbox-span",
     "overhangAreaMm2": 1156.45,
     "overhangFraction": 0.06604,
+    "projectionBasis": "contact-area",
+    "projectionConfident": false,
     "socketWidths": [],
     "tier": "insert-fed",
     "triangles": 7320,
+    "wallFaceAxis": "y",
     "watertight": false
    },
    "name": "USB-holder",
@@ -1793,6 +1896,7 @@
     "source": "sliced",
     "supports": true
    },
+   "projectionMm": 55.0,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,
@@ -1851,11 +1955,14 @@
     "method": "bbox-span",
     "overhangAreaMm2": 827.05,
     "overhangFraction": 0.04994,
+    "projectionBasis": "contact-area",
+    "projectionConfident": false,
     "socketWidths": [
      13.45
     ],
     "tier": "insert-fed",
     "triangles": 6986,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "USB-holder-without-screw",
@@ -1868,6 +1975,7 @@
     "source": "sliced",
     "supports": true
    },
+   "projectionMm": 40.0023,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,
@@ -1952,9 +2060,12 @@
     "method": "bbox-span",
     "overhangAreaMm2": 7.49,
     "overhangFraction": 0.00052,
+    "projectionBasis": "contact-area",
+    "projectionConfident": false,
     "socketWidths": [],
     "tier": "insert-fed",
     "triangles": 1188,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "wranch-hoks-1",
@@ -1967,6 +2078,7 @@
     "source": "sliced",
     "supports": false
    },
+   "projectionMm": 13.288,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,
@@ -2046,9 +2158,12 @@
     "method": "bbox-span",
     "overhangAreaMm2": 7.49,
     "overhangFraction": 0.00049,
+    "projectionBasis": "contact-area",
+    "projectionConfident": false,
     "socketWidths": [],
     "tier": "insert-fed",
     "triangles": 916,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "wranch-hoks-2",
@@ -2061,6 +2176,7 @@
     "source": "sliced",
     "supports": false
    },
+   "projectionMm": 13.288,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,
@@ -2119,6 +2235,8 @@
     "method": "bbox-gate+silhouette",
     "overhangAreaMm2": 247.02,
     "overhangFraction": 0.05801,
+    "projectionBasis": "mating-axis",
+    "projectionConfident": true,
     "socketWidths": [
      13.4,
      13.7,
@@ -2127,6 +2245,7 @@
     ],
     "tier": "wall-clip",
     "triangles": 1464,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "hexagon-countersung-and-hole",
@@ -2139,6 +2258,7 @@
     "source": "sliced",
     "supports": true
    },
+   "projectionMm": 10.0,
    "provenance": {
     "basis": "both",
     "confidence": 0.9,
@@ -2206,6 +2326,8 @@
     "method": "bbox-gate+silhouette",
     "overhangAreaMm2": 247.02,
     "overhangFraction": 0.0572,
+    "projectionBasis": "mating-axis",
+    "projectionConfident": true,
     "socketWidths": [
      5.8,
      11.4,
@@ -2214,6 +2336,7 @@
     ],
     "tier": "wall-clip",
     "triangles": 1600,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "insert-countersung-m3",
@@ -2226,6 +2349,7 @@
     "source": "sliced",
     "supports": true
    },
+   "projectionMm": 10.0,
    "provenance": {
     "basis": "both",
     "confidence": 0.9,
@@ -2282,12 +2406,15 @@
     "method": "bbox-gate+silhouette",
     "overhangAreaMm2": 128.64,
     "overhangFraction": 0.05924,
+    "projectionBasis": "mating-axis",
+    "projectionConfident": true,
     "socketWidths": [
      16.5,
      18.5
     ],
     "tier": "wall-clip",
     "triangles": 988,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "Insert-countersunk",
@@ -2300,6 +2427,7 @@
     "source": "sliced",
     "supports": true
    },
+   "projectionMm": 10.0,
    "provenance": {
     "basis": "both",
     "confidence": 0.9,
@@ -2376,6 +2504,8 @@
     "method": "bbox-gate+silhouette",
     "overhangAreaMm2": 512.7,
     "overhangFraction": 0.05994,
+    "projectionBasis": "mating-axis",
+    "projectionConfident": true,
     "socketWidths": [
      5.8,
      11.4,
@@ -2384,6 +2514,7 @@
     ],
     "tier": "wall-clip",
     "triangles": 2884,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "Insert-countersunk-with-m3x3",
@@ -2396,6 +2527,7 @@
     "source": "sliced",
     "supports": true
    },
+   "projectionMm": 10.0,
    "provenance": {
     "basis": "both",
     "confidence": 0.9,
@@ -2462,6 +2594,8 @@
     "method": "bbox-gate+silhouette",
     "overhangAreaMm2": 512.7,
     "overhangFraction": 0.06124,
+    "projectionBasis": "mating-axis",
+    "projectionConfident": true,
     "socketWidths": [
      13.4,
      13.7,
@@ -2470,6 +2604,7 @@
     ],
     "tier": "wall-clip",
     "triangles": 2548,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "insert-for-countersunk-hole-3",
@@ -2482,6 +2617,7 @@
     "source": "sliced",
     "supports": true
    },
+   "projectionMm": 10.0,
    "provenance": {
     "basis": "both",
     "confidence": 0.9,
@@ -2540,6 +2676,8 @@
     "method": "bbox-gate+silhouette",
     "overhangAreaMm2": 221.77,
     "overhangFraction": 0.05087,
+    "projectionBasis": "mating-axis",
+    "projectionConfident": true,
     "socketWidths": [
      11.4,
      16.5,
@@ -2547,6 +2685,7 @@
     ],
     "tier": "wall-clip",
     "triangles": 1596,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "double M4",
@@ -2559,6 +2698,7 @@
     "source": "sliced",
     "supports": true
    },
+   "projectionMm": 10.0,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,
@@ -2616,6 +2756,8 @@
     "method": "bbox-gate+silhouette",
     "overhangAreaMm2": 221.77,
     "overhangFraction": 0.05066,
+    "projectionBasis": "mating-axis",
+    "projectionConfident": true,
     "socketWidths": [
      11.4,
      16.5,
@@ -2623,6 +2765,7 @@
     ],
     "tier": "wall-clip",
     "triangles": 1632,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "double M5",
@@ -2635,6 +2778,7 @@
     "source": "sliced",
     "supports": true
    },
+   "projectionMm": 10.0,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,
@@ -2679,6 +2823,8 @@
     "method": "bbox-gate+silhouette",
     "overhangAreaMm2": 103.38,
     "overhangFraction": 0.0488,
+    "projectionBasis": "mating-axis",
+    "projectionConfident": true,
     "socketWidths": [
      13.4,
      16.5,
@@ -2686,6 +2832,7 @@
     ],
     "tier": "wall-clip",
     "triangles": 588,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "insert-empty",
@@ -2698,6 +2845,7 @@
     "source": "sliced",
     "supports": true
    },
+   "projectionMm": 10.0,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,
@@ -2745,6 +2893,8 @@
     "method": "bbox-gate+silhouette",
     "overhangAreaMm2": 221.77,
     "overhangFraction": 0.05284,
+    "projectionBasis": "mating-axis",
+    "projectionConfident": true,
     "socketWidths": [
      13.4,
      13.7,
@@ -2753,6 +2903,7 @@
     ],
     "tier": "wall-clip",
     "triangles": 1156,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "insert-hollow-dual",
@@ -2765,6 +2916,7 @@
     "source": "sliced",
     "supports": true
    },
+   "projectionMm": 10.0,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,
@@ -2819,6 +2971,8 @@
     "method": "bbox-gate+silhouette",
     "overhangAreaMm2": 487.46,
     "overhangFraction": 0.05866,
+    "projectionBasis": "mating-axis",
+    "projectionConfident": true,
     "socketWidths": [
      13.4,
      13.7,
@@ -2827,6 +2981,7 @@
     ],
     "tier": "wall-clip",
     "triangles": 2304,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "insert-hollow-for",
@@ -2839,6 +2994,7 @@
     "source": "sliced",
     "supports": true
    },
+   "projectionMm": 10.0,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,
@@ -2889,6 +3045,8 @@
     "method": "bbox-gate+silhouette",
     "overhangAreaMm2": 354.62,
     "overhangFraction": 0.0567,
+    "projectionBasis": "mating-axis",
+    "projectionConfident": true,
     "socketWidths": [
      13.4,
      13.7,
@@ -2897,6 +3055,7 @@
     ],
     "tier": "wall-clip",
     "triangles": 1730,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "insert-hollow-tre",
@@ -2909,6 +3068,7 @@
     "source": "sliced",
     "supports": true
    },
+   "projectionMm": 10.0,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,
@@ -2964,6 +3124,8 @@
     "method": "bbox-gate+silhouette",
     "overhangAreaMm2": 103.38,
     "overhangFraction": 0.04717,
+    "projectionBasis": "mating-axis",
+    "projectionConfident": true,
     "socketWidths": [
      11.4,
      16.5,
@@ -2971,6 +3133,7 @@
     ],
     "tier": "wall-clip",
     "triangles": 876,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "insert M4",
@@ -2983,6 +3146,7 @@
     "source": "sliced",
     "supports": true
    },
+   "projectionMm": 10.0,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,
@@ -3039,6 +3203,8 @@
     "method": "bbox-gate+silhouette",
     "overhangAreaMm2": 103.38,
     "overhangFraction": 0.04698,
+    "projectionBasis": "mating-axis",
+    "projectionConfident": true,
     "socketWidths": [
      11.4,
      16.5,
@@ -3046,6 +3212,7 @@
     ],
     "tier": "wall-clip",
     "triangles": 904,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "insert M5",
@@ -3058,6 +3225,7 @@
     "source": "sliced",
     "supports": true
    },
+   "projectionMm": 10.0,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,
@@ -3114,6 +3282,8 @@
     "method": "bbox-gate+silhouette",
     "overhangAreaMm2": 103.38,
     "overhangFraction": 0.04761,
+    "projectionBasis": "mating-axis",
+    "projectionConfident": true,
     "socketWidths": [
      5.8,
      11.4,
@@ -3122,6 +3292,7 @@
     ],
     "tier": "wall-clip",
     "triangles": 764,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "insert-with-M3",
@@ -3134,6 +3305,7 @@
     "source": "sliced",
     "supports": true
    },
+   "projectionMm": 10.0,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,
@@ -3192,6 +3364,8 @@
     "method": "bbox-gate+silhouette",
     "overhangAreaMm2": 221.77,
     "overhangFraction": 0.05141,
+    "projectionBasis": "mating-axis",
+    "projectionConfident": true,
     "socketWidths": [
      5.7,
      5.8,
@@ -3201,6 +3375,7 @@
     ],
     "tier": "wall-clip",
     "triangles": 1548,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "Insert-with-M3-dual",
@@ -3213,6 +3388,7 @@
     "source": "sliced",
     "supports": true
    },
+   "projectionMm": 10.0,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,
@@ -4405,9 +4581,12 @@
     "method": "lattice-fit",
     "overhangAreaMm2": 0.0,
     "overhangFraction": 0.0,
+    "projectionBasis": "mating-axis",
+    "projectionConfident": true,
     "socketWidths": [],
     "tier": "panel",
     "triangles": 18964,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "375x389-fixed",
@@ -4429,6 +4608,7 @@
     "source": "sliced",
     "supports": false
    },
+   "projectionMm": 8.0,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,
@@ -4537,9 +4717,12 @@
     "method": "lattice-fit",
     "overhangAreaMm2": 0.0,
     "overhangFraction": 0.0,
+    "projectionBasis": "mating-axis",
+    "projectionConfident": true,
     "socketWidths": [],
     "tier": "panel",
     "triangles": 1140,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "wall-honeycomb-106x89-fixed",
@@ -4568,6 +4751,7 @@
     "source": "sliced",
     "supports": false
    },
+   "projectionMm": 8.0,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,
@@ -4936,9 +5120,12 @@
     "method": "lattice-fit",
     "overhangAreaMm2": 0.0,
     "overhangFraction": 0.0,
+    "projectionBasis": "mating-axis",
+    "projectionConfident": true,
     "socketWidths": [],
     "tier": "panel",
     "triangles": 5460,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "wall-honeycomb-224x190size(mk3s)",
@@ -4965,6 +5152,7 @@
     "source": "sliced",
     "supports": false
    },
+   "projectionMm": 8.0,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,
@@ -5625,9 +5813,12 @@
     "method": "lattice-fit",
     "overhangAreaMm2": 0.0,
     "overhangFraction": 0.0,
+    "projectionBasis": "mating-axis",
+    "projectionConfident": true,
     "socketWidths": [],
     "tier": "panel",
     "triangles": 10244,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "wall-honeycomb-293x271-(big-printer)",
@@ -5651,6 +5842,7 @@
     "source": "sliced",
     "supports": false
    },
+   "projectionMm": 8.0,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,
@@ -6095,9 +6287,12 @@
     "method": "lattice-fit",
     "overhangAreaMm2": 0.0,
     "overhangFraction": 0.0,
+    "projectionBasis": "mating-axis",
+    "projectionConfident": true,
     "socketWidths": [],
     "tier": "panel",
     "triangles": 6708,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "wall-honeycomb-bambu-211x248-fixed",
@@ -6122,6 +6317,7 @@
     "source": "sliced",
     "supports": false
    },
+   "projectionMm": 8.0,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,
@@ -6486,9 +6682,12 @@
     "method": "lattice-fit",
     "overhangAreaMm2": 0.0,
     "overhangFraction": 0.0,
+    "projectionBasis": "mating-axis",
+    "projectionConfident": true,
     "socketWidths": [],
     "tier": "panel",
     "triangles": 5396,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "wall-honeycomb-k1-211x201",
@@ -6516,6 +6715,7 @@
     "source": "sliced",
     "supports": false
    },
+   "projectionMm": 8.0,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,
@@ -6784,9 +6984,12 @@
     "method": "lattice-fit",
     "overhangAreaMm2": 0.0,
     "overhangFraction": 0.0,
+    "projectionBasis": "mating-axis",
+    "projectionConfident": true,
     "socketWidths": [],
     "tier": "panel",
     "triangles": 3812,
+    "wallFaceAxis": "z",
     "watertight": false
    },
    "name": "wall-honeycomb-part",
@@ -6815,6 +7018,7 @@
     "source": "sliced",
     "supports": false
    },
+   "projectionMm": 8.0,
    "provenance": {
     "basis": "both",
     "confidence": 0.95,

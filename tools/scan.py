@@ -37,7 +37,7 @@ SCHEMA_VERSION = 1
 SCANNER_VERSION = "1.1.0"
 # Bumped whenever the measurement code changes meaning. The cache keys on it, so
 # a logic fix invalidates stale measurements instead of silently keeping them.
-MEASURE_VERSION = 4
+MEASURE_VERSION = 5
 CATALOG = ROOT / "src" / "catalog" / "catalog.json"
 OVERRIDES = ROOT / "src" / "catalog" / "overrides.json"
 CACHE = ROOT / "build" / "measure-cache.json"
@@ -175,6 +175,57 @@ def _count_bores_one_axis(mesh) -> dict[str, int]:
     return counts
 
 
+def wall_face(mesh, mating_axis: str) -> dict:
+    """Which face sits against the wall, and how far does the part stand proud.
+
+    The 3D view needs the extent along the WALL NORMAL. Using the largest
+    bounding-box dimension — the obvious shortcut — is wrong for almost every
+    part in this set: it made a 10 mm insert stand 26 mm off the wall, and would
+    have drawn the 200 mm wrench rack as a 200 mm column instead of the 13 mm
+    bar it is.
+
+    Two sources, in order of trust:
+
+      1. The mating axis, where the footprint detector measured one. That is a
+         real feature of the part (its 22.5 mm flange lies in that plane), so it
+         is authoritative.
+      2. Otherwise, the largest solid cross-section near a surface — the face
+         with the most material against the wall. Good for the flat parts
+         (hooks, shelves, racks all come out at 13 mm) and admittedly a guess
+         for a deep box, which is why the basis is recorded per part.
+    """
+    lo, hi = mesh.bounds
+    size = [float(hi[i] - lo[i]) for i in range(3)]
+    idx = {"x": 0, "y": 1, "z": 2}
+
+    if mating_axis in idx:
+        a = idx[mating_axis]
+        return {"projectionMm": round(size[a], 4), "wallFaceAxis": mating_axis,
+                "projectionBasis": "mating-axis", "projectionConfident": True}
+
+    best = None
+    for axis, name in ((2, "z"), (0, "x"), (1, "y")):
+        m = fpmod._oriented(mesh, axis)
+        zlo, zhi = float(m.bounds[0][2]), float(m.bounds[1][2])
+        ext = zhi - zlo
+        if ext <= 1e-6:
+            continue
+        for z in (zlo + ext * 0.03, zhi - ext * 0.03):
+            try:
+                polys = section_polygons(m, z)
+            except Exception:
+                continue
+            area = sum(p.area for p in polys)
+            if best is None or area > best[0]:
+                best = (area, name, ext)
+    if best is None:
+        return {"projectionMm": round(min(size), 4), "wallFaceAxis": "n/a",
+                "projectionBasis": "fallback-min-extent", "projectionConfident": False}
+    _area, name, ext = best
+    return {"projectionMm": round(ext, 4), "wallFaceAxis": name,
+            "projectionBasis": "contact-area", "projectionConfident": False}
+
+
 def measure(path: pathlib.Path) -> dict:
     mesh = load(path)
     lo, hi = mesh.bounds
@@ -195,6 +246,7 @@ def measure(path: pathlib.Path) -> dict:
         "interfaceWidths": fp.interface_widths,
         "socketWidths": fp.socket_widths,
         "bores": count_bores(mesh),
+        **wall_face(mesh, fp.mating_axis),
         **overhang_report(mesh),
     }
 
@@ -471,6 +523,9 @@ def main() -> int:
             "drawnOrientation": m["drawnOrientation"],
             "bboxMm": m["bboxMm"],
             "volumeMm3": m["volumeMm3"],
+            # How far the part stands off the wall. The 3D view needs this and
+            # cannot derive it from the bounding box — see wall_face().
+            "projectionMm": m["projectionMm"],
             "requires": requires,
             "hardware": hardware,
             "print": est,
@@ -482,6 +537,9 @@ def main() -> int:
                 "method": m["detectMethod"], "confidence": m["detectConfidence"],
                 "interfaceWidths": m["interfaceWidths"],
                 "socketWidths": m["socketWidths"], "bores": m["bores"],
+                "wallFaceAxis": m["wallFaceAxis"],
+                "projectionBasis": m["projectionBasis"],
+                "projectionConfident": m["projectionConfident"],
                 "overhangAreaMm2": m["overhangAreaMm2"],
                 "overhangFraction": m["overhangFraction"],
                 "watertight": m["watertight"], "triangles": m["triangles"],
