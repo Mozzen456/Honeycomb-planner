@@ -209,6 +209,21 @@ the brief asked for it to work on a tablet.
 
 **Still open:**
 
+- **The app draws the wall pointy-top; the photographs show it flat-top.** HSW-SPEC §2 makes
+  pointy-top the canonical frame, and the panel size formula confirms the STLs are drawn that way.
+  But every reference photograph of a *mounted* part — the SD-card holder in the designer's own
+  gallery, the shelf seen from behind — shows a **flat-top** plug going into the wall, with the
+  part's slots pointing straight up. Those two cannot both be right.
+
+  It matters because a flat-top plug in a pointy-top cell is 30° out, and 30° is not a multiple of
+  60°, so no legal rotation reconciles them: with the wall drawn pointy-top, an SD-card holder's
+  slots can only ever point 30° off vertical. `src/ui/meshLibrary.ts` therefore draws the part the
+  way it is used — slots up, plug in — and accepts that its hexagon reads 30° off the cell drawn
+  under it. That is the visible symptom of this, not a bug in the transform.
+
+  Resolving it properly means turning the app's whole lattice frame, which touches `hexToMm`,
+  `panelCells`, the tiler, the parity test and both renderers. It should be measured first: photograph
+  a hung panel square-on and see whether the cells have a vertex at the top or a flat edge.
 - **The print estimate for imported parts is ±30 %, and ±50 % on unusual geometry.** It is a model,
   not a slice, and it is marked as one everywhere it appears. The residual is concentrated in one
   place: a large flat plate still comes out ~47 % slow, because nothing cheaply computable from a

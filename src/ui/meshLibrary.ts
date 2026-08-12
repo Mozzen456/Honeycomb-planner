@@ -103,25 +103,35 @@ function orient(mesh: MeshData, detection: Detection): THREE.BufferGeometry {
     let v = src[i + vi]!;
     let w = src[i + wi]!;
 
-    // A flat-drawn part must be spun 90° to sit on a pointy-top wall — the same
-    // (u, v) -> (-v, u) turn `toAxial` applies to its cells.
-    if (spin) {
-      const t = u;
-      u = -v;
-      v = t;
-    }
-    // The mating face has to end up at the low end of w. Turning the part over
-    // is a 180° rotation, NOT a negation of w on its own: negating one axis is
-    // a reflection, and a mirrored hook is a left-hand hook on a right-hand
-    // wall.
+    // NO 90° SPIN. `toAxial` spins a flat-drawn part's CELLS by 90° so its
+    // footprint lands on a pointy-top lattice, and applying the same turn to
+    // the mesh was the obvious thing to do — but it is wrong, and the
+    // photographs are what show it.
     //
-    // About V, not U. Both are proper rotations and both put the mating face
-    // against the wall — they differ by a 180° turn IN THE WALL PLANE, which is
-    // the difference between an SD-card holder whose slots face up and one
-    // whose slots face down. `v` is the wall's vertical, so rotating about it
-    // keeps the part's own up pointing up; rotating about `u` tips it over.
+    // A part is drawn in the orientation it is USED: the SD-card holder's slots
+    // are cut into its −y face, and the reference photograph of one mounted on
+    // a real wall has those slots pointing straight up, cards standing in them.
+    // Spinning the mesh 90° pointed them sideways and cards would fall out.
+    //
+    // The residue is that the part's own hexagon then reads 30° off the cell
+    // drawn under it. That is a genuine discrepancy and it is the app's wall
+    // frame, not this transform: the wall is drawn pointy-top (HSW-SPEC §2)
+    // while every reference photograph of a mounted part shows a flat-top
+    // plug going into the wall. Which of the two is turned is a much bigger
+    // question than how a mesh is drawn — see PARKED. Between a part whose
+    // hexagon is 30° out and a part whose contents fall on the floor, this
+    // draws the one that is usable.
+    void spin;
+
+    // The mating face has to end up at the low end of w, so the plug goes INTO
+    // the wall and the body stands out into the room.
+    //
+    // Turning the part over is a 180° rotation, NOT a negation of w on its own:
+    // negating one axis is a reflection, and a mirrored hook is a left-hand
+    // hook on a right-hand wall. About U, which keeps the part's own up (v)
+    // pointing up — about V it would arrive upside down.
     if (flip) {
-      u = -u;
+      v = -v;
       w = -w;
     }
 
