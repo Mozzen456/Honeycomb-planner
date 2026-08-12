@@ -1,8 +1,11 @@
 /* App shell layout. Tokens only — no colour, size or duration literals. */
 
+/* `auto` rather than a fixed --topbar-height: the bar wraps to a second line on
+   a narrow window, and a fixed row height cropped it. It still measures exactly
+   --topbar-height when it fits on one line, which is every desktop width. */
 .app {
   display: grid;
-  grid-template-rows: var(--topbar-height) 1fr;
+  grid-template-rows: auto minmax(0, 1fr);
   block-size: 100dvh;
   background: var(--surface-0);
   color: var(--text-primary);
@@ -12,11 +15,19 @@
 
 /* ---------- top bar ---------- */
 
+/* Wrapping, not scrolling or hiding.
+   At 1024px the bar overflowed and took `Solve panels` and the 3D/Plan toggle
+   off the end of it — the primary action in the product, invisible on the
+   tablet the brief asked it to work on. Nothing here is optional enough to
+   hide, so the bar takes a second line instead. */
 .app__bar {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  min-block-size: var(--topbar-height);
   padding-inline: var(--space-4);
+  padding-block: var(--space-1);
   border-block-end: var(--border-width-hair) solid var(--border-subtle);
   background: var(--surface-1);
   min-inline-size: 0;
@@ -64,8 +75,8 @@
   min-inline-size: 0;
 }
 
-.app__wall-controls { flex: 1 1 auto; }
-.app__actions { flex: 0 0 auto; }
+.app__wall-controls { flex: 1 1 auto; flex-wrap: wrap; }
+.app__actions { flex: 0 0 auto; flex-wrap: wrap; }
 
 .app__wall-controls label,
 .app__actions label {
@@ -100,8 +111,14 @@
    base.css deliberately strips every <button> and leaves the component to the
    app. Nothing ever defined it, so the top bar shipped 20px unpadded text
    beside 32px rounded inputs — the single loudest "unfinished" tell in the
-   product. This is that missing component; .app__import and the BOM's export
-   row should consume it too rather than hand-rolling it a third time. */
+   product.
+
+   `.button` is that component, and it is now the only definition of button
+   chrome in the app: the top bar, the import control, the BOM's export row and
+   the import dialog all resolve to this rule. Three of those used to hand-roll
+   their own, which is why the export row disagreed with the import control
+   about font size by a pixel. */
+.button,
 .app__bar button,
 .app__import {
   display: inline-flex;
@@ -124,6 +141,7 @@
               border-color var(--duration-fast) var(--ease-standard);
 }
 
+.button:hover:not(:disabled),
 .app__bar button:hover:not(:disabled),
 .app__import:hover {
   background: var(--surface-2);
@@ -131,34 +149,41 @@
   border-color: var(--border-strong);
 }
 
+.button:active:not(:disabled),
 .app__bar button:active:not(:disabled) { background: var(--surface-3); }
 
+.button:disabled,
 .app__bar button:disabled {
   color: var(--text-disabled);
   cursor: default;
 }
 
+.button:focus-visible,
 .app__bar button:focus-visible {
   outline: var(--focus-ring-width) solid var(--focus-ring-color);
   outline-offset: var(--focus-ring-offset);
 }
 
+.button--primary,
 .app__primary {
   background: var(--accent);
   color: var(--accent-on);
   border-color: var(--accent);
 }
 
+.button--primary:hover:not(:disabled),
 .app__bar .app__primary:hover {
   background: var(--accent-hover);
   border-color: var(--accent-hover);
   color: var(--accent-on);
 }
+.button--primary:active:not(:disabled),
 .app__bar .app__primary:active { background: var(--accent-active); }
 
 /* The standard ring is the accent colour, which vanishes on an accent-filled
    button. Offsetting it outward keeps one ring for the whole app while still
    being visible here. */
+.button--primary:focus-visible,
 .app__bar .app__primary:focus-visible {
   outline-offset: var(--space-0-5);
 }
@@ -236,6 +261,7 @@
   position: relative;
   min-inline-size: 0;
   min-block-size: 0;
+  overflow: hidden; /* nothing overlaid on the wall may escape onto the panels */
   background: var(--canvas-wall);
 }
 
@@ -270,6 +296,53 @@
 .app__toast--warn  { border-color: var(--warning-border); background: var(--warning-bg); color: var(--warning-fg); }
 .app__toast--ok    { border-color: var(--success-border); background: var(--success-bg); color: var(--success-fg); }
 
+/* First-run guidance over the empty wall. `pointer-events: none` is
+   load-bearing, not tidiness: the stage under it is the drop target, and a
+   panel dropped on the words has to land. */
+.app__empty {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: 50%;
+  translate: -50% -50%;
+  /* Bounded by the stage, not by a fixed width: on a phone a 34rem card
+     overflowed the stage and painted over the catalogue and the parts list. */
+  max-inline-size: min(34rem, calc(100% - 2 * var(--space-4)));
+  max-block-size: calc(100% - 2 * var(--space-4));
+  overflow-y: auto;
+  padding: var(--space-5) var(--space-6);
+  border: var(--border-width-hair) solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  pointer-events: none;
+  user-select: none;
+}
+
+.app__empty-title {
+  color: var(--text-primary);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+}
+
+.app__empty-steps {
+  margin-block-start: var(--space-3);
+  display: grid;
+  gap: var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+}
+
+.app__empty-steps strong { color: var(--text-primary); }
+
+.app__empty-note {
+  margin-block-start: var(--space-4);
+  padding-block-start: var(--space-3);
+  border-block-start: var(--border-width-hair) solid var(--border-subtle);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-relaxed);
+}
+
 .app__hint {
   position: absolute;
   inset-block-end: var(--space-4);
@@ -281,16 +354,9 @@
   user-select: none;
 }
 
-.visually-hidden {
-  position: absolute;
-  inline-size: 1px;
-  block-size: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
+/* `.visually-hidden` is defined once, in base.css. It used to be defined here
+   too, with a different body and a lower specificity, so which rule won
+   depended on which properties each happened to set. */
 
 /* Narrow / tablet: the catalogue collapses to a strip above the stage so the
    wall and the parts list keep the room.
@@ -303,10 +369,13 @@
     grid-template-columns: minmax(0, 1fr) var(--panel-width-right);
     grid-template-rows: auto minmax(0, 1fr);
   }
+  /* 17rem, not 14: at 14 the strip's own header and footer left ~60px for the
+     tiles, so every two-line part name was cropped through its second line —
+     which reads as a rendering fault rather than as truncation. */
   .app__rail {
     grid-column: 1 / -1;
     grid-row: 1;
-    max-block-size: 14rem;
+    max-block-size: 17rem;
     border-block-end: var(--border-width-hair) solid var(--border-subtle);
   }
   .app__rail > * { inline-size: 100%; max-inline-size: none; }
@@ -322,15 +391,41 @@
     gap: var(--space-1);
     overflow-x: auto;
   }
+
+  /* A two-line name in a fixed-height strip was cropped mid-descender, which
+     reads as a rendering fault rather than as truncation. Clamp it properly and
+     keep the full name in the tile's title attribute, which it already has. */
+  .app__rail .catalog-tile__name {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
 }
 
 /* Phone-ish: the parts list goes under the wall rather than beside it. */
 @media (max-width: 46rem) {
   .app__body {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr) minmax(12rem, 40vh);
+    /* The wall is the point of the page, so it gets what is left after a
+       usable strip of catalogue and a readable parts list — not the other way
+       round. At 12rem/40vh it was left with about 110px. */
+    grid-template-rows: auto minmax(0, 1fr) minmax(8rem, 30vh);
   }
-  .app__rail { grid-column: 1; grid-row: 1; }
+  .app__rail { grid-column: 1; grid-row: 1; max-block-size: 9rem; }
   .app__stage { grid-column: 1; grid-row: 2; }
   .app__bom { grid-column: 1; grid-row: 3; }
+
+  /* Every control still fits, but on four or five lines, which leaves no wall.
+     The label words go first — each input keeps its aria-label, so this costs a
+     sighted user a word they can infer and a screen-reader user nothing — and
+     the layout name goes with them; it is set once and is in the tab title. */
+  .app__brand { display: none; }
+  .app__wall-controls label { gap: var(--space-1); font-size: 0; }
+  .app__wall-controls label > * { font-size: var(--font-size-xs); }
+  .app__wall-controls input[type='number'] { inline-size: 7ch; }
+  .app__bar { gap: var(--space-1) var(--space-2); }
+
+  .app__empty { padding: var(--space-4); }
+  .app__empty-steps { font-size: var(--font-size-xs); }
 }

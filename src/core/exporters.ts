@@ -57,6 +57,8 @@ const CSV_HEADER = [
   'type',
   'file',
   'supports',
+  'footprint_estimated',
+  'print_estimated',
   'minutes_each',
   'grams_each',
   'metres_each',
@@ -78,12 +80,15 @@ function csvField(value: string | number): string {
 
 const csvRow = (cells: (string | number)[]): string => cells.map(csvField).join(',');
 
-/** Line totals divided back down to one part. Quantity 0 means no per-unit figure. */
-function each(total: number, quantity: number): number {
-  if (!Number.isFinite(total) || !Number.isFinite(quantity) || quantity <= 0) return 0;
-  return total / quantity;
-}
-
+/**
+ * Per-unit figures come from the line's own catalogue values.
+ *
+ * They used to be computed as `total / quantity`, which divides a number that
+ * has already been rounded: six parts at 54.63 minutes each total 328, and
+ * 328 / 6 printed as 54.6. The spreadsheet then disagreed with the catalogue in
+ * its last digit for no reason a reader could see. `bom.ts` now carries the
+ * unrounded per-unit value through, and this reads it.
+ */
 function csvLineFor(section: string, line: BomLine): (string | number)[] {
   const q = Number.isFinite(line.quantity) ? line.quantity : 0;
   return [
@@ -94,9 +99,11 @@ function csvLineFor(section: string, line: BomLine): (string | number)[] {
     line.type ?? 'unknown',
     line.file ?? '',
     line.supports ? 'yes' : 'no',
-    num(each(line.minutes, q)),
-    num(each(line.grams, q)),
-    num(each(line.metres, q)),
+    line.needsReview ? 'yes' : 'no',
+    line.estimated ? 'yes' : 'no',
+    num(line.minutesEach ?? 0),
+    num(line.gramsEach ?? 0),
+    num(line.metresEach ?? 0),
     num(line.minutes),
     num(line.grams),
     num(line.metres),
@@ -120,6 +127,8 @@ export function toCsv(bom: Bom): string {
         '',
         buy.item ?? '',
         'bought',
+        '',
+        '',
         '',
         '',
         '',
@@ -163,6 +172,11 @@ function checklistLine(line: BomLine): string {
   if (line.minutes > 0) detail.push(formatMinutes(line.minutes));
   if (line.grams > 0) detail.push(`${num(line.grams, 1)} g`);
   if (line.supports) detail.push('needs supports');
+  // The sheet you carry to the printer is the copy that gets used, so the two
+  // "this is a model, not a measurement" markers travel with it. On screen they
+  // are the `est.` badge; here they are words, because a badge does not print.
+  if (line.needsReview) detail.push('footprint estimated');
+  if (line.estimated) detail.push('print time estimated');
   const tail = detail.length ? ` — ${detail.join(', ')}` : '';
   const file = line.file ? ` \`${mdText(line.file)}\`` : '';
   return `- [ ] **${num(q, 0)} ×** ${mdText(line.name || line.partId)}${tail}${file}`;
@@ -254,6 +268,8 @@ function htmlRows(rows: BomLine[]): string {
         `  <td class="name">${escapeHtml(line.name || line.partId)}` +
           (line.file ? `<span class="file">${escapeHtml(line.file)}</span>` : '') +
           (line.supports ? '<span class="flag">supports</span>' : '') +
+          (line.needsReview ? '<span class="flag">footprint est.</span>' : '') +
+          (line.estimated ? '<span class="flag">print est.</span>' : '') +
           '</td>',
         `  <td class="n">${escapeHtml(formatMinutes(line.minutes))}</td>`,
         `  <td class="n">${escapeHtml(num(line.grams, 1))} g</td>`,

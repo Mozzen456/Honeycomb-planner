@@ -22,6 +22,7 @@ import { itemCells } from '../core/bom';
 import { CELL, PANEL_DEPTH, PITCH } from '../core/constants';
 import { hexKey, hexToMm, panelCells, placeFootprint } from '../core/hex';
 import type { Catalog, CatalogPart, Hex, LayoutDoc, Rotation } from '../core/types';
+import { loadPartMesh, type PartMesh } from './meshLibrary';
 import './WallView3D.css';
 
 export interface Drag3D {
@@ -465,6 +466,16 @@ export function WallView3D(props: WallView3DProps) {
 
   // --- build the placed items --------------------------------------------
 
+  /**
+   * Bumped when a part's real mesh finishes loading, to rebuild the item group.
+   *
+   * Loading is asynchronous and per part id, so the wall draws immediately with
+   * boxes and each box is replaced by the real shape as its STL arrives. A part
+   * that never arrives keeps its box, which is why the box code below stays.
+   */
+  const [meshTick, setMeshTick] = useState(0);
+  const meshes = useRef(new Map<string, PartMesh | null>());
+
   useEffect(() => {
     const s = stateRef.current;
     if (!s || !ready) return;
@@ -474,7 +485,11 @@ export function WallView3D(props: WallView3DProps) {
     for (const child of [...s.itemGroup.children]) {
       s.itemGroup.remove(child);
       const m = child as THREE.Mesh;
-      m.geometry?.dispose();
+      // Only the geometry this view built is disposed. A cached part mesh is
+      // shared between every placement of that part and owned by meshLibrary —
+      // disposing it here would blank every copy on the wall the moment one of
+      // them was deleted.
+      if (m.userData['ownGeometry'] === true) m.geometry?.dispose();
       (m.material as THREE.Material)?.dispose?.();
     }
 
@@ -487,7 +502,8 @@ export function WallView3D(props: WallView3DProps) {
       const colour = sel.has(it.id) ? theme.selected : theme.item;
       const mat = new THREE.MeshLambertMaterial({ color: colour });
 
-      // The body: one box at the part's real size, standing proud of the face.
+      // The body: the part's own mesh where we have it, otherwise a box at its
+      // measured size, standing proud of the face.
       let cx = 0;
       let cy = 0;
       for (const c of cells) {
@@ -498,10 +514,23 @@ export function WallView3D(props: WallView3DProps) {
       cx /= cells.length;
       cy /= cells.length;
 
-      const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, depth), mat);
-      body.position.set(cx, cy, PANEL_DEPTH + depth / 2);
+      const loaded = meshes.current.get(it.partId);
+      if (loaded === undefined) {
+        // Not asked for yet. Ask once per part id; the box below stands in.
+        meshes.current.set(it.partId, null);
+        void loadPartMesh(part).then((m) => {
+          meshes.current.set(it.partId, m);
+          if (m !== null) setMeshTick((n) => n + 1);
+        });
+      }
+
+      const body = loaded
+        ? new THREE.Mesh(loaded.geometry, mat)
+        : new THREE.Mesh(new THREE.BoxGeometry(w, h, depth), mat);
+      body.position.set(cx, cy, loaded ? PANEL_DEPTH : PANEL_DEPTH + depth / 2);
       body.rotation.z = (Math.PI / 3) * it.rotation;
       body.userData['itemId'] = it.id;
+      body.userData['ownGeometry'] = loaded === null || loaded === undefined;
       s.itemGroup.add(body);
 
       // A thin collar in each occupied cell, so a multi-cell part still shows
@@ -523,7 +552,7 @@ export function WallView3D(props: WallView3DProps) {
         s.itemGroup.add(collar);
       }
     }
-  }, [doc.items, selection, catalog, partOf, ready, readTheme, themeTick]);
+  }, [doc.items, selection, catalog, partOf, ready, readTheme, themeTick, meshTick]);
 
   // --- ghost preview ------------------------------------------------------
 
@@ -619,6 +648,12 @@ export function WallView3D(props: WallView3DProps) {
     if (!host || !ready) return;
 
     const down = (e: PointerEvent) => {
+      // The toolbar lives inside the host so it can float over the wall, which
+      // means its buttons' pointerdown bubbles to here. Capturing the pointer
+      // then redirected every later pointer event to the host, and the button
+      // never got its click: Fit and Front looked dead to a mouse while working
+      // perfectly when called from code.
+      if ((e.target as Element | null)?.closest?.('.wall3d__tools')) return;
       host.setPointerCapture?.(e.pointerId);
       if (e.button === 1 || e.altKey || e.shiftKey) {
         panRef.current = { x: e.clientX, y: e.clientY, mode: e.shiftKey ? 'pan' : 'orbit' };

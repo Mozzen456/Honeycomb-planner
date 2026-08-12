@@ -20,10 +20,36 @@ npm run dev
 Then: set your wall size, pick your printer, hit **Solve panels**, and drag accessories on.
 
 ```bash
-npm test          # 180+ unit tests over the pure engines
+npm test          # 467 tests over the pure engines
 npm run typecheck
 npm run build
 ```
+
+Needs Node 18 or newer. `node_modules` is not committed — install it fresh rather than copying it
+between machines, or the CLI shims will not be executable.
+
+## Add your own models
+
+**Drop an STL anywhere on the window** — or use **Import**. The file is measured in the browser and
+you get a review dialog showing what was found: bounding box, volume, how far it stands off the
+wall, its cell footprint, and a print estimate. Set the type, draw the footprint by clicking cells,
+choose the insert it bolts to, and it joins the catalogue under **Imported**. It then behaves like
+any other part — placeable, counted in the parts list, present in every export.
+
+Two things about an imported part are marked wherever they appear, including on the printed sheet:
+
+- a footprint the geometry could only **bound** rather than measure (that is the `est.` badge —
+  see "Known limits" below), and
+- a print estimate that is **modelled rather than sliced**, since a browser has no slicer. Reckon
+  on ±30% for HSW-like parts and ±50% for anything very unlike them; it is fitted against 73 real
+  PrusaSlicer results and its measured error per family is in `HSW-SPEC.md` §7. If you need a real
+  number, slice the file.
+
+Imports live in your browser (localStorage plus IndexedDB for the mesh), so they survive a reload
+and never touch the generated catalogue. Remove one with the × on its tile.
+
+For a permanent, sliced, reproducible entry, put the file in `./models/` and run the scanner
+instead.
 
 ## Rebuild the catalogue
 
@@ -34,6 +60,7 @@ python tools/scan.py            # measure new/changed files, append
 python tools/scan.py --rescan   # re-measure everything from scratch
 python tools/scan.py --verify   # rebuild and diff against the committed catalogue
 python tools/report.py          # human-readable summary
+python tools/calibrate_estimator.py   # re-fit the in-browser print estimator
 ```
 
 Requires `trimesh`, `scipy`, `shapely`, `rtree`, `numpy`, and PrusaSlicer for print estimates
@@ -60,6 +87,10 @@ The UI is a thin shell on top.
 | `src/core/store.ts` | commands, placement rules, undo/redo | `tests/store.test.ts` |
 | `src/core/persist.ts` | save/load/share, hostile-input tolerant | `tests/persist.test.ts` |
 | `src/core/exporters.ts` | CSV, markdown, print page | `tests/exporters.test.ts` |
+| `src/core/stl.ts` | STL reading, mesh measurement, print estimate | `tests/stl.test.ts` |
+| `src/core/detect.ts` | footprint detection in the browser | `tests/detect.test.ts` |
+| `src/core/importPart.ts` | an STL becomes a catalogue part | `tests/import.test.ts` |
+| `src/core/userCatalog.ts` | imported parts, stored and merged | `tests/import.test.ts` |
 | `src/ui/tokens.css` | the design token layer — nothing else defines a colour | see `TOKENS.md` |
 
 Two rules the whole thing depends on:
@@ -75,7 +106,9 @@ Two rules the whole thing depends on:
 
 **3D is the default.** The wall is a thing you mount objects *on*, so the question at the wall is
 how far something stands out and whether it fouls its neighbour — which a plan cannot show. Panels
-are drawn as real 8 mm plates with hexagonal holes; every part stands proud at its measured depth.
+are drawn as real 8 mm plates with hexagonal holes, and **every placed part is drawn from its own
+STL**, oriented the way it actually mounts. Models load lazily, one per distinct part; until one
+arrives — or if it cannot be fetched at all — that part falls back to a box at its measured size.
 
 **Plan** is one click away and is faster for aiming precisely. Both drive the same document, so
 they cannot disagree.
@@ -116,7 +149,10 @@ Right-drag orbits, shift-drag pans, the wheel zooms.
 - **29 of 51 parts are second-tier** — they bolt or plug into an *insert* rather than clipping to
   the wall. Geometry can measure how wide such a part is but cannot know which cells its
   installer will use, so their footprints are bounding-box estimates, flagged in the UI and in
-  `UNKNOWN.md`. Correct them via `overrides.json`.
+  `UNKNOWN.md`. Correct them via `overrides.json`, or draw the real footprint in the import dialog.
+- **The layout is comfortable from about 1000 px up.** Below that the top bar takes a second line
+  and the catalogue becomes a strip above the wall; on a phone it is legible but cramped, which is
+  a fair description of planning a garage wall on a phone.
 - **`375x389-fixed.stl` needs a 400 × 400 bed.** It fits none of the common printers.
 - Print estimates are for one specific recorded profile (`PLA-0.20mm-15pct-2perim-0.4nozzle`).
   They are real slices, not volume guesses, but they are not *your* profile.

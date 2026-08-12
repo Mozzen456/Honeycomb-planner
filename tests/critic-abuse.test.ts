@@ -21,7 +21,7 @@ import {
   migrate,
   serialize,
 } from '../src/core/persist';
-import { Store, __resetIds, emptyDoc } from '../src/core/store';
+import { MAX_CELL_COORD, Store, __resetIds, emptyDoc } from '../src/core/store';
 import { solveTiling } from '../src/core/tiling';
 import type { Catalog, CatalogPart, Hex, LayoutDoc, PlacedItem, Rotation } from '../src/core/types';
 
@@ -228,38 +228,41 @@ describe('scale', () => {
     expect(big.t).toBeLessThan(10_000);
   }, 600_000);
 
-  it('absurd coordinates (q,r = +/-1e9) do not throw anywhere', () => {
+  it('REGRESSION (was P8 item 1): the store refuses what persist would refuse', () => {
+    // The finding: `checkPlacement` accepted coordinates `persist` rejects, so
+    // a document could be legal in memory and illegal on disk. The item was
+    // dropped on reload — loudly, which is what made it survivable, but the two
+    // modules still disagreed about what a legal document is, and the store was
+    // the permissive one. Fixed by clamping in `addItem` against the same limit
+    // `persist.readCoord` uses.
     const s = new Store(emptyDoc(), catalog); // no panels: everything is "on the wall"
     const far = s.addItem('pair', { q: 1e9, r: -1e9 });
-    expect(far.ok).toBe(true);
+    expect(far.ok).toBe(false);
+    expect(far.reason).toMatch(/outside any real wall/i);
+    expect(s.getState().doc.items).toHaveLength(0);
+
+    // The boundary is exactly persist's, tested from both sides.
+    expect(s.addItem('pair', { q: MAX_CELL_COORD, r: 0 }).ok).toBe(true);
+    expect(s.addItem('pair', { q: MAX_CELL_COORD + 1, r: 0 }).ok).toBe(false);
+
+    // ...and what the store does accept survives a save/load unchanged, which
+    // is the property the whole finding was about.
+    const round = deserialize(serialize(s.getState().doc));
+    expect(round.errors).toEqual([]);
+    expect(round.doc?.items).toHaveLength(1);
+    expect(round.doc?.items[0]!.at).toEqual({ q: MAX_CELL_COORD, r: 0 });
+  });
+
+  it('an item far from the origin still does not throw anywhere', () => {
+    // The other half of the original finding, and still worth pinning: nothing
+    // downstream may throw on a legal-but-extreme coordinate.
+    const s = new Store(emptyDoc(), catalog);
+    s.addItem('pair', { q: MAX_CELL_COORD, r: -MAX_CELL_COORD });
     const doc = s.getState().doc;
     expect(() => validate(doc, catalog)).not.toThrow();
     expect(() => computeBom(doc, catalog)).not.toThrow();
     expect(() => itemCells(doc.items[0]!, catalog)).not.toThrow();
     expect(() => s.rotateItems([doc.items[0]!.id], 1)).not.toThrow();
-
-    // PENDING FINDING — PARKED.md P8 item 1: `checkPlacement` accepts
-    // coordinates that `persist` refuses. Whatever the store accepts ought to
-    // survive a save/load, or the store should have refused the placement in
-    // the first place; the two modules disagree about what a legal document is
-    // and the store is the permissive one. The fix is to clamp in `addItem`.
-    //
-    // Asserted below is the CURRENT, WRONG behaviour, so that the suite stays
-    // honest about where the app actually is. What saves it from being a silent
-    // data loss — and what must never regress — is that the drop is explained:
-    // the item disappears on reload, but with a message naming it and saying
-    // why. If someone fixes P8.1, this test fails and should be inverted.
-    const round = deserialize(serialize(s.getState().doc));
-    expect(
-      round.doc?.items.length,
-      'P8.1 appears to be FIXED — the store no longer accepts what persist refuses. ' +
-        'Invert this test: expect the item to survive, or addItem to have refused it.',
-    ).toBe(0);
-    expect(round.doc, 'the rest of the layout was lost along with the item').not.toBeNull();
-    expect(
-      round.errors.join(' | '),
-      'the item vanished on reload with no explanation — loud is the only thing making this survivable',
-    ).toMatch(/far outside any real wall/i);
   });
 
   it('a panel with a plausible-but-huge cell count is not allowed to become an unbounded workload', () => {

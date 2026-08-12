@@ -97,7 +97,14 @@ function line(over: Partial<BomLine> = {}): BomLine {
     minutes: 50,
     grams: 17,
     metres: 5.6,
+    // Per-unit figures come from the catalogue, not from total / quantity:
+    // 4 hooks at 12.5 min / 4.25 g / 1.4 m each.
+    minutesEach: 12.5,
+    gramsEach: 4.25,
+    metresEach: 1.4,
     supports: false,
+    needsReview: false,
+    estimated: false,
     ...over,
   };
 }
@@ -153,6 +160,8 @@ describe('toCsv', () => {
       'type',
       'file',
       'supports',
+      'footprint_estimated',
+      'print_estimated',
       'minutes_each',
       'grams_each',
       'metres_each',
@@ -208,20 +217,42 @@ describe('toCsv', () => {
     const rows = parseCsv(toCsv(makeBom({ printed: [line()], fasteners: [], shopping: [] })));
     const row = rows[1]!;
     expect(row[1]).toBe('4'); // quantity
-    expect(row[7]).toBe('12.5'); // minutes each = 50 / 4
-    expect(row[10]).toBe('50'); // minutes total, straight from the BOM line
-    expect(row[8]).toBe('4.25'); // grams each = 17 / 4
-    expect(row[11]).toBe('17');
-    expect(row[9]).toBe('1.4'); // metres each = 5.6 / 4
-    expect(row[12]).toBe('5.6');
+    expect(row[9]).toBe('12.5'); // minutes each, from the catalogue
+    expect(row[12]).toBe('50'); // minutes total, straight from the BOM line
+    expect(row[10]).toBe('4.25'); // grams each
+    expect(row[13]).toBe('17');
+    expect(row[11]).toBe('1.4'); // metres each
+    expect(row[14]).toBe('5.6');
   });
 
-  it('reports no per-unit figure rather than dividing by zero', () => {
+  /**
+   * The per-unit columns read the catalogue value rather than dividing the line
+   * total, which is why a zero quantity is no longer a division at all. It used
+   * to be `total / quantity` — and dividing an already-rounded total printed
+   * 54.6 where the catalogue said 54.63 (PARKED P8 item 6).
+   */
+  it('reports the catalogue per-unit figure even when the quantity is zero', () => {
     const rows = parseCsv(
       toCsv(makeBom({ printed: [line({ quantity: 0 })], fasteners: [], shopping: [] })),
     );
-    expect(rows[1]![7]).toBe('0');
-    expect(rows[1]![8]).toBe('0');
+    expect(rows[1]![9]).toBe('12.5');
+    expect(rows[1]![10]).toBe('4.25');
+  });
+
+  it('marks a bounded footprint and a modelled print estimate', () => {
+    // The two "this is a model, not a measurement" flags have to reach the
+    // sheet that is actually carried to the printer, not just the screen.
+    const rows = parseCsv(
+      toCsv(makeBom({
+        printed: [line({ needsReview: true, estimated: true })],
+        fasteners: [],
+        shopping: [],
+      })),
+    );
+    expect(rows[0]![7]).toBe('footprint_estimated');
+    expect(rows[0]![8]).toBe('print_estimated');
+    expect(rows[1]![7]).toBe('yes');
+    expect(rows[1]![8]).toBe('yes');
   });
 
   it('records the part id, type, file and support flag', () => {

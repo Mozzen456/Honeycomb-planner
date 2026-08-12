@@ -261,6 +261,37 @@ parts carry a bounding-box footprint and are flagged in `UNKNOWN.md` rather than
 
 `src/catalog/catalog.json` — **generated, never hand-written**.
 
+### The browser measures the same way
+
+`src/core/stl.ts` and `src/core/detect.ts` re-implement the measurement and the footprint detector
+for the import feature, because a browser has neither trimesh nor shapely. They are held to this
+document by test rather than by intention:
+
+| Claim | Checked in | Result over all 51 models |
+|---|---|---|
+| same volume as trimesh | `tests/stl.test.ts` | agrees to < 1e-5 relative |
+| same bounding box | `tests/stl.test.ts` | agrees to 1e-3 mm |
+| same supports verdict (§7) | `tests/stl.test.ts` | identical on all 51 |
+| same cell footprint | `tests/detect.test.ts` | **identical, cell for cell, on all 51** |
+| same tier and `needsReview` | `tests/detect.test.ts` | identical on all 51 |
+
+### The recorded slices were re-run and they hold
+
+All 51 parts were re-sliced from scratch with PrusaSlicer **2.9.6 on macOS**, against the committed
+`build/hsw-profile.ini` (hash `0b71b5f111592797`, the one named in every catalogue entry):
+
+- **filament mass: identical on all 51**, to the recorded decimal;
+- print time: 31 identical, the rest differing by at most **0.05 %** (1.2 seconds on a 37-minute
+  part);
+- filament length: at most **0.11 %** (0.6 mm).
+
+The catalogue was generated on Windows, so this is a cross-platform reproduction rather than the
+byte-identical one `--verify` reports on the machine that made it. Same version, same profile,
+different platform, and the mass column does not move at all.
+
+The in-browser print estimate is *not* a slice and is not claimed to be one — see §7 and
+DECISIONS D23 for its model and its measured error.
+
 ```
 python tools/scan.py            # incremental: measures only new/changed files
 python tools/scan.py --rescan   # re-measure everything
@@ -308,6 +339,41 @@ fail with "outside the print volume" and silently lose their estimates. Whether 
 **Supports** are a stated mesh heuristic, not a slicer verdict: facets whose normal lies within
 45° of straight down, excluding the bed face; supports recommended if that area exceeds both
 20 mm² and 2 % of total. The raw overhang area is recorded on every part so the call is auditable.
+
+### Estimates for parts nobody has sliced
+
+An imported STL cannot be sliced in a browser, so its figures are modelled and marked
+`print.source: 'volume'` everywhere they appear. The model is shell-plus-infill —
+
+```
+shell        = min(area · 0.80, volume · 0.95)
+infill       = (volume − shell) · 0.17
+filament_mm3 = shell + infill
+minutes      = 0.00789 · shell + 0.00374 · infill + 0.0407 · (height / 0.20)
+grams        = filament_mm3 / 1000 · 1.24
+```
+
+Shell and infill carry **different** minutes-per-mm³ because perimeters print at 45 mm/s and
+infill at 80. That distinction is not cosmetic — see below.
+
+**The fit set is 73 real slices, not 51.** Fitting on the shipped catalogue alone is a trap: every
+part in it is thin-walled, so the model learns *that family* rather than the physics. The first
+version did exactly that, scoring 15 % RMS on its own fit set while being **54–59 % wrong** on a
+solid cube, a sphere and a flat plate. The fit therefore includes 22 generated shapes spanning the
+regime the HSW set does not — solid blocks, thin shells, flat plates, tall posts, cylinders,
+tubes — and four further shapes are held out of the fit entirely.
+
+| Family | n | mass | time |
+|---|---|---|---|
+| shipped HSW parts | 51 | RMS 7.0 %, worst 20.6 % | RMS 13.2 %, worst 30.9 % |
+| generated calibration | 22 | RMS 12.6 %, worst 39.3 % | RMS 21.9 %, worst 49.9 % |
+| **held out of the fit** | 4 | RMS 11.3 %, worst 19.2 % | RMS 26.3 %, worst **46.9 %** |
+
+For comparison, volume × density is RMS 36 % and worst 109 % on mass alone, which is why it is not
+used. Working figure to quote a user: **±30 % on HSW-like parts, ±50 % on anything very unlike
+them.** Reproduce all of it with `python tools/calibrate_estimator.py`; the recorded results live
+in `tests/fixtures/estimator-calibration.json` and `tests/stl.test.ts` checks against them without
+needing a slicer.
 
 ---
 

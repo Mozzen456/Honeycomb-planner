@@ -24,6 +24,12 @@ CANDIDATES = [
     r"C:\Program Files\Prusa3D\PrusaSlicer\prusa-slicer-console.exe",
     r"C:\Users\Morten\Documents\PrusaSlicer-2.9.3\prusa-slicer-console.exe",
     "prusa-slicer-console.exe",
+    # macOS. The bundle ships as a GUI app, but the same binary takes the CLI
+    # arguments; `--export-gcode` never opens a window. The Prusa driver
+    # installer puts it in a subfolder rather than straight into /Applications.
+    "/Applications/Original Prusa Drivers/PrusaSlicer.app/Contents/MacOS/PrusaSlicer",
+    "/Applications/PrusaSlicer.app/Contents/MacOS/PrusaSlicer",
+    str(pathlib.Path.home() / "Applications/PrusaSlicer.app/Contents/MacOS/PrusaSlicer"),
     "prusa-slicer",
 ]
 

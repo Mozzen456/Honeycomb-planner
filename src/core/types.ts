@@ -163,7 +163,9 @@ export interface Issue {
     | 'crosses-seam'
     | 'no-panel'
     | 'unknown-part'
-    | 'panel-overlap';
+    | 'panel-overlap'
+    /** Accessories have taken the cells the panel's own wall mounts need. */
+    | 'no-room-for-mounts';
   message: string;
   itemIds: string[];
   cells?: Hex[];
@@ -175,10 +177,31 @@ export interface BomLine {
   file: string;
   type: PartType;
   quantity: number;
+  /** LINE TOTALS: the per-unit estimate already multiplied by `quantity`. */
   minutes: number;
   grams: number;
   metres: number;
+  /**
+   * Per-unit figures, straight from the catalogue.
+   *
+   * Present because an exporter that computes them as `total / quantity` is
+   * dividing an already-rounded number: 54.63 minutes each × 6 rounds to 328,
+   * and 328 / 6 prints as 54.6. The sheet you carry to the printer then
+   * disagrees with the catalogue in its last digit for no reason a reader can
+   * see.
+   */
+  minutesEach: number;
+  gramsEach: number;
+  metresEach: number;
   supports: boolean;
+  /**
+   * This part's cell footprint is a bound from its bounding box, not a measured
+   * fit. Shown as "est." on screen, and now in every export as well — the
+   * printed sheet is the copy that actually gets used.
+   */
+  needsReview: boolean;
+  /** The print figures are modelled rather than sliced (an imported part). */
+  estimated: boolean;
 }
 
 export interface Bom {

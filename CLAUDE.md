@@ -13,9 +13,9 @@ copied from any published description. `HSW-SPEC.md` records every number with i
 
 ```bash
 npm run dev          # Vite dev server
-npm test             # vitest run — 394 tests
+npm test             # vitest run — 467 tests
 npm run typecheck    # tsc --noEmit
-npm run build        # typecheck + vite build
+npm run build        # typecheck + vite build (also copies models/ into dist/)
 
 npx vitest run tests/hex.test.ts                    # one file
 npx vitest run tests/store.test.ts -t "six times"   # one test by name
@@ -69,6 +69,26 @@ guard for one string.
 and silently — no warning, no issue. The only impossibility is two parts that plug *into* a cell
 (`type` `insert` or `fastener`) sharing one. See `isExclusive` in `src/core/store.ts`.
 
+**There are now two footprint detectors and they must agree.** `tools/footprint.py` uses trimesh
+and shapely; `src/core/detect.ts` uses a raster, because a browser has neither. `tests/detect.test.ts`
+runs the TS one over all 51 shipped models and requires the same cells, tier and `needsReview` as
+the committed catalogue. If you change either, that test is the contract — do not weaken it.
+The axis permutations in `detect.ts` are **cyclic on purpose**: cyclic is a rotation, acyclic is a
+reflection, and a mirrored footprint is silently wrong.
+
+**Accepting a proposed footprint must not clear `needsReview`.** Only an actual edit does. A bound
+promoted to a measurement by a click is the exact dishonesty PARKED P1 exists to prevent, and
+`withFootprint` in `src/core/importPart.ts` is where that rule lives.
+
+**A control inside the 3D canvas host needs `setPointerCapture` skipped.** The host captures the
+pointer on `pointerdown`, which swallows the click of any button inside it. This made `Fit` and
+`Front` dead to a mouse while working when called from code — see the guard in `WallView3D.tsx`.
+
+**A scrolling panel inside the `100dvh` shell must `contain: layout paint`.** Without it the panel's
+overflow propagates to the viewport, `documentElement.scrollHeight` grows past the window, and
+focusing a catalogue tile scrolls the top bar off screen. `layout paint`, not `strict`: `strict`
+implies `size` and collapses the grid track.
+
 ## Architecture
 
 Everything load-bearing is a pure function over an immutable document, tested without a browser.
@@ -81,6 +101,11 @@ The UI is a thin shell.
 - **`src/core/bom.ts`** — parts-list aggregation and `validate()`.
 - **`src/core/store.ts`** — commands, placement rules, undo/redo.
 - **`src/core/persist.ts` / `exporters.ts`** — save/load/share, CSV/markdown/print.
+- **`src/core/stl.ts`** — STL parsing, mesh measurement, the fitted print estimator.
+- **`src/core/detect.ts`** — the browser's footprint detector (raster port of `footprint.py`).
+- **`src/core/importPart.ts`** — an STL plus a file name becomes a `CatalogPart`.
+- **`src/core/userCatalog.ts`** — imported parts: validation, storage, merge with the generated
+  catalogue. Ids carry a `user/` prefix so a collision is impossible.
 
 Two invariants the whole thing rests on:
 
@@ -95,6 +120,11 @@ anchor handling and empty footprints included. When they disagreed, the editor a
 the BOM then reported as overlaps.
 
 ### Catalogue
+
+Imported parts never go in `catalog.json`. They live in localStorage (metadata) and IndexedDB (the
+STL bytes, for the 3D view) and are merged at read time by `mergeCatalog`, which memoises on
+identity — `bom.ts` caches its part index in a `WeakMap` keyed on the `Catalog` object, so a fresh
+merge per render would rebuild that index per render.
 
 `src/catalog/catalog.json` is **generated — never hand-edit it.** Human corrections go in
 `src/catalog/overrides.json`, keyed by part id; the scanner reads that file and never writes it, so
@@ -124,6 +154,12 @@ In 3D, a panel is **one** extruded shape (union outline + one hole per cell), no
 Per-cell rings put two coincident 8 mm side walls inside solid material at every boundary, which is
 what made the plate look thick. Part depth comes from the measured `projectionMm`, never from
 `max(bbox)`.
+
+Placed parts are drawn from their **real STL** (`src/ui/meshLibrary.ts`), loaded lazily and cached
+per part id, with the measured box as placeholder and fallback. Orientation comes from re-running
+`detect()` rather than from a second rule, so the mesh cannot disagree with the footprint. Only
+geometry this view built is disposed on rebuild — a cached part mesh is shared by every placement
+of that part, and disposing it would blank all of them.
 
 ### UI conventions
 

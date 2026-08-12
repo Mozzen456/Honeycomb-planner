@@ -702,20 +702,35 @@ describe('3 — AWKWARD: seams, edges, overlaps, a missing part and a rotation',
     expect(clash[0]!.cells!.map(hexKey)).toEqual(['4,3']);
   });
 
-  it('the two overlapping ACCESSORIES are not reported at all', () => {
+  it('the two overlapping ACCESSORIES are not reported AS AN OVERLAP', () => {
     // over1 (hook-side) and over2 (box) genuinely share cell (1,1). The wall
-    // exists to mount things on top of one another, so this is not an error and
-    // not a warning — flagging it would put a complaint on a perfectly good
+    // exists to mount things on top of one another, so sharing is not an error
+    // and not a warning — flagging it would put a complaint on a perfectly good
     // parts list. Proven positively: the cell really is shared.
     const a = itemCells(L3_ITEMS[2]!, catalog).map(hexKey);
     const b = itemCells(L3_ITEMS[3]!, catalog).map(hexKey);
     expect(a.filter((k) => b.includes(k))).toEqual(['1,1']);
-    expect(bom.issues.filter((i) => i.itemIds.includes('over1'))).toEqual([]);
-    expect(bom.issues.filter((i) => i.itemIds.includes('over2'))).toEqual([]);
+
+    // Neither is reported for sharing. Whatever else is said about them is
+    // about a different property — one of the two does straddle a panel seam,
+    // which is a separate, legal-but-worth-knowing fact and a warning, not an
+    // error (P8 item 4, now fixed).
+    for (const id of ['over1', 'over2']) {
+      const mine = bom.issues.filter((i) => i.itemIds.includes(id));
+      expect(mine.every((i) => i.code !== 'overlap')).toBe(true);
+      expect(mine.every((i) => i.level === 'warning')).toBe(true);
+    }
+    const seam = bom.issues.filter((i) => i.code === 'crosses-seam');
+    expect(seam.map((i) => i.itemIds[0]).sort()).toEqual(['over2', 'seam']);
   });
 
   it('the two panels do not overlap and no spurious issues appear', () => {
-    expect(codes(bom.issues)).toEqual(['off-panel', 'overlap', 'unknown-part']);
+    // The two crosses-seam warnings are the box and the hook that genuinely
+    // straddle the join between the fixture's two panels. `panel-overlap` is
+    // absent, which is the point of this case.
+    expect(codes(bom.issues)).toEqual([
+      'crosses-seam', 'crosses-seam', 'off-panel', 'overlap', 'unknown-part',
+    ]);
   });
 
   it('shopping list adds the rotated fastener’s own hardware exactly once', () => {
@@ -821,12 +836,20 @@ describe('4 — seam crossing', () => {
     expect(crossesSeam(inside, tiled)).toBe(false);
   });
 
-  it('FINDING: validate()/computeBom() never emit a crosses-seam issue', () => {
-    // The seam item in L3 sits on two panels. Nothing in the BOM says so, so a
-    // layout that arrives by file load or share link is never advised of it —
-    // the warning exists only transiently in the drag handler.
+  it('REGRESSION (was P8 item 4): validate() emits crosses-seam for a loaded layout', () => {
+    // The finding: the seam warning used to exist only inside the drag handler,
+    // so a layout that arrived by file load or share link was never advised of
+    // it. `validate` now runs the same `crossesSeam` test the editor does — the
+    // same function, not a second implementation of the rule.
     const issues = validate(L3, catalog);
-    expect(issues.some((i) => i.code === 'crosses-seam')).toBe(false);
+    const seam = issues.filter((i) => i.code === 'crosses-seam');
+    expect(seam.length).toBeGreaterThan(0);
+    expect(seam.every((i) => i.level === 'warning')).toBe(true);
+    // Every one of them names an item that really does straddle a seam.
+    for (const issue of seam) {
+      const it = L3.items.find((x) => x.id === issue.itemIds[0]);
+      expect(crossesSeam(itemCells(it!, catalog), L3.panels)).toBe(true);
+    }
   });
 });
 
@@ -1116,10 +1139,11 @@ describe('7 — findings (documented as tests so they cannot regress silently)',
     expect(shop(bom, 'M3 nut')).toBe(1);
   });
 
-  it('FINDING: the needs-review marker never reaches a BOM line', () => {
-    // 27 of 51 parts carry needsReview:true. `BomLine` has no field for it, so
-    // the CSV, Markdown and printable HTML the user carries to the printer show
-    // a bounding-box guess and a measured fit identically.
+  it('REGRESSION (was P8 item 3): the needs-review marker reaches the BOM line', () => {
+    // The finding: 27 of 51 parts carry needsReview:true, `BomLine` had no
+    // field for it, and so the CSV, Markdown and printable HTML the user
+    // carries to the printer showed a bounding-box guess and a measured fit
+    // identically. The `est.` badge existed on screen and nowhere else.
     const flagged = catalog.parts.filter(
       (p) => (p as unknown as { needsReview?: boolean }).needsReview === true,
     );
@@ -1127,10 +1151,13 @@ describe('7 — findings (documented as tests so they cannot regress silently)',
 
     const bom = computeBom(doc({ panels: [], items: [item('s', 'shelf-4', { q: 0, r: 0 })] }), catalog);
     const l = line(bom, 'shelf-4')!;
-    expect(Object.keys(l).sort()).toEqual(
-      ['file', 'grams', 'metres', 'minutes', 'name', 'partId', 'quantity', 'supports', 'type'].sort(),
+    expect(l.needsReview).toBe(true);
+    // ...and a measured part is not marked, or the flag would mean nothing.
+    const measured = computeBom(
+      doc({ panels: [], items: [item('i', 'insert-empty', { q: 0, r: 0 })] }),
+      catalog,
     );
-    expect('needsReview' in l).toBe(false);
+    expect(line(measured, 'insert-empty')!.needsReview).toBe(false);
   });
 
   it('FINDING: HSW-SPEC section 5 and the catalogue disagree on what two cover parts plug into', () => {
@@ -1145,17 +1172,11 @@ describe('7 — findings (documented as tests so they cannot regress silently)',
     expect(part('insert-empty').provenance.notes.join(' ')).toContain('13.4, 16.5, 18.5');
   });
 
-  it('PENDING FINDING: nothing reserves cells for the wall-mount inserts a panel requires', () => {
-    // STILL OPEN — PARKED.md P8 item 2. A 4x4 panel needs 4 countersunk inserts
-    // in 4 of its 16 cells, but the BOM does not place them and validate() does
-    // not check that 4 cells are free. Fill every cell of the panel and the BOM
-    // still cheerfully asks for 4 inserts that have nowhere to go. The fix is a
-    // warning in validate() when free cells < required wall mounts.
-    //
-    // Everything below asserts the CURRENT, WRONG behaviour so that the suite
-    // stays green while the defect stays visible. If someone implements the
-    // warning, the first assertion fails and this test should be inverted into
-    // a regression test for it.
+  it('REGRESSION (was P8 item 2): a full panel is warned it has no room for its wall mounts', () => {
+    // The finding: a 4x4 panel needs 4 countersunk inserts in 4 of its 16
+    // cells, but the BOM did not place them and validate() did not check that 4
+    // cells were free. Fill every cell and the BOM cheerfully asked for 4
+    // inserts with nowhere to go, and raised nothing.
     //
     // The cell list is panel A's real footprint under the -ceil(r/2) stagger:
     // rows 1 and 3 lean half a pitch LEFT of the row below. Using the old
@@ -1185,13 +1206,20 @@ describe('7 — findings (documented as tests so they cannot regress silently)',
     );
     const bom = computeBom(doc({ panels: [panelA], items }), catalog);
 
-    expect(
-      bom.issues,
-      'P8.2 appears to be FIXED — validate() now notices there is no room for the wall mounts. ' +
-        'Invert this test into a regression test for that warning.',
-    ).toEqual([]); // WRONG: there is no complaint at all
+    expect(bom.issues.map((i) => i.code)).toEqual(['no-room-for-mounts']);
+    const warned = bom.issues[0]!;
+    expect(warned.level).toBe('warning');
+    expect(warned.itemIds).toEqual(['pA']);
+    expect(warned.message).toContain('4 free cells');
+    expect(warned.message).toContain('has 0');
+
     expect(qty(bom, 'insert-cable-holder')).toBe(16); // every cell occupied
     expect(qty(bom, 'insert-countersunk')).toBe(4); // and nowhere to put them
     expect(items.length).toBe(part(panelA.partId).footprint.length); // the panel is genuinely full
+
+    // Leaving four cells free clears the warning: the check counts real free
+    // cells, it does not simply fire on any full-ish panel.
+    const roomy = computeBom(doc({ panels: [panelA], items: items.slice(0, 12) }), catalog);
+    expect(roomy.issues).toEqual([]);
   });
 });

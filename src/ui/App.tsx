@@ -12,28 +12,45 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import catalogJson from '../catalog/catalog.json';
 import { BEDS } from '../core/constants';
 import { toCsv, toMarkdownChecklist, toPrintableHtml, downloadName } from '../core/exporters';
+import { proposePart, type ImportedPart, type ImportProposal } from '../core/importPart';
 import { decodeShareUrl, encodeShareUrl, deserialize, serialize } from '../core/persist';
 import { emptyDoc, Store, type EditorState, type DropResult } from '../core/store';
 import { solveTiling, type PanelSize } from '../core/tiling';
 import type { Catalog, Hex, Rotation } from '../core/types';
+import {
+  deleteModelBytes, loadUserParts, mergeCatalog, putModelBytes, saveUserParts,
+} from '../core/userCatalog';
 import { BomPanel } from './BomPanel';
 import { CatalogPanel } from './CatalogPanel';
+import { ImportDialog } from './ImportDialog';
 import { WallCanvas, ghostCells, type DragPayload } from './WallCanvas';
 import { WallView3D } from './WallView3D';
 import './App.css';
 
-const catalog = catalogJson as unknown as Catalog;
+const baseCatalog = catalogJson as unknown as Catalog;
 
 type Theme = 'system' | 'light' | 'dark';
 
 export function App() {
+  /**
+   * The catalogue is the generated one plus whatever the user imported.
+   * `mergeCatalog` memoises on identity because `bom.ts` caches its part index
+   * in a WeakMap keyed on the Catalog object — a fresh merge per render would
+   * rebuild that index per render.
+   */
+  const [userParts, setUserParts] = useState<ImportedPart[]>(() => loadUserParts().parts);
+  const catalog = useMemo(() => mergeCatalog(baseCatalog, userParts), [userParts]);
+
   const storeRef = useRef<Store | null>(null);
   if (storeRef.current === null) {
     storeRef.current = new Store(loadInitialDoc(), catalog);
   }
   const store = storeRef.current;
+  useEffect(() => store.setCatalog(catalog), [store, catalog]);
 
   const [state, setState] = useState<EditorState>(() => store.getState());
+  const [importing, setImporting] = useState<ImportProposal | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
   const [drag, setDrag] = useState<DragPayload | null>(null);
   const [dropCheck, setDropCheck] = useState<DropResult>({ ok: true });
   const [toast, setToast] = useState<{ text: string; kind: 'error' | 'warn' | 'ok' } | null>(null);
@@ -305,6 +322,121 @@ export function App() {
     [store, say],
   );
 
+  // --- STL import ---------------------------------------------------------
+
+  /**
+   * Measure a dropped model and open the review dialog.
+   *
+   * Measuring is a few hundred milliseconds on the largest shipped panel, which
+   * is long enough to look like nothing happened — hence the busy state. It runs
+   * on the main thread deliberately: a worker would have to ship the catalogue
+   * across for the classification step, and this is fast enough that the
+   * complexity buys nothing.
+   */
+  const importStl = useCallback(
+    (file: File) => {
+      setBusy(`Measuring ${file.name}…`);
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const buffer = reader.result as ArrayBuffer;
+          const proposal = proposePart(file.name, buffer, store.catalog);
+          stlBytes.current.set(proposal.part.id, buffer);
+          setImporting(proposal);
+        } catch (err) {
+          say(`Could not read ${file.name}: ${(err as Error).message}`, 'error');
+        } finally {
+          setBusy(null);
+        }
+      };
+      reader.onerror = () => {
+        setBusy(null);
+        say(`Could not read ${file.name}`, 'error');
+      };
+      reader.readAsArrayBuffer(file);
+    },
+    [store, say],
+  );
+
+  /** Bytes of the file being reviewed, held until the part is actually added. */
+  const stlBytes = useRef(new Map<string, ArrayBuffer>());
+
+  const addImportedPart = useCallback(
+    (part: ImportedPart) => {
+      setUserParts((prev) => {
+        const next = [...prev.filter((p) => p.id !== part.id), part];
+        const problem = saveUserParts(next);
+        if (problem !== null) say(problem, 'warn');
+        return next;
+      });
+      const bytes = stlBytes.current.get(part.id);
+      if (bytes) {
+        // The mesh is what the 3D view draws. Losing it costs the mesh and
+        // nothing else, so a browser that refuses IndexedDB still gets a part.
+        void putModelBytes(part.id, bytes).then((stored) => {
+          if (!stored) say('Added, but this browser would not store the model for the 3D view', 'warn');
+        });
+        stlBytes.current.delete(part.id);
+      }
+      setImporting(null);
+      say(`Added ${part.name} — it is in the catalogue under Imported`, 'ok');
+    },
+    [say],
+  );
+
+  const removeImportedPart = useCallback(
+    (partId: string) => {
+      const placed = store.getState().doc.items.filter((i) => i.partId === partId).length;
+      if (placed > 0) {
+        say(`${placed} placement${placed === 1 ? ' uses' : 's use'} that part — delete those first`, 'error');
+        return;
+      }
+      setUserParts((prev) => {
+        const next = prev.filter((p) => p.id !== partId);
+        const problem = saveUserParts(next);
+        if (problem !== null) say(problem, 'warn');
+        return next;
+      });
+      void deleteModelBytes(partId);
+      say('Removed from the catalogue', 'ok');
+    },
+    [store, say],
+  );
+
+  /** One entry point for both kinds of file, so a drop never has to be aimed. */
+  const importFile = useCallback(
+    (file: File) => {
+      if (/\.stl$/i.test(file.name)) importStl(file);
+      else if (/\.json$/i.test(file.name)) importJson(file);
+      else say(`${file.name} is neither an STL model nor a saved layout`, 'error');
+    },
+    [importStl, importJson, say],
+  );
+
+  // Drop anywhere on the window. The wall itself is a drag target for placing
+  // parts, so a file dropped on it must not be mistaken for a placement — the
+  // check is on `dataTransfer.files`, which a part drag never carries.
+  useEffect(() => {
+    const over = (e: DragEvent) => {
+      if (e.dataTransfer?.types.includes('Files')) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+      }
+    };
+    const drop = (e: DragEvent) => {
+      const files = [...(e.dataTransfer?.files ?? [])];
+      if (files.length === 0) return;
+      e.preventDefault();
+      for (const file of files) importFile(file);
+    };
+    window.addEventListener('dragover', over);
+    window.addEventListener('drop', drop);
+    return () => {
+      window.removeEventListener('dragover', over);
+      window.removeEventListener('drop', drop);
+    };
+  }, [importFile]);
+
   // --- render -------------------------------------------------------------
 
   const selectedPartIds = useMemo(() => {
@@ -391,14 +523,14 @@ export function App() {
           <button type="button" onClick={() => store.undo()} disabled={!state.canUndo} title="Undo (Ctrl+Z)">Undo</button>
           <button type="button" onClick={() => store.redo()} disabled={!state.canRedo} title="Redo (Ctrl+Shift+Z)">Redo</button>
           <button type="button" onClick={share}>Share</button>
-          <label className="app__import">
+          <label className="app__import" title="Add an STL model, or open a saved layout">
             Import
             <input
               type="file"
-              accept="application/json,.json"
+              accept=".stl,model/stl,application/json,.json"
+              multiple
               onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) importJson(f);
+                for (const f of e.target.files ?? []) importFile(f);
                 e.target.value = '';
               }}
             />
@@ -423,6 +555,7 @@ export function App() {
             onFilterChange={setFilter}
             selectedPartId={[...selectedPartIds][0]}
             onDragStart={(partId) => beginPartDrag(partId)}
+            onRemovePart={removeImportedPart}
           />
         </aside>
 
@@ -463,7 +596,35 @@ export function App() {
               }}
             />
           )}
-          {toast && (
+          {/*
+            First-run guidance on the largest surface in the product, which
+            otherwise opened as an empty black rectangle with a line of
+            keyboard hints in the corner. It goes when the wall does, and it
+            never eats a pointer event: the stage underneath is a drop target,
+            and a panel dropped where this text sits must still land.
+          */}
+          {state.doc.panels.length === 0 && state.doc.items.length === 0 && (
+            <div className="app__empty" aria-hidden="true">
+              <p className="app__empty-title">Start with the wall</p>
+              <ol className="app__empty-steps">
+                <li>Set the size of your wall and pick your printer, above.</li>
+                <li>
+                  Press <strong>Solve panels</strong> and the planner works out which panels
+                  to print and how they tile.
+                </li>
+                <li>Drag hooks, shelves and bins from the catalogue onto the cells.</li>
+              </ol>
+              <p className="app__empty-note">
+                Got your own model? Drop an STL anywhere on this window and it is measured,
+                classified and added to the catalogue.
+              </p>
+            </div>
+          )}
+
+          {busy !== null && (
+            <div className="app__toast app__toast--ok" role="status">{busy}</div>
+          )}
+          {toast && busy === null && (
             <div className={`app__toast app__toast--${toast.kind}`} role="status">
               {toast.text}
             </div>
@@ -485,6 +646,18 @@ export function App() {
           />
         </aside>
       </div>
+
+      {importing !== null && (
+        <ImportDialog
+          proposal={importing}
+          catalog={catalog}
+          onCancel={() => {
+            stlBytes.current.delete(importing.part.id);
+            setImporting(null);
+          }}
+          onConfirm={addImportedPart}
+        />
+      )}
     </div>
   );
 }

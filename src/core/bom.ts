@@ -35,6 +35,7 @@
  */
 
 import { hexKey, hexSub, keyToHex, panelCells, placeFootprint } from './hex';
+import { crossesSeam } from './tiling';
 import type {
   Bom,
   BomLine,
@@ -139,6 +140,19 @@ function estimateOf(part: CatalogPart): {
     supports: print?.supports === true,
   };
 }
+
+/**
+ * Is this part's footprint a bound rather than a measurement?
+ *
+ * `needsReview` is written by `tools/scan.py` and by the browser importer, but
+ * it is not part of the `CatalogPart` contract, so it is read structurally and
+ * anything other than an explicit `true` counts as measured.
+ */
+const needsReviewOf = (part: CatalogPart): boolean =>
+  (part as unknown as { needsReview?: unknown }).needsReview === true;
+
+/** Modelled print figures rather than a real slice. */
+const isEstimated = (part: CatalogPart): boolean => part.print?.source === 'volume';
 
 // ---------------------------------------------------------------------------
 // Footprints
@@ -245,9 +259,9 @@ function occupancyOf(entries: { id: string; cells: Hex[] }[]): Map<string, strin
 /**
  * Everything wrong with the layout that this module can see.
  *
- * Seam crossing belongs to the tiling module and is simply absent here; the
- * `crosses-seam` code stays in the Issue union and this function neither emits
- * nor depends on it.
+ * Seam detection itself belongs to the tiling module; this function calls it
+ * rather than reimplementing it, so the warning a file raises on load and the
+ * warning a drop raises in the editor are the same test.
  */
 export function validate(doc: LayoutDoc, catalog: Catalog): Issue[] {
   const index = partIndex(catalog);
@@ -357,6 +371,26 @@ export function validate(doc: LayoutDoc, catalog: Catalog): Issue[] {
     }
   }
 
+  // --- crosses-seam -------------------------------------------------------
+  // The editor warns about this at drop time, which covers a layout you built
+  // by hand and nothing else: a layout that arrived by file, by share link, or
+  // by a wall resize that moved the panels under it was never advised at all.
+  // Spanning a seam is legal — some inserts exist to do it — so it stays a
+  // warning, one per item.
+  if (panels.length > 1) {
+    for (const footprint of itemFootprints) {
+      if (footprint.cells.length < 2) continue;
+      if (!crossesSeam(footprint.cells, panels)) continue;
+      issues.push({
+        level: 'warning',
+        code: 'crosses-seam',
+        message: `Item "${footprint.id}" spans the join between two panels.`,
+        itemIds: [footprint.id],
+        cells: [...footprint.cells].sort(byCell),
+      });
+    }
+  }
+
   // --- no-panel -----------------------------------------------------------
   if (panels.length === 0 && items.length > 0) {
     issues.push({
@@ -369,7 +403,61 @@ export function validate(doc: LayoutDoc, catalog: Catalog): Issue[] {
     });
   }
 
+  // --- no-room-for-mounts -------------------------------------------------
+  // A panel hangs on the wall through its own cells: a countersunk insert drops
+  // into one and takes a wall screw. Fill every cell with accessories and the
+  // BOM still orders those inserts, with nowhere left to put them — a parts
+  // list that is correct about what to print and silent about what cannot be
+  // built. Counted per panel, because a mount has to be in the panel it holds.
+  for (const panel of panels) {
+    const part = index.get(panel.partId);
+    if (part === undefined) continue;
+    const mounts = wallMountsRequired(part, index);
+    if (mounts === 0) continue;
+
+    const cells = panelCellsOf(panel);
+    const taken = new Set<string>();
+    for (const footprint of itemFootprints) {
+      for (const cell of footprint.cells) taken.add(hexKey(cell));
+    }
+    const free = cells.filter((c) => !taken.has(hexKey(c))).length;
+    if (free >= mounts) continue;
+
+    issues.push({
+      level: 'warning',
+      code: 'no-room-for-mounts',
+      message:
+        `Panel "${panel.id}" needs ${mounts} free cell${mounts === 1 ? '' : 's'} for the ` +
+        `wall mounts that hold it up, and has ${free}. Clear ${mounts - free} cell` +
+        `${mounts - free === 1 ? '' : 's'}, or fit the mounts before the accessories.`,
+      itemIds: [panel.id],
+    });
+  }
+
   return issues;
+}
+
+/**
+ * How many cells this panel's own fixings will occupy.
+ *
+ * Read from the panel's `requires[]` rather than recomputing the 4-plus-one-per-
+ * 50-cells rule, so the count that is warned about is exactly the count that is
+ * ordered — two rules would drift the moment either changed. Only requirements
+ * that actually plug into a cell are counted.
+ */
+function wallMountsRequired(
+  panel: CatalogPart,
+  index: ReadonlyMap<string, CatalogPart>,
+): number {
+  let total = 0;
+  for (const req of asArray(panel.requires)) {
+    const part = req ? index.get(req.partId) : undefined;
+    if (part === undefined) continue;
+    if (part.type !== 'insert' && part.type !== 'fastener') continue;
+    const cells = Math.max(1, asArray(part.footprint).length);
+    total += countOf(req.count) * cells;
+  }
+  return total;
 }
 
 // ---------------------------------------------------------------------------
@@ -447,7 +535,14 @@ export function computeBom(doc: LayoutDoc, catalog: Catalog): Bom {
       minutes: roundMinutes(est.minutes * quantity),
       grams: roundGrams(est.grams * quantity),
       metres: roundMetres(est.metres * quantity),
+      // Per-unit figures come from the catalogue, never from total ÷ quantity:
+      // that division reads back a number that has already been rounded.
+      minutesEach: roundTo(est.minutes, 2),
+      gramsEach: roundGrams(est.grams),
+      metresEach: roundMetres(est.metres),
       supports: est.supports,
+      needsReview: needsReviewOf(part),
+      estimated: isEstimated(part),
     };
     (isFastener(part) ? fasteners : printed).push(line);
   }

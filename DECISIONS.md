@@ -409,3 +409,176 @@ Two things read wrong once there was something to look at:
 - **The seams were the loudest thing on the wall** — heavier than the parts the user had placed,
   which inverts the hierarchy. A seam is reference information; it has to be findable, not loud.
   Weight and alpha both reduced.
+
+---
+
+## D22. Importing an STL in the browser — a second measurer, held to the first
+
+The brief asks for new models to be usable without a round trip through Python. That means a
+second implementation of the thing this project is most careful about, which is a real risk: two
+measurers that disagree turn one catalogue into two.
+
+So it is written as a port with a test that pins it. `tools/footprint.py` reaches its answer with
+trimesh cross-sections and shapely booleans; `src/core/detect.ts` reaches it with a raster,
+because a browser has neither library. Every question the Python detector asks a polygon — is
+this cell filled, is that hole hexagonal, how much of the probe is covered — is a question about
+*area*, and a raster answers area without a boolean-geometry library.
+
+**`tests/detect.test.ts` runs the browser detector over all 51 shipped models and requires it to
+reproduce the scanner's footprint cell for cell.** It does: 51/51, including the six chiral panels
+where a mirrored answer would be silently wrong, and the 4-cell diamond inserts whose filenames do
+not describe their shape. Tier and `needsReview` match too.
+
+Two details carried over deliberately:
+
+- **The bounding-box gate is the sharp test**, not area overlap. A plain rectangle is ~70%
+  coverable by hexagons, so area scoring calls a storage box a 3-cell wall part; the gate rejects
+  it because the box does not decompose onto the lattice.
+- **The axis permutations are cyclic.** A cyclic permutation is a rotation; an acyclic one is a
+  reflection, which would mirror the footprint — the same class of error as the stagger parity in
+  D4's neighbourhood.
+
+---
+
+## D23. An imported part's print estimate is modelled, and says so
+
+There is no slicer in a browser. The honest options were to leave the numbers blank or to model
+them and mark them, and blank numbers make a parts list useless for the thing it is for — deciding
+whether you can print this tonight.
+
+Volume × density is not good enough: these parts are mostly perimeter, and that model is wrong by
+up to **109%** on this very model set. So the estimate is shell-plus-infill.
+
+**The first version of this was fitted on the 51 shipped parts alone, and that was a mistake** —
+see D28, which is the correction. It now fits 73 slices spanning solids as well as shells, and
+charges shell and infill different rates because perimeters print at 45 mm/s and infill at 80.
+
+| | HSW parts | held out of the fit |
+|---|---|---|
+| grams | RMS **7.0%**, worst 20.6% | RMS 11.3%, worst 19.2% |
+| minutes | RMS **13.2%**, worst 30.9% | RMS 26.3%, worst 46.9% |
+
+Those bounds are asserted in `tests/stl.test.ts` rather than described, so loosening them has to
+be a deliberate act. Every part built this way carries `print.source: 'volume'`, and the catalogue
+tile, the parts list, the CSV, the Markdown checklist and the printable sheet all mark it.
+
+---
+
+## D24. The import dialog is where a measurement problem becomes an authoring one
+
+PARKED P1 said it: geometry can measure how wide a shelf is, but it cannot say which cells its
+installer will put its inserts in, because **that is a choice, not a feature**. 29 of 51 shipped
+parts are in that position.
+
+The dialog is the answer P1 proposed, built: it shows every measured number, says plainly which
+of them are bounds, and gives the two controls that geometry cannot supply — draw the footprint,
+and name the insert it bolts to.
+
+One rule keeps it honest: **accepting the proposed footprint is not the same as confirming it.**
+Only an actual edit clears `needsReview`. Pressing Add on a bounded part leaves it flagged, so a
+bound is never silently promoted to a measurement by a click.
+
+---
+
+## D25. Imported parts live beside the generated catalogue, never inside it
+
+`src/catalog/catalog.json` is generated and read-only — hand-editing it is the one thing CLAUDE.md
+says never to do, because the next `--rescan` would erase the edit.
+
+So imported parts are a separate list that is merged at read time, and their ids carry a `user/`
+prefix, which makes a collision with a generated part structurally impossible rather than a case
+to resolve. Metadata goes in localStorage (small, synchronous, wanted before first render); the
+STL bytes go in IndexedDB (megabytes). Losing the bytes costs the 3D mesh and nothing else, so a
+browser that refuses IndexedDB still gets a working part.
+
+The merge is memoised on identity, because `bom.ts` caches its part index in a `WeakMap` keyed on
+the `Catalog` object. A fresh merge per render would rebuild that index per render.
+
+---
+
+## D26. The 3D view draws the real mesh, not a box the size of the box
+
+Every accessory used to be an extruded bounding box. That answers "does it fit", which is what the
+plan view is for, and not the question the 3D view exists to answer: what will this look like on
+my wall, and does this hook foul the one beside it. A 20-slot SD-card holder and a coat hook were
+the same grey cuboid.
+
+Each placed part is now drawn from its own STL — lazily, cached per part id, one fetch per
+distinct part, with the box kept as the placeholder until it arrives and as the permanent fallback
+when it cannot be fetched.
+
+Orientation is not guesswork: the detector already knows which axis faces the wall, which end of
+that axis it is, and whether the part is drawn flat-top and so must be spun 90° to sit on a
+pointy-top wall. `meshLibrary.ts` re-runs `detect()` rather than inventing a second orientation
+rule — one rule, one place, and the mesh cannot end up disagreeing with the footprint.
+
+Turning a part over is a 180° rotation about an in-plane axis, **not** a negation of the wall
+normal on its own. Negating one axis is a reflection, and a mirrored hook is a left-hand hook on a
+right-hand wall: wrong in a way that looks fine.
+
+---
+
+## D27. Two interaction defects that only a real browser shows
+
+Both were invisible to the test suite and obvious within a minute of using the app.
+
+**The 3D toolbar was dead to a mouse.** `Fit` and `Front` sit inside the canvas host so they can
+float over the wall, so their `pointerdown` bubbles to the host's handler, which called
+`setPointerCapture`. Capture redirects every later pointer event to the host, and the button never
+received its click — while working perfectly when called from code, which is why nothing caught
+it. The handler now ignores events originating inside `.wall3d__tools`.
+
+**The whole app scrolled its own chrome away.** The shell is `100dvh` with `overflow: hidden`, yet
+`documentElement.scrollHeight` measured 3326 against a 900px window: the catalogue's tall tile list
+propagated its overflow past its own `overflow-y: auto` and into the viewport's scrolling area.
+Clicking or tabbing to a tile scrolled the page and took the top bar off screen, with no scrollbar
+to bring it back. `contain: layout paint` on the two scrolling panels fixes it — `layout paint`
+rather than `strict`, because `strict` implies `size` and would make the grid track report zero
+height.
+
+
+---
+
+## D28. The estimator had memorised the model set, and only a slicer could show it
+
+PrusaSlicer became available on the machine after the import feature was built, which made two
+checks possible that had not been.
+
+**First: the committed catalogue reproduces.** All 51 parts re-sliced from scratch against the
+committed profile hash on macOS — filament mass identical on every one, print time within 0.05 %,
+length within 0.11 %. The catalogue was generated on Windows, so that is a cross-platform
+reproduction, and the mass column does not move at all. HSW-SPEC §7 now records it.
+
+**Second, and the reason this decision exists: the in-browser estimator was overfitted, and its
+own test suite could not see it.** D23 reported RMS 15 % on print time and it was true — against
+the 51 shipped parts, every one of which is a hook, a clip or a perforated plate. Sliced against
+geometry that is not in that family:
+
+| shape | real | estimated |
+|---|---|---|
+| solid cube, 25 mm | 30.2 min | 47.8 min (**+58 %**) |
+| sphere, r15 | 27.4 min | 42.2 min (**+54 %**) |
+| flat plate, 60 × 2 × 80 | 55.4 min | 88.3 min (**+59 %**) |
+
+The cause is straightforward once seen: the model charged one blended rate per mm³ of filament,
+and every part it learned from was almost pure perimeter. It had no example of infill to learn
+that infill prints nearly twice as fast. Someone importing a chunky bin would have been told an
+hour of print time that did not exist.
+
+Fixing it meant fixing the *fit set*, not the formula: 22 generated shapes spanning solid blocks,
+thin shells, flat plates, tall posts, cylinders and tubes, plus four shapes held out entirely.
+Refitting on the union improved every family at once — HSW time RMS 15 % → **13.2 %**, worst
+42 % → **31 %**, and held-out worst 59.5 % → **46.9 %**.
+
+Two things did *not* work and are recorded so they are not retried blindly:
+
+- fitting the shell/infill split on the 51 HSW parts alone made it **worse** (RMS 15.0 % → 17.9 %),
+  because with no infill in the data the second coefficient has nothing to identify it;
+- adding a fourth term for average cross-section perimeter — an attempt to distinguish long fast
+  lines from small fiddly ones — did not help either family. The remaining error on a flat plate
+  (+47 %) is real and unexplained by anything cheap to compute from a mesh.
+
+The lasting change is not the constants, it is `tests/fixtures/estimator-calibration.json`: 27
+shapes with their real slicer results, checked by `tests/stl.test.ts` **without needing a slicer**.
+Fitting and testing on one family proves only that you memorised that family, and now the suite
+cannot make that mistake quietly again. `tools/calibrate_estimator.py` regenerates the whole thing.

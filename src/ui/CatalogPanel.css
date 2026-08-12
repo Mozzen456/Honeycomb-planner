@@ -86,9 +86,19 @@
    Scroll region
    -------------------------------------------------------------------------- */
 
+/* `contain` is load-bearing, not an optimisation.
+   Without it the tall tile list propagates its overflow past this box's own
+   `overflow-y: auto` and into the viewport's scrolling area: the shell is
+   100dvh with `overflow: hidden`, yet documentElement.scrollHeight measured
+   3326 against a 900px window. The visible symptom is that focusing a tile —
+   clicking one, or tabbing to it — scrolls the WHOLE app and takes the top bar
+   off screen, with no scrollbar to scroll it back.
+   `layout paint` rather than `strict`: `strict` implies `size`, which would
+   make this grid track report zero height to its parent. */
 .catalog-panel__scroll {
   overflow-y: auto;
   overflow-x: hidden;
+  contain: layout paint;
   padding: var(--space-2) var(--space-3) var(--space-4);
   display: grid;
   align-content: start;
@@ -169,6 +179,10 @@
 .catalog-tile__slot {
   display: grid;
   min-inline-size: var(--space-0);
+  /* Positioning context for the remove control on imported tiles. The control
+     sits over the tile rather than inside it: the tile is a drag handle, and a
+     button inside it would start a drag on press. */
+  position: relative;
 }
 
 /* -----------------------------------------------------------------------------
@@ -245,6 +259,52 @@
 
 .catalog-tile__dot {
   padding-inline: var(--space-1);
+}
+
+/* An imported part's print numbers are modelled rather than sliced. The marker
+   is the same word the parts list uses for an estimated footprint, because it
+   means the same thing to the reader: this number is a model, not a
+   measurement. */
+.catalog-tile__est {
+  margin-inline-end: var(--space-1);
+  padding-inline: var(--space-1);
+  border-radius: var(--radius-sm);
+  background-color: var(--warning-bg);
+  color: var(--warning-fg);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+/* ---------- imported parts ---------- */
+
+.catalog-tile__remove {
+  position: absolute;
+  inset-block-start: var(--space-1);
+  inset-inline-end: var(--space-1);
+  inline-size: var(--space-4);
+  block-size: var(--space-4);
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-none);
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-standard);
+}
+
+.catalog-tile__slot:hover .catalog-tile__remove,
+.catalog-tile__remove:focus-visible {
+  opacity: 1;
+}
+
+.catalog-tile__remove:hover {
+  background-color: var(--danger-bg);
+  color: var(--danger-fg);
+}
+
+/* A coarse pointer has no hover, so the control is always visible there. */
+@media (pointer: coarse) {
+  .catalog-tile__remove { opacity: 1; }
 }
 
 /* -----------------------------------------------------------------------------

@@ -36,9 +36,16 @@ row step), are marked `needsReview`, are listed in `UNKNOWN.md`, and are shown i
 **What to do:** correct any of them in `src/catalog/overrides.json`, keyed by part id. The scanner
 reads that file and never writes it, so a correction survives every rescan.
 
-**What I would do with more time:** offer a "define footprint" mode in the app — drop the part, then
-click the cells its inserts occupy, and write the result straight to `overrides.json`. That turns a
-measurement problem into a two-click authoring problem, which is what it actually is.
+**RESOLVED for imported parts, and half-resolved for shipped ones.** The "define footprint" mode
+described here now exists: drop an STL on the window and the import dialog shows every measured
+number, says which are bounds, and lets you click the cells the part really occupies. Accepting the
+proposal does *not* clear the flag — only an actual edit does, so a bound is never promoted to a
+measurement by a click (DECISIONS D24).
+
+What it does not yet do is write a correction for one of the 29 **shipped** parts back to
+`src/catalog/overrides.json`, because a browser cannot write into the repo. Correcting one of those
+still means editing `overrides.json` by hand — or importing the same STL and drawing its footprint,
+which gives you a usable part immediately but a modelled print estimate rather than the sliced one.
 
 ---
 
@@ -137,31 +144,19 @@ it visible.
 
 ---
 
-## P8. Defects found by the critics that are still open
+## P8. RESOLVED — the critics' open defects are closed
 
-Fixed: group rotation silently translating a selection, the 90°-rotation tiling bug, the
-stagger-parity mirror, silent truncation in `deserialize`, the panel-cell-count bomb, store/BOM
-disagreement on anchors and empty footprints, `rotateItems(NaN)`, 18 accessories that required
-no insert or bolt, and the accessory/insert bolt double-count (D20).
+All six are fixed, and each pinned test has been inverted into a regression test rather than
+deleted. `npm test` is **467 passing** (was 394).
 
-Still open, in severity order:
-
-1. **`checkPlacement` accepts coordinates that `persist` refuses** (±1e9). The item is dropped on
-   reload *with a clear message*, so it is loud rather than silent — but the two modules disagree
-   about what a legal document is, and the store is the permissive one. Fix: clamp in `addItem`.
-2. **Nothing reserves cells for the wall-mount inserts a panel requires.** Fill all 16 cells of a
-   4×4 panel and the BOM still asks for 4 countersunk inserts with nowhere to put them, and raises
-   no issue. Fix: a warning in `validate` when free cells < required wall mounts.
-3. **`needsReview` never reaches a BOM line**, so the `est.` marker is on screen but absent from
-   the CSV, markdown and print page — the sheet you actually carry to the printer. Fix: add the
-   field to `BomLine` and surface it in all three exporters.
-4. **`crosses-seam` is in the `Issue` union but never emitted by `validate`.** The seam warning
-   fires at drop time only, so a layout arriving by file or share link is never advised.
-5. **Bulk placement is quadratic-ish**: 0.039 ms/item at 200 items, 0.216 ms/item at 2000, because
-   `checkPlacement` rebuilds the occupancy map per call. No cliff, and a drag on a 20k-item wall
-   still costs ~2 ms per pointer move, but it should be an incremental index.
-6. **CSV per-unit columns divide the rounded line total**, so `minutes_each` reads 54.6 where the
-   catalogue says 54.63. Cosmetic; the fix is to read the catalogue value.
+| # | Was | Now |
+|---|---|---|
+| 1 | `checkPlacement` accepted coordinates `persist` refuses (±1e9) | `addItem`, `moveItems` and `duplicateItems` clamp against `MAX_CELL_COORD`, the same 1e7 limit `persist.readCoord` uses. One constant, two modules. |
+| 2 | Nothing reserved cells for a panel's wall mounts | `validate` emits `no-room-for-mounts` when a panel's free cells are fewer than the fixings it orders. The count is read from the panel's own `requires[]`, so the warning and the order cannot drift apart. |
+| 3 | `needsReview` never reached a BOM line | `BomLine` carries `needsReview` and `estimated`; the CSV has two new columns, the checklist and the printable sheet spell them out in words. |
+| 4 | `crosses-seam` was in the `Issue` union but never emitted | `validate` calls the tiler's own `crossesSeam`, so a layout that arrives by file or share link is advised exactly as a drop is. |
+| 5 | Bulk placement was quadratic-ish | The occupancy map is cached on the immutable items array and *extended* across an append instead of rebuilt. Measured: 0.129 ms/item at 2000 items → **0.004 ms/item**, and flat against 200. |
+| 6 | CSV per-unit columns divided the rounded line total | `BomLine` carries the catalogue's per-unit figures; the exporter reads them. 54.63 stays 54.63. |
 
 ---
 
@@ -194,15 +189,34 @@ the brief asked for it to work on a tablet.
 7. `--space-1-5`, which was referenced but never defined.
 8. Canvas hierarchy (the plate is now drawn, seams quietened), theme repaint, clipped wall inputs.
 
+**Also fixed since, and the narrow layout has now been seen rendered:**
+
+9. **The canvas empty state** exists: a three-step start card over the empty wall, which also says
+   an STL can be dropped anywhere. It is `pointer-events: none`, because the stage under it is a
+   drop target and a panel dropped on the words has to land.
+10. **The containment bug was worse than a phantom gutter.** `documentElement.scrollHeight`
+    measured 3326 against a 900px window, and clicking or tabbing to a catalogue tile scrolled the
+    whole app so the top bar left the screen. `contain: layout paint` on both scrolling panels —
+    not `strict`, which implies `size` and collapses the grid track.
+11. `.bom-export` and `.app__import` now consume `.button`, which is the only definition of button
+    chrome left in the app. The 12 px / 13 px disagreement is gone with them.
+12. `.visually-hidden` is defined once, in `base.css`.
+13. **The tablet layout was broken in a way the CSS review could not see.** Rendered at 1024 px,
+    the top bar overflowed and pushed `Solve panels` and the 3D/Plan toggle off the end — the
+    primary action in the product, invisible on the device the brief named. The bar now wraps.
+    Also: two-line part names were cropped through the second line, and the keyboard hint ran
+    underneath the Fit/Front buttons.
+
 **Still open:**
 
-- **No canvas empty state.** The largest surface in the product still has no first-run guidance;
-  the 3D view has a one-line hint in the corner and nothing else.
-- **`.catalog-panel__scroll` needs `contain: strict`** — without it the `100dvh; overflow:hidden`
-  shell reports `scrollHeight` 3339 and keeps a phantom scrollbar gutter.
-- `.bom-export` and `.app__import` still hand-roll button chrome instead of consuming the new
-  `.button`, and disagree with each other on font size (12 px vs 13 px).
-- `.visually-hidden` is defined twice, in `App.css` and `base.css`, with different bodies.
+- **The print estimate for imported parts is ±30 %, and ±50 % on unusual geometry.** It is a model,
+  not a slice, and it is marked as one everywhere it appears. The residual is concentrated in one
+  place: a large flat plate still comes out ~47 % slow, because nothing cheaply computable from a
+  mesh distinguishes long fast extrusion lines from short fiddly ones. Two attempts at a feature
+  that would are recorded in DECISIONS D28. Anyone wanting a real number should slice the file.
+- **A phone is cramped.** At 375 px the wall gets about a third of the screen once the bar, the
+  catalogue strip and the parts list have theirs. Nothing is broken or hidden, but planning a
+  garage wall on a phone is not a thing this layout makes pleasant.
 
 None of these were token-layer failures — `tokens.css` is sound and its contrast is measured. They
 were all places where the shell had been assembled without consuming it.
@@ -217,6 +231,14 @@ Honest gaps, so nobody assumes coverage that is not there:
   canvas and coarse-pointer target sizes, and it is exercised with synthetic pointer events — but
   not on an actual tablet. Multi-touch pinch-zoom in particular is unverified.
 - **Browsers other than Chrome.** Nothing used is Chrome-specific (Pointer Events, Path2D,
-  `ResizeObserver`, `MutationObserver`, `TextEncoder`), but Firefox and Safari were not opened.
+  `ResizeObserver`, `MutationObserver`, `TextEncoder`, IndexedDB, `contain`), but Firefox and
+  Safari were not opened.
+- **A slow or offline model fetch.** The 3D view falls back to the measured box when a model
+  cannot be fetched, and that path is exercised by removing the file — but not against a slow
+  connection, and there is no spinner on an individual part.
+- **A huge imported STL.** Measurement runs on the main thread; the largest shipped model
+  (19k triangles, 928 KB) takes about 20 ms to measure and 400 ms in the worst detector case. A
+  million-triangle scan would block the tab for noticeably longer, and nothing yet moves that work
+  to a worker.
 - **Printing for real.** The print page is verified to be self-contained, to carry `@media print`
   rules and `break-inside` protection, and to be legible — but no paper came out of a printer.

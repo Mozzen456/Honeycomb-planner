@@ -1,0 +1,278 @@
+{
+ "_": "Real PrusaSlicer 2.9.6 results for geometry that is NOT part of the HSW model set.",
+ "_why": "The in-browser estimator (src/core/stl.ts) is fitted against printed parts. Fitting and testing on the same family proves only that it memorised that family \u2014 and it had: on a solid cube and a flat plate the first version was 54-59% slow. These 26 shapes span the regime the HSW parts do not (infill-dominated solids, flat plates, tall posts, tubes) so the estimator can be held to a stated error on geometry a user might actually import.",
+ "_profile": "PLA-0.20mm-15pct-2perim-0.4nozzle/PrusaSlicer@0b71b5f111592797 (the profile in HSW-SPEC.md 7)",
+ "_regenerate": "tools/calibrate_estimator.py",
+ "shapes": [
+  {
+   "name": "cyl-r10h20",
+   "family": "calibration",
+   "volumeMm3": 6257.379,
+   "areaMm2": 1881.083,
+   "heightMm": 20.0,
+   "grams": 2.82,
+   "minutes": 14.72,
+   "metres": 0.9456
+  },
+  {
+   "name": "cyl-r20h15",
+   "family": "calibration",
+   "volumeMm3": 18772.136,
+   "areaMm2": 4385.97,
+   "heightMm": 15.0,
+   "grams": 7.27,
+   "minutes": 35.8,
+   "metres": 2.4366
+  },
+  {
+   "name": "cyl-r8h60",
+   "family": "calibration",
+   "volumeMm3": 12014.167,
+   "areaMm2": 3413.302,
+   "heightMm": 60.0,
+   "grams": 5.63,
+   "minutes": 30.82,
+   "metres": 1.8873
+  },
+  {
+   "name": "plate-120x80x4",
+   "family": "calibration",
+   "volumeMm3": 38400.0,
+   "areaMm2": 20800.0,
+   "heightMm": 4.0,
+   "grams": 23.32,
+   "minutes": 145.72,
+   "metres": 7.8182
+  },
+  {
+   "name": "plate-40x40x3",
+   "family": "calibration",
+   "volumeMm3": 4800.0,
+   "areaMm2": 3680.0,
+   "heightMm": 3.0,
+   "grams": 3.68,
+   "minutes": 24.38,
+   "metres": 1.234
+  },
+  {
+   "name": "plate-60x60x8",
+   "family": "calibration",
+   "volumeMm3": 28800.0,
+   "areaMm2": 9120.0,
+   "heightMm": 8.0,
+   "grams": 12.75,
+   "minutes": 68.55,
+   "metres": 4.2748
+  },
+  {
+   "name": "plate-80x60x2",
+   "family": "calibration",
+   "volumeMm3": 9600.0,
+   "areaMm2": 10160.0,
+   "heightMm": 2.0,
+   "grams": 9.55,
+   "minutes": 67.1,
+   "metres": 3.2013
+  },
+  {
+   "name": "post-10x100",
+   "family": "calibration",
+   "volumeMm3": 10000.0,
+   "areaMm2": 4200.0,
+   "heightMm": 100.0,
+   "grams": 5.79,
+   "minutes": 54.42,
+   "metres": 1.94
+  },
+  {
+   "name": "post-16x140",
+   "family": "calibration",
+   "volumeMm3": 35840.0,
+   "areaMm2": 9472.0,
+   "heightMm": 140.0,
+   "grams": 15.8,
+   "minutes": 79.03,
+   "metres": 5.296
+  },
+  {
+   "name": "post-4x40",
+   "family": "calibration",
+   "volumeMm3": 640.0,
+   "areaMm2": 672.0,
+   "heightMm": 40.0,
+   "grams": 0.83,
+   "minutes": 15.33,
+   "metres": 0.2781
+  },
+  {
+   "name": "post-6x60",
+   "family": "calibration",
+   "volumeMm3": 2160.0,
+   "areaMm2": 1512.0,
+   "heightMm": 60.0,
+   "grams": 2.8,
+   "minutes": 29.77,
+   "metres": 0.94
+  },
+  {
+   "name": "shell-25-w1.0",
+   "family": "calibration",
+   "volumeMm3": 3458.0,
+   "areaMm2": 6924.0,
+   "heightMm": 25.0,
+   "grams": 4.24,
+   "minutes": 29.42,
+   "metres": 1.42
+  },
+  {
+   "name": "shell-30-w1.6",
+   "family": "calibration",
+   "volumeMm3": 7751.169,
+   "areaMm2": 9709.44,
+   "heightMm": 30.0,
+   "grams": 9.42,
+   "minutes": 58.75,
+   "metres": 3.1571
+  },
+  {
+   "name": "shell-40-w2.4",
+   "family": "calibration",
+   "volumeMm3": 20385.798,
+   "areaMm2": 17034.239,
+   "heightMm": 40.0,
+   "grams": 20.2,
+   "minutes": 120.2,
+   "metres": 6.7729
+  },
+  {
+   "name": "shell-50-w3.2",
+   "family": "calibration",
+   "volumeMm3": 42118.149,
+   "areaMm2": 26405.76,
+   "heightMm": 50.0,
+   "grams": 33.37,
+   "minutes": 191.55,
+   "metres": 11.1896
+  },
+  {
+   "name": "solid-cube-12",
+   "family": "calibration",
+   "volumeMm3": 1728.0,
+   "areaMm2": 864.0,
+   "heightMm": 12.0,
+   "grams": 1.08,
+   "minutes": 7.12,
+   "metres": 0.3619
+  },
+  {
+   "name": "solid-cube-18",
+   "family": "calibration",
+   "volumeMm3": 5832.0,
+   "areaMm2": 1944.0,
+   "heightMm": 18.0,
+   "grams": 2.77,
+   "minutes": 15.25,
+   "metres": 0.9303
+  },
+  {
+   "name": "solid-cube-25",
+   "family": "calibration",
+   "volumeMm3": 15625.0,
+   "areaMm2": 3750.0,
+   "heightMm": 25.0,
+   "grams": 6.15,
+   "minutes": 30.2,
+   "metres": 2.0606
+  },
+  {
+   "name": "solid-cube-35",
+   "family": "calibration",
+   "volumeMm3": 42875.0,
+   "areaMm2": 7350.0,
+   "heightMm": 35.0,
+   "grams": 14.81,
+   "minutes": 65.83,
+   "metres": 4.965
+  },
+  {
+   "name": "solid-cube-45",
+   "family": "calibration",
+   "volumeMm3": 91125.0,
+   "areaMm2": 12150.0,
+   "heightMm": 45.0,
+   "grams": 28.41,
+   "minutes": 114.78,
+   "metres": 9.5261
+  },
+  {
+   "name": "tube-r15h25w2.0",
+   "family": "calibration",
+   "volumeMm3": 4380.165,
+   "areaMm2": 6859.117,
+   "heightMm": 25.0,
+   "grams": 5.31,
+   "minutes": 26.83,
+   "metres": 1.782
+  },
+  {
+   "name": "tube-r25h20w3.0",
+   "family": "calibration",
+   "volumeMm3": 8822.906,
+   "areaMm2": 12839.557,
+   "heightMm": 20.0,
+   "grams": 7.86,
+   "minutes": 47.0,
+   "metres": 2.6364
+  },
+  {
+   "name": "hollow-box-30",
+   "family": "held-out",
+   "volumeMm3": 5975.426,
+   "areaMm2": 9970.56,
+   "heightMm": 30.0,
+   "grams": 7.35,
+   "minutes": 52.08,
+   "metres": 2.4641
+  },
+  {
+   "name": "rod-4x4x120",
+   "family": "held-out",
+   "volumeMm3": 1920.0,
+   "areaMm2": 1952.0,
+   "heightMm": 120.0,
+   "grams": 2.49,
+   "minutes": 45.83,
+   "metres": 0.8345
+  },
+  {
+   "name": "solid-cube-25",
+   "family": "held-out",
+   "volumeMm3": 15625.0,
+   "areaMm2": 3750.0,
+   "heightMm": 25.0,
+   "grams": 6.15,
+   "minutes": 30.2,
+   "metres": 2.0606
+  },
+  {
+   "name": "sphere-r15",
+   "family": "held-out",
+   "volumeMm3": 13916.444,
+   "areaMm2": 2805.309,
+   "heightMm": 30.0,
+   "grams": 5.44,
+   "minutes": 27.43,
+   "metres": 1.8228
+  },
+  {
+   "name": "thin-plate-2x60x80",
+   "family": "held-out",
+   "volumeMm3": 9600.0,
+   "areaMm2": 10160.0,
+   "heightMm": 80.0,
+   "grams": 11.64,
+   "minutes": 55.37,
+   "metres": 3.9017
+  }
+ ]
+}

@@ -85,8 +85,26 @@ export class Store {
   private label = 'Opened';
   private listeners = new Set<Listener>();
 
-  constructor(doc: LayoutDoc, readonly catalog: Catalog) {
+  constructor(doc: LayoutDoc, private catalogRef: Catalog) {
     this.current = { doc, selection: [] };
+  }
+
+  get catalog(): Catalog {
+    return this.catalogRef;
+  }
+
+  /**
+   * Swap in a wider catalogue — the user imported a part.
+   *
+   * Deliberately NOT an undo step: the catalogue is not part of the document.
+   * Undoing a placement must not un-import the part it used, and importing must
+   * not clear the redo stack. The two histories are separate, which is why this
+   * assigns and emits rather than committing.
+   */
+  setCatalog(next: Catalog): void {
+    if (next === this.catalogRef) return;
+    this.catalogRef = next;
+    this.emit();
   }
 
   getState(): EditorState {
@@ -157,12 +175,65 @@ export class Store {
     return validate(this.current.doc, this.catalog);
   }
 
-  /** Cells covered by every item except the ones named — the collision set. */
+  /**
+   * cell -> item id for every placed item. Cached on the identity of the items
+   * array and of the catalogue, both of which are immutable, so the cache can
+   * never serve a stale answer.
+   *
+   * `checkPlacement` runs on every pointer move of every drag, and it used to
+   * rebuild this from scratch each time: 0.039 ms per item at 200 items and
+   * 0.216 ms at 2000, i.e. the cost per item grew with the number of items.
+   * Building it once per document state makes a drag O(footprint) again.
+   */
+  private occupancyCache: {
+    items: LayoutDoc['items'];
+    catalog: Catalog;
+    map: Map<string, string>;
+  } | null = null;
+
+  private occupancyIndex(): ReadonlyMap<string, string> {
+    const items = this.current.doc.items;
+    const cache = this.occupancyCache;
+    if (cache && cache.items === items && cache.catalog === this.catalogRef) return cache.map;
+
+    const map = new Map<string, string>();
+    for (const item of items) {
+      for (const c of itemCells(item, this.catalogRef)) map.set(hexKey(c), item.id);
+    }
+    this.occupancyCache = { items, catalog: this.catalogRef, map };
+    return map;
+  }
+
+  /**
+   * Carry the index forward across an append, instead of rebuilding it.
+   *
+   * Every command replaces the items array, so a cache keyed on that array's
+   * identity is invalidated by each placement — which makes placing n items
+   * cost O(n²) even with the cache. Adding is the only bulk path that matters
+   * (a paste, a duplicate, a scripted fill), and an append only ever adds
+   * cells, so it can be applied to the existing map directly. Everything else
+   * — move, delete, rotate, undo — lets the cache miss and rebuild once.
+   */
+  private extendOccupancy(items: LayoutDoc['items'], added: readonly PlacedItem[]): void {
+    const cache = this.occupancyCache;
+    if (!cache || cache.catalog !== this.catalogRef) return;
+    for (const item of added) {
+      for (const c of itemCells(item, this.catalogRef)) cache.map.set(hexKey(c), item.id);
+    }
+    cache.items = items;
+  }
+
+  /**
+   * Cells covered by every item except the ones named — the collision set.
+   *
+   * Kept as a public query returning a fresh Map, because callers outside this
+   * class treat it as theirs. The shared index above is what makes it cheap.
+   */
   occupiedCells(exclude: ReadonlySet<string> = new Set()): Map<string, string> {
     const map = new Map<string, string>();
-    for (const item of this.current.doc.items) {
-      if (exclude.has(item.id)) continue;
-      for (const c of itemCells(item, this.catalog)) map.set(hexKey(c), item.id);
+    for (const [cell, id] of this.occupancyIndex()) {
+      if (exclude.has(id)) continue;
+      map.set(cell, id);
     }
     return map;
   }
@@ -204,7 +275,16 @@ export class Store {
     ignoreIds: ReadonlySet<string> = new Set(),
     exclusiveCells: ReadonlySet<string> = new Set(),
   ): DropResult {
-    const occupied = this.occupiedCells(ignoreIds);
+    // The shared index, read directly: a drag asks this question on every
+    // pointer move, and copying the whole map first just to skip a handful of
+    // ids would put the O(items) cost straight back.
+    const index = this.occupancyIndex();
+    const occupied = {
+      get: (key: string): string | undefined => {
+        const id = index.get(key);
+        return id !== undefined && ignoreIds.has(id) ? undefined : id;
+      },
+    };
     const overlapping: Hex[] = [];
     const clashing: Hex[] = [];
     let overlapName = '';
@@ -300,15 +380,28 @@ export class Store {
   addItem(partId: string, at: Hex, rotation: Rotation = 0): DropResult {
     const part = this.part(partId);
     if (!part) return { ok: false, reason: `Unknown part "${partId}"` };
+    if (!withinLattice(at)) {
+      // The store used to accept coordinates that `persist` then refused, so a
+      // document could be legal in memory and illegal on disk: the item was
+      // dropped on reload with a message, which is loud but still a
+      // disagreement about what a legal document is. The store is the
+      // permissive one, so the store is where it is fixed.
+      return {
+        ok: false,
+        reason: `That is ${Math.max(Math.abs(at.q), Math.abs(at.r)).toExponential(0)} cells from the origin — far outside any real wall`,
+      };
+    }
     const cells = partCells(part, at, rotation);
     const check = this.checkPlacement(cells, new Set(), exclusiveCellsOf(part, cells));
     if (!check.ok) return check;
 
     const item: PlacedItem = { id: newId('i'), partId, at, rotation };
+    const items = [...this.current.doc.items, item];
     this.commit(`Place ${part.name}`, {
-      doc: { ...this.current.doc, items: [...this.current.doc.items, item] },
+      doc: { ...this.current.doc, items },
       selection: [item.id],
     });
+    this.extendOccupancy(items, [item]);
     return check;
   }
 
@@ -325,6 +418,9 @@ export class Store {
         continue;
       }
       const at = { q: item.at.q + delta.q, r: item.at.r + delta.r };
+      if (!withinLattice(at)) {
+        return { ok: false, reason: 'That would move it off the lattice entirely' };
+      }
       const moved = { ...item, at };
       next.push(moved);
       const part = this.part(item.partId);
@@ -433,6 +529,9 @@ export class Store {
     const excl = new Set<string>();
     for (const m of members) {
       const at = { q: m.at.q + delta.q, r: m.at.r + delta.r };
+      if (!withinLattice(at)) {
+        return { ok: false, reason: 'Cannot duplicate — that would land off the lattice' };
+      }
       let groupId = m.groupId;
       if (groupId !== undefined) {
         let mapped = groupMap.get(groupId);
@@ -456,10 +555,12 @@ export class Store {
     if (!check.ok) return { ...check, reason: `Cannot duplicate — ${check.reason ?? 'no room'}` };
 
     const groups = [...this.current.doc.groups, ...[...groupMap.values()].map((id) => ({ id }))];
+    const items = [...this.current.doc.items, ...copies];
     this.commit(`Duplicate ${copies.length} item${copies.length > 1 ? 's' : ''}`, {
-      doc: { ...this.current.doc, items: [...this.current.doc.items, ...copies], groups },
+      doc: { ...this.current.doc, items, groups },
       selection: copies.map((c) => c.id),
     });
+    this.extendOccupancy(items, copies);
     return check;
   }
 
@@ -526,6 +627,19 @@ function clampDim(v: number): number {
   if (!Number.isFinite(v)) return 100;
   return Math.min(20000, Math.max(50, Math.round(v)));
 }
+
+/**
+ * The furthest a cell may sit from the origin, matching `persist.readCoord`.
+ *
+ * One number, two modules: if these ever disagree again, a document is legal in
+ * memory and illegal on disk. 1e7 cells is 236 km of wall, so nothing real is
+ * excluded.
+ */
+export const MAX_CELL_COORD = 1e7;
+
+const withinLattice = (h: Hex): boolean =>
+  Number.isFinite(h.q) && Number.isFinite(h.r) &&
+  Math.abs(h.q) <= MAX_CELL_COORD && Math.abs(h.r) <= MAX_CELL_COORD;
 
 /**
  * Does this part go INTO a cell, or ON the wall in front of it?

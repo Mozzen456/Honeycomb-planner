@@ -64,6 +64,14 @@
   user-select: none;
 }
 
+/* The hint is a mouse-and-keyboard crib sheet, and on a narrow window it ran
+   under the Fit/Front buttons — two pieces of text on top of each other, which
+   is the first thing anyone notices. Below the tablet breakpoint it goes: on a
+   coarse pointer there is no right-drag, no wheel and no Ctrl+D to describe. */
+@media (max-width: 68rem) {
+  .wall3d__hint { display: none; }
+}
+
 @media (pointer: coarse) {
   .wall3d__tools button { min-block-size: var(--control-height-lg); }
 }

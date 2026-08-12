@@ -1,0 +1,163 @@
+/* The STL import review dialog. Tokens only — no colour, size or duration literals. */
+
+.import-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  background: var(--scrim);
+}
+
+.import {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  inline-size: min(60rem, 100%);
+  max-block-size: min(46rem, 100%);
+  border: var(--border-width-hair) solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-lg);
+  /* Same reason as .catalog-panel__scroll: a scrolling box inside a fixed
+     overlay must contain its overflow or the viewport inherits it. */
+  contain: layout paint;
+}
+
+.import:focus-visible {
+  outline: none; /* the dialog takes focus programmatically; the ring would be noise */
+}
+
+.import__head {
+  padding: var(--space-4) var(--space-5) var(--space-3);
+  border-block-end: var(--border-width-hair) solid var(--border-subtle);
+}
+
+.import__title {
+  font-size: var(--font-size-lg);
+  overflow-wrap: anywhere;
+}
+
+.import__sub {
+  margin-block-start: var(--space-1);
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.import__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-5);
+  padding: var(--space-4) var(--space-5);
+  overflow-y: auto;
+  contain: layout paint;
+}
+
+.import__form {
+  display: grid;
+  align-content: start;
+  gap: var(--space-2);
+}
+
+.import__field {
+  display: grid;
+  grid-template-columns: 8rem minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.import__hint {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-relaxed);
+  margin-block-end: var(--space-2);
+}
+
+.import__facts {
+  margin-block-start: var(--space-3);
+  display: grid;
+  gap: var(--space-1);
+  font-size: var(--font-size-xs);
+}
+
+.import__facts > div {
+  display: grid;
+  grid-template-columns: 8rem minmax(0, 1fr);
+  gap: var(--space-3);
+}
+
+.import__facts dt { color: var(--text-tertiary); }
+.import__facts dd { color: var(--text-primary); overflow-wrap: anywhere; }
+
+.import__warnings {
+  margin-block-start: var(--space-3);
+  padding: var(--space-2) var(--space-3) var(--space-2) var(--space-5);
+  border: var(--border-width-hair) solid var(--warning-border);
+  border-radius: var(--radius-sm);
+  background: var(--warning-bg);
+  color: var(--warning-fg);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-relaxed);
+  display: grid;
+  gap: var(--space-2);
+}
+
+.import__footprint {
+  display: grid;
+  align-content: start;
+  gap: var(--space-2);
+  min-inline-size: 0;
+}
+
+.import__footprint h3 {
+  font-size: var(--font-size-md);
+}
+
+.import__count {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+}
+
+.import__foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-5);
+  border-block-start: var(--border-width-hair) solid var(--border-subtle);
+}
+
+/* ---------- the footprint editor ---------- */
+
+.footprint {
+  inline-size: 100%;
+  max-block-size: 20rem;
+  background: var(--canvas-wall);
+  border: var(--border-width-hair) solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.footprint__cell {
+  fill: var(--canvas-panel-tint);
+  stroke: var(--canvas-wall);
+  stroke-width: 1.2;
+  cursor: pointer;
+  transition: fill var(--duration-fast) var(--ease-standard);
+}
+
+.footprint__cell:hover { fill: var(--accent-bg); }
+
+.footprint__cell--on { fill: var(--accent); }
+
+/* The anchor is the cell that sits under the cursor while dragging, so it is
+   worth being able to see which one it is. */
+.footprint__cell--anchor { stroke: var(--accent); stroke-width: 2; }
+
+.footprint__cell:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+}
+
+@media (max-width: 52rem) {
+  .import__body { grid-template-columns: minmax(0, 1fr); }
+}

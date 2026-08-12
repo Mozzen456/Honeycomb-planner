@@ -11,6 +11,7 @@
 
 import { useMemo, useState } from 'react';
 
+import { isImported } from '../core/userCatalog';
 import type { Catalog, CatalogPart, PartType } from '../core/types';
 
 import './CatalogPanel.css';
@@ -26,6 +27,8 @@ export interface CatalogPanelProps {
   selectedPartId?: string;
   filter?: string;
   onFilterChange?: (value: string) => void;
+  /** Offered on imported parts only — a generated part is the scanner's to remove. */
+  onRemovePart?: (partId: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -43,6 +46,10 @@ const GROUPS: readonly { type: PartType; label: string; note: string }[] = [
   { type: 'fastener', label: 'Fasteners', note: 'Printed screws and clips' },
   { type: 'unknown', label: 'Unclassified', note: 'The scanner could not place these' },
 ];
+
+/** Imported parts get their own group, above the generated ones: they are the
+ *  ones the user just added and is looking for. */
+const IMPORTED_GROUP = { label: 'Imported', note: 'STLs you added yourself' } as const;
 
 // ---------------------------------------------------------------------------
 // Formatting — display only
@@ -117,11 +124,14 @@ interface TileProps {
   part: CatalogPart;
   selected: boolean;
   onDragStart: CatalogPanelProps['onDragStart'];
+  onRemove?: (partId: string) => void;
 }
 
-function CatalogTile({ part, selected, onDragStart }: TileProps): JSX.Element {
+function CatalogTile({ part, selected, onDragStart, onRemove }: TileProps): JSX.Element {
   const cells = cellCount(part);
   const name = part.name.length > 0 ? part.name : part.id;
+  const imported = isImported(part);
+  const estimated = part.print?.source === 'volume';
 
   return (
     <li className="catalog-tile__slot">
@@ -156,6 +166,10 @@ function CatalogTile({ part, selected, onDragStart }: TileProps): JSX.Element {
           <span className="visually-hidden"> cells</span>
         </span>
         <span className="catalog-tile__metrics tabular-nums">
+          {/* An imported part's print numbers are modelled, not sliced. The
+              marker is on the tile as well as in the parts list, because this
+              is where the choice between two parts is actually made. */}
+          {estimated ? <span className="catalog-tile__est">est.</span> : null}
           {formatMinutes(part.print?.minutes)}
           <span className="catalog-tile__dot" aria-hidden="true">
             ·
@@ -163,6 +177,17 @@ function CatalogTile({ part, selected, onDragStart }: TileProps): JSX.Element {
           {formatGrams(part.print?.grams)}
         </span>
       </div>
+      {imported && onRemove !== undefined ? (
+        <button
+          type="button"
+          className="catalog-tile__remove hit-area"
+          aria-label={`Remove ${name} from the catalogue`}
+          title="Remove this imported part"
+          onClick={() => onRemove(part.id)}
+        >
+          ×
+        </button>
+      ) : null}
     </li>
   );
 }
@@ -172,7 +197,7 @@ function CatalogTile({ part, selected, onDragStart }: TileProps): JSX.Element {
 // ---------------------------------------------------------------------------
 
 export function CatalogPanel(props: CatalogPanelProps): JSX.Element {
-  const { catalog, onDragStart, selectedPartId, filter, onFilterChange } = props;
+  const { catalog, onDragStart, selectedPartId, filter, onFilterChange, onRemovePart } = props;
 
   const [collapsed, setCollapsed] = useState<ReadonlySet<PartType>>(() => new Set<PartType>());
 
@@ -193,14 +218,22 @@ export function CatalogPanel(props: CatalogPanelProps): JSX.Element {
   const groups = useMemo(() => {
     const buckets = new Map<PartType, CatalogPart[]>();
     for (const group of GROUPS) buckets.set(group.type, []);
+    const imported: CatalogPart[] = [];
     for (const part of matches) {
+      if (isImported(part)) {
+        imported.push(part);
+        continue;
+      }
       const bucket = buckets.get(part.type) ?? buckets.get('unknown');
       bucket?.push(part);
     }
-    return GROUPS.map((group) => ({
+    const generated = GROUPS.map((group) => ({
       ...group,
       parts: buckets.get(group.type) ?? [],
     })).filter((group) => group.parts.length > 0);
+    return imported.length > 0
+      ? [{ type: 'imported' as PartType, ...IMPORTED_GROUP, parts: imported }, ...generated]
+      : generated;
   }, [matches]);
 
   const toggle = (type: PartType): void => {
@@ -253,7 +286,7 @@ export function CatalogPanel(props: CatalogPanelProps): JSX.Element {
         {groups.length === 0 ? (
           <p className="catalog-panel__empty">
             {parts.length === 0
-              ? 'The catalogue is empty. Run the scanner over the model folder to fill it.'
+              ? 'The catalogue is empty. Drop an STL here, or run the scanner over the model folder.'
               : `Nothing matches “${filter ?? ''}”. Try part of a file name, or a word from the model’s title.`}
           </p>
         ) : (
@@ -288,6 +321,7 @@ export function CatalogPanel(props: CatalogPanelProps): JSX.Element {
                       part={part}
                       selected={part.id === selectedPartId}
                       onDragStart={onDragStart}
+                      onRemove={onRemovePart}
                     />
                   ))}
                 </ul>

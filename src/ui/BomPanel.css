@@ -78,52 +78,23 @@
   gap: var(--space-2);
 }
 
-.bom-export {
-  min-block-size: var(--control-height-md);
-  padding-inline: var(--space-3);
-  border: var(--border-width-hair) solid var(--border-default);
-  border-radius: var(--radius-sm);
-  background-color: var(--surface-2);
-  color: var(--text-secondary);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
-  line-height: var(--line-height-none);
-  transition:
-    background-color var(--duration-fast) var(--ease-standard),
-    border-color var(--duration-fast) var(--ease-standard),
-    color var(--duration-fast) var(--ease-standard);
-}
-
-.bom-export:hover {
-  border-color: var(--border-strong);
-  color: var(--text-primary);
-}
-
-/* The one primary action in the group: this list exists to be printed. */
-.bom-export--primary {
-  background-color: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-on);
-}
-
-.bom-export--primary:hover {
-  background-color: var(--accent-hover);
-  border-color: var(--accent-hover);
-  color: var(--accent-on);
-}
-
-.bom-export--primary:active {
-  background-color: var(--accent-active);
-  border-color: var(--accent-active);
-}
+/* The export row consumes `.button` from App.css rather than hand-rolling its
+   own chrome — which is what it used to do, at 12px against the top bar's 13px,
+   so the two rows of buttons in the same product did not match. Only the group
+   layout belongs here now. `.bom-export--primary` maps onto `.button--primary`:
+   this list exists to be printed, so Print is the one filled action. */
 
 /* -----------------------------------------------------------------------------
    Scroll region
    -------------------------------------------------------------------------- */
 
+/* See the note on .catalog-panel__scroll: a scrolling box inside the 100dvh
+   shell has to contain its overflow, or the viewport inherits it and the app
+   scrolls its own chrome away. */
 .bom-panel__scroll {
   overflow-y: auto;
   overflow-x: hidden;
+  contain: layout paint;
   padding-inline: var(--space-4);
   padding-block: var(--space-3) var(--space-4);
   display: grid;

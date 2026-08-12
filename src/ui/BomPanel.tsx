@@ -119,6 +119,11 @@ const ISSUE_COPY: Record<Issue['code'], IssueCopy> = {
     advice:
       'The model file was renamed or removed. Re-run the catalogue scan, or delete the placement — it counts for nothing in this list.',
   },
+  'no-room-for-mounts': {
+    title: 'The panel has no free cells left for its own wall mounts',
+    advice:
+      'A panel hangs on the wall through its own cells. Clear enough of them for the countersunk inserts in the list below, or fit those first and plan around them.',
+  },
   'panel-overlap': {
     title: 'Two panels cover the same cells',
     advice: 'Panels butt up against each other; slide one aside so they only touch.',
@@ -362,7 +367,9 @@ export function BomPanel(props: BomPanelProps): JSX.Element {
               key={entry.format}
               type="button"
               className={
-                entry.format === 'print' ? 'bom-export bom-export--primary' : 'bom-export'
+                entry.format === 'print'
+                  ? 'button button--primary bom-export'
+                  : 'button bom-export'
               }
               title={entry.hint}
               onClick={() => onExport(entry.format)}
