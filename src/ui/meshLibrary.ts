@@ -111,10 +111,17 @@ function orient(mesh: MeshData, detection: Detection): THREE.BufferGeometry {
       v = t;
     }
     // The mating face has to end up at the low end of w. Turning the part over
-    // is a 180° rotation about u, NOT a negation of w on its own: negating one
-    // axis is a reflection.
+    // is a 180° rotation, NOT a negation of w on its own: negating one axis is
+    // a reflection, and a mirrored hook is a left-hand hook on a right-hand
+    // wall.
+    //
+    // About V, not U. Both are proper rotations and both put the mating face
+    // against the wall — they differ by a 180° turn IN THE WALL PLANE, which is
+    // the difference between an SD-card holder whose slots face up and one
+    // whose slots face down. `v` is the wall's vertical, so rotating about it
+    // keeps the part's own up pointing up; rotating about `u` tips it over.
     if (flip) {
-      v = -v;
+      u = -u;
       w = -w;
     }
 

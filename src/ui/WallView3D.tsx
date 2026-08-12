@@ -19,6 +19,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import * as THREE from 'three';
 
 import { itemCells } from '../core/bom';
+import { fixingsFor } from '../core/fixings';
 import { CELL, PANEL_DEPTH, PITCH } from '../core/constants';
 import { hexKey, hexToMm, panelCells, placedPanelCells, placeFootprint } from '../core/hex';
 import type { Catalog, CatalogPart, Hex, LayoutDoc, Rotation } from '../core/types';
@@ -253,6 +254,7 @@ export function WallView3D(props: WallView3DProps) {
     itemGroup: THREE.Group;
     ghostGroup: THREE.Group;
     obstacleGroup: THREE.Group;
+    fixingGroup: THREE.Group;
     frame: number;
   } | null>(null);
 
@@ -332,7 +334,8 @@ export function WallView3D(props: WallView3DProps) {
     const itemGroup = new THREE.Group();
     const ghostGroup = new THREE.Group();
     const obstacleGroup = new THREE.Group();
-    scene.add(panelGroup, itemGroup, ghostGroup, obstacleGroup);
+    const fixingGroup = new THREE.Group();
+    scene.add(panelGroup, itemGroup, ghostGroup, obstacleGroup, fixingGroup);
 
     stateRef.current = {
       renderer, scene, camera,
@@ -340,7 +343,7 @@ export function WallView3D(props: WallView3DProps) {
       // Picking happens on the panel's FRONT face, which is where the user is
       // pointing — not on z = 0, which would put the cursor behind the plate.
       plane: new THREE.Plane(new THREE.Vector3(0, 0, 1), -PANEL_DEPTH),
-      panelGroup, itemGroup, ghostGroup, obstacleGroup, frame: 0,
+      panelGroup, itemGroup, ghostGroup, obstacleGroup, fixingGroup, frame: 0,
     };
     setReady(true);
 
@@ -583,6 +586,81 @@ export function WallView3D(props: WallView3DProps) {
       }
     }
   }, [doc.items, selection, catalog, partOf, ready, readTheme, themeTick, meshTick]);
+
+  // --- wall fixings -------------------------------------------------------
+
+  /**
+   * The countersunk inserts that hold the wall up, drawn where they go.
+   *
+   * They were ordered by the parts list and never shown, which made the one
+   * question a builder has at this stage — "where do I drill?" — unanswerable
+   * from the picture. They are real parts in real cells, so they are drawn from
+   * the real mesh like everything else, with the measured box as the fallback.
+   *
+   * The plan avoids cells accessories occupy, so what is drawn here is exactly
+   * what is ordered and exactly where it fits.
+   */
+  const [fixingMesh, setFixingMesh] = useState<PartMesh | null>(null);
+  const fixingPart = useMemo(
+    () => catalog.parts.find((p) => p.type === 'fastener' || p.type === 'insert'
+      ? (p.hardware ?? []).some((h) => /wall (screw|plug)/i.test(h.item))
+        && (p.footprint ?? []).length <= 1
+      : false),
+    [catalog],
+  );
+
+  useEffect(() => {
+    if (!fixingPart) return;
+    let live = true;
+    void loadPartMesh(fixingPart).then((m) => {
+      if (live && m !== null) setFixingMesh(m);
+    });
+    return () => { live = false; };
+  }, [fixingPart]);
+
+  useEffect(() => {
+    const s = stateRef.current;
+    if (!s || !ready) return;
+    const theme = readTheme();
+    for (const child of [...s.fixingGroup.children]) {
+      s.fixingGroup.remove(child);
+      const m = child as THREE.Mesh;
+      if (m.userData['ownGeometry'] === true) m.geometry?.dispose();
+      (m.material as THREE.Material)?.dispose?.();
+    }
+    if (doc.panels.length === 0) return;
+
+    const occupied = new Set<string>();
+    for (const it of doc.items) for (const c of itemCells(it, catalog)) occupied.add(hexKey(c));
+    const plan = fixingsFor(doc, undefined, occupied);
+
+    // Lighter than the plate, not darker. These are structure rather than the
+    // things you came to hang up, so they must not compete with a placed
+    // accessory — but drawn 50% toward black they vanished into a dark theme's
+    // plate entirely, which defeats the point of drawing them at all. Lifting
+    // them off the plate reads as a part seated in the hole.
+    const mat = new THREE.MeshLambertMaterial({
+      color: theme.panel.clone().lerp(new THREE.Color(0xffffff), 0.35),
+    });
+    for (const cell of plan.cells) {
+      const p = hexToMm(cell);
+      const mesh = fixingMesh
+        ? new THREE.Mesh(fixingMesh.geometry, mat)
+        : new THREE.Mesh(
+            new THREE.CylinderGeometry(
+              CELL.mouthAcrossFlats / Math.sqrt(3), CELL.mouthAcrossFlats / Math.sqrt(3),
+              PANEL_DEPTH, 6,
+            ),
+            mat,
+          );
+      if (!fixingMesh) mesh.geometry.rotateX(Math.PI / 2);
+      // Seated in the cell: the insert drops in from behind and its flange sits
+      // proud of the front face, which is what the photographs show.
+      mesh.position.set(p.x, p.y, fixingMesh ? PANEL_DEPTH - fixingMesh.depthMm : PANEL_DEPTH / 2);
+      mesh.userData['ownGeometry'] = fixingMesh === null;
+      s.fixingGroup.add(mesh);
+    }
+  }, [doc, catalog, ready, readTheme, themeTick, fixingMesh]);
 
   // --- obstacles ----------------------------------------------------------
 

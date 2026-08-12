@@ -346,6 +346,49 @@ function insideHex(du: number, dv: number, acrossFlats: number, phaseDeg: number
 
 const phaseOf = (drawn: 'pointy' | 'flat'): number => (drawn === 'flat' ? 0 : 30);
 
+/**
+ * How HEXAGONAL is the silhouette here — not merely how covered.
+ *
+ * `hexCoverage` cannot tell a flange from a block: a rectangle contains the
+ * hexagon inscribed in it, so it scores ~1.0 on both. That is why every
+ * clip-in part came out with its mating face at the wrong end and was mounted
+ * back-to-front — the 20-slot SD holder is a 26 × 22.5 prism for its whole
+ * length, both ends scored the same, and the tie went to whichever was tested
+ * first.
+ *
+ * The discriminator is the material OUTSIDE the hexagon but inside its bounding
+ * box: the six corners. A real hexagonal flange leaves them empty; a
+ * rectangular block fills them.
+ */
+function hexagonality(
+  r: Raster, cu: number, cv: number, acrossFlats: number, drawn: 'pointy' | 'flat',
+): number {
+  const phase = phaseOf(drawn);
+  const reach = acrossFlats / Math.sqrt(3);
+  const x0 = Math.max(0, Math.floor((cu - reach - r.minU) / r.cellMm));
+  const x1 = Math.min(r.cols - 1, Math.ceil((cu + reach - r.minU) / r.cellMm));
+  const y0 = Math.max(0, Math.floor((cv - reach - r.minV) / r.cellMm));
+  const y1 = Math.min(r.rows - 1, Math.ceil((cv + reach - r.minV) / r.cellMm));
+
+  let outsideCells = 0;
+  let outsideFilled = 0;
+  for (let y = y0; y <= y1; y++) {
+    const v = r.minV + (y + 0.5) * r.cellMm;
+    for (let x = x0; x <= x1; x++) {
+      const u = r.minU + (x + 0.5) * r.cellMm;
+      const du = u - cu;
+      const dv = v - cv;
+      // Inside the hexagon's bounding box but outside the hexagon itself.
+      if (Math.abs(du) > acrossFlats / 2 + 0.01 || Math.abs(dv) > reach + 0.01) continue;
+      if (insideHex(du, dv, acrossFlats, phase)) continue;
+      outsideCells++;
+      if (r.data[y * r.cols + x] === 1) outsideFilled++;
+    }
+  }
+  if (outsideCells === 0) return 1;
+  return 1 - outsideFilled / outsideCells;
+}
+
 /** Fraction of a hexagonal probe that the raster covers. */
 function hexCoverage(
   r: Raster, cu: number, cv: number, acrossFlats: number, drawn: 'pointy' | 'flat',
@@ -672,6 +715,7 @@ function detectWallClip(mesh: MeshData, axis: Axis, cellMm: number): Detection |
   let best: {
     cells: Hex[];
     coverage: number;
+    hexness: number;
     where: 'low' | 'high';
     points: { u: number; v: number }[];
   } | null = null;
@@ -681,17 +725,36 @@ function detectWallClip(mesh: MeshData, axis: Axis, cellMm: number): Detection |
     const points = cellsInSilhouette(sil, gate.drawn);
     if (points.length === 0) continue;
     let coverage = 0;
-    for (const p of points) coverage += hexCoverage(sil, p.u, p.v, ENV_FLATS, gate.drawn);
+    let hexness = 0;
+    for (const p of points) {
+      coverage += hexCoverage(sil, p.u, p.v, ENV_FLATS, gate.drawn);
+      hexness += hexagonality(sil, p.u, p.v, ENV_FLATS, gate.drawn);
+    }
     coverage /= points.length;
+    hexness /= points.length;
     if (coverage < 0.7) continue;
     const cells = toAxial(points, gate.drawn);
     if (cells === null) continue;
+    /**
+     * More cells wins first — that is which cells the part occupies. Between
+     * two ends claiming the same cells, the flange is the one that both FILLS
+     * a cell hexagon and IS one.
+     *
+     * Both halves are needed. Coverage alone cannot tell a flange from the
+     * rectangular end of a card block, because a rectangle contains the
+     * hexagon inscribed in it. Hexagonality alone prefers whichever end is
+     * SMALLER — a narrow tip has nothing outside the hexagon either, which is
+     * how an insert came out mounted tip-first. The product is high only for a
+     * silhouette that is full-size and hexagonal, which is what a flange is.
+     */
+    const score = coverage * hexness;
+    const bestScore = best === null ? -1 : best.coverage * best.hexness;
     if (
       best === null ||
       cells.length > best.cells.length ||
-      (cells.length === best.cells.length && coverage > best.coverage)
+      (cells.length === best.cells.length && score > bestScore)
     ) {
-      best = { cells, coverage, where: band.where, points };
+      best = { cells, coverage, hexness, where: band.where, points };
     }
   }
   if (best === null) return null;
@@ -700,7 +763,8 @@ function detectWallClip(mesh: MeshData, axis: Axis, cellMm: number): Detection |
     `bbox decomposes exactly onto the lattice (${gate.drawn}-drawn, ` +
       `${gate.a}+1 × ${gate.b}+1 half-steps); mating face on the ${best.where} ` +
       `${axis} end; ${best.cells.length} cell(s) filled, hexagons ` +
-      `${(best.coverage * 100).toFixed(1)}% solid`,
+      `${(best.coverage * 100).toFixed(1)}% solid, silhouette ` +
+      `${(best.hexness * 100).toFixed(0)}% hexagonal`,
   ];
 
   return {
