@@ -53,6 +53,26 @@ const DIRS: readonly Hex[] = [
   { q: -1, r: 0 }, { q: 0, r: -1 }, { q: 1, r: -1 },
 ];
 
+/**
+ * A fitting's hexagon has to seat in the cell's hexagon.
+ *
+ * The parts are drawn flat-top; the wall is drawn pointy-top (HSW-SPEC §2), so
+ * a fitting needs 30° to line up with the hole it drops into. For an accessory
+ * that 30° is refused, because the part has a meaningful up — an SD-card holder
+ * whose slots point 30° off vertical spills its cards, and `meshLibrary` orients
+ * those to the photographs instead.
+ *
+ * An INSERT has no up. It is a hexagonal fitting and nothing about it reads
+ * wrong at 60° intervals, so there is nothing to lose by turning it and a
+ * misaligned one is obviously wrong. Applied here rather than in `meshLibrary`
+ * because it depends on what the part is FOR, which is a catalogue fact, not a
+ * mesh one.
+ *
+ * The real fix is the wall frame itself — see PARKED. This is what makes the
+ * fittings sit in their holes until that is settled.
+ */
+const FITTING_SEAT_RADIANS = Math.PI / 6;
+
 /** Corner k of a pointy-top cell, in wall millimetres. */
 function corner(centre: { x: number; y: number }, k: number, acrossFlats: number) {
   const R = acrossFlats / Math.sqrt(3);
@@ -561,7 +581,9 @@ export function WallView3D(props: WallView3DProps) {
         ? new THREE.Mesh(loaded.geometry, mat)
         : new THREE.Mesh(new THREE.BoxGeometry(w, h, depth), mat);
       body.position.set(cx, cy, loaded ? PANEL_DEPTH : PANEL_DEPTH + depth / 2);
-      body.rotation.z = (Math.PI / 3) * it.rotation;
+      const fitting = part.type === 'insert' || part.type === 'fastener';
+      body.rotation.z =
+        (Math.PI / 3) * it.rotation + (loaded && fitting ? FITTING_SEAT_RADIANS : 0);
       body.userData['itemId'] = it.id;
       body.userData['ownGeometry'] = loaded === null || loaded === undefined;
       s.itemGroup.add(body);
@@ -669,6 +691,7 @@ export function WallView3D(props: WallView3DProps) {
             mat,
           );
       if (!fixingMesh) mesh.geometry.rotateX(Math.PI / 2);
+      mesh.rotation.z = FITTING_SEAT_RADIANS;
       // Seated in the cell: the insert drops in from behind and its flange sits
       // proud of the front face, which is what the photographs show.
       mesh.position.set(p.x, p.y, fixingMesh ? PANEL_DEPTH - fixingMesh.depthMm : PANEL_DEPTH / 2);
@@ -708,7 +731,7 @@ export function WallView3D(props: WallView3DProps) {
             mat,
           );
       if (!junctionMesh) mesh.geometry.rotateX(Math.PI / 2);
-      mesh.rotation.z = (Math.PI / 3) * junction.rotation;
+      mesh.rotation.z = (Math.PI / 3) * junction.rotation + FITTING_SEAT_RADIANS;
       mesh.position.set(
         cx, cy,
         junctionMesh ? PANEL_DEPTH - junctionMesh.depthMm : PANEL_DEPTH / 2,
