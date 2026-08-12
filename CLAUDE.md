@@ -13,7 +13,7 @@ copied from any published description. `HSW-SPEC.md` records every number with i
 
 ```bash
 npm run dev          # Vite dev server
-npm test             # vitest run — 515 tests
+npm test             # vitest run — 519 tests
 npm run typecheck    # tsc --noEmit
 npm run build        # typecheck + vite build (also copies models/ into dist/)
 
@@ -31,7 +31,17 @@ python tools/scan.py --rescan    # re-measure everything from a cold cache
 python tools/scan.py --no-slice  # skip slicing (fast; estimates come out zeroed)
 python tools/scan.py --verify    # rebuild and diff against the committed catalogue
 python tools/report.py           # human-readable catalogue summary
+
+python tools/calibrate_estimator.py          # re-fit the in-browser print estimator
+python tools/calibrate_estimator.py --write  # ...and rewrite tests/fixtures/
 ```
+
+`calibrate_estimator.py` needs PrusaSlicer but **not** trimesh, so it runs where `scan.py` cannot.
+Same for `tools/slicer.py`, which knows the macOS bundle path as well as the Windows one.
+
+If `npm` is missing, Node is not installed: `. ~/.nvm/nvm.sh && nvm install --lts`. A `node_modules`
+copied from another platform will fail with "Permission denied" on the CLI shims rather than
+anything informative — delete it and reinstall.
 
 `scan.py` shells out to PrusaSlicer. If it fails to start under the tool sandbox, run that command
 with the sandbox disabled — the failure looks like a crash, not a permission error.
@@ -84,6 +94,29 @@ shipped file — you would print 50 plates and find four of them do not fit roun
 Every derivation of a panel's cells must go through `placedPanelCells`, never `panelCells` on the
 raw origin/columns/rows.
 
+**The app draws the wall pointy-top; every photograph of a mounted part shows it flat-top.** This
+is unresolved (PARKED) and it leaks into anything that draws a part. 30° is not a multiple of 60°,
+so no legal rotation reconciles the two, and the renderer therefore treats the two kinds of part
+differently *on purpose*: an accessory keeps its own orientation, because it has a meaningful up
+and an SD-card holder tilted 30° spills its cards; a fitting (insert, fastener, junction bridge) is
+turned by `FITTING_SEAT_RADIANS` in `WallView3D.tsx`, because a hexagon reads the same every 60° and
+one lying across a cell wall is obviously wrong. Both compensations delete themselves the day the
+frame question is settled — do not build more on top of them.
+
+**`meshLibrary` must NOT apply the 90° spin that `toAxial` applies.** `toAxial` spins a flat-drawn
+part's CELLS so its footprint lands on the lattice; applying the same turn to the MESH points an
+SD-card holder's slots sideways. A part is drawn in the orientation it is used.
+
+**Coverage cannot tell a flange from the end of a block** — a rectangle contains the hexagon
+inscribed in it, so both score ~1.0. `detectWallClip` scores `coverage × hexagonality`, where
+hexagonality measures the material *outside* the hexagon but inside its bounding box. Neither half
+works alone: hexagonality by itself prefers whichever end is smaller and mounts an insert tip-first.
+Getting this wrong mounted all 17 clip-in parts back-to-front.
+
+**A junction fixing REPLACES nearby fixings; it does not add to them.** Planned independently, the
+seam rule and the spacing grid gave 56 four-cell inserts on top of 74 single ones — 128 holes in a
+wall needing about 80. Same class of error as the original 370.
+
 **Overlap is allowed.** The wall exists to mount things *on*, so accessories may share cells freely
 and silently — no warning, no issue. The only impossibility is two parts that plug *into* a cell
 (`type` `insert` or `fastener`) sharing one. See `isExclusive` in `src/core/store.ts`.
@@ -129,6 +162,8 @@ The UI is a thin shell.
   as well as by the scanner.
 - **`src/core/fixings.ts`** — where the wall fixings go, across the assembly.
 - **`src/core/obstacles.ts`** — switches, sockets and pipes, as cells the wall must avoid.
+- **`src/ui/meshLibrary.ts`** — loads a part's STL, orients it to the wall, caches per part id.
+  Load-bearing logic despite living in `ui/`: it decides which face goes against the wall.
 - **`src/core/customiser.ts`** — a cut panel as OpenSCAD customiser parameters. The customiser is on
   the same lattice (23.6 / 20.438 / 8), flat-top where the wall is pointy-top, so the conversion is
   a 90° turn plus a stagger parity — pinned by round-trip in `tests/customiser.test.ts` for the same
@@ -200,10 +235,23 @@ literals. `base.css` strips `<button>` deliberately; the button component lives 
 accessories placed, BOM reconciled against the placements, all three exports, and a save/load/share
 round trip — run against the real generated catalogue.
 
+`tests/customiser.test.ts` asserts nothing by hand: it converts a panel to parameters, expands them
+back with the customiser's own loop, and demands the identical cell set. A parity error there is a
+mirrored plate, invisible until it is printed.
+
+`tests/fixtures/estimator-calibration.json` holds 27 non-HSW shapes with real slicer results, so the
+print estimator can be held to a stated error **without** a slicer installed. It exists because the
+estimator was once fitted and tested on the shipped parts alone — all thin-walled — and was 54–59%
+wrong on a solid cube. Fitting and testing on one family proves only that you memorised it.
+
 `tests/critic-*.test.ts` were written by adversarial reviewers with fresh context. Some deliberately
 **pin current, wrong behaviour** for findings that are still open, with a comment saying to invert
 the test when fixed. If one of those starts failing, check whether you fixed the underlying defect
 before "correcting" the expectation.
+
+`Customiser/` holds the OpenSCAD parametric generator that makes panels with cells left out (for a
+light switch). Its README records the lattice check against `constants.ts`; the `.scad` is the
+readable copy of the supplied `.rtf`.
 
 ## Importing other agent configs
 
