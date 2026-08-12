@@ -173,6 +173,16 @@ every panel cross-section at the throat band. Panels join in two ways only:
    straddle the join is what actually holds two panels together. The catalogue's multi-cell
    inserts (§5) are the joiners.
 
+**Where three or four plates meet, that is the fixing.** `insert-for-countersunk-hole-3` is a
+four-cell diamond taking one wall screw, so one of them ties every plate at the junction to its
+neighbours *and* to the wall. Four separate single-cell fixings, one per plate, fix each plate and
+leave the join itself unsupported — which is the thing the panels have no screw holes for.
+
+The planner does this first and counts it towards the fixing spacing rather than adding to it:
+planned independently, a 2400 × 1200 wall came to 56 junction inserts on top of 74 single ones, or
+128 holes in a wall that needs about 80. Planned together it is 24 single-cell inserts and 56
+junction inserts, 29 fixings per m².
+
 ### How panels mount to the wall
 
 Also through the cells: a **countersunk insert** drops into a cell and takes a wall screw

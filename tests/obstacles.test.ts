@@ -14,6 +14,7 @@ import { computeBom } from '../src/core/bom';
 import { isCustomPanel, toCustomiserPanel } from '../src/core/customiser';
 import { hexKey, hexToMm, placedPanelCells } from '../src/core/hex';
 import { cellClashes, makeObstacle, obstructedCells, OBSTACLE_PRESETS } from '../src/core/obstacles';
+import { JUNCTION_FIXING_ID, JUNCTION_FOOTPRINT, planFixings } from '../src/core/fixings';
 import { cutAroundObstacles, emptyDoc, Store } from '../src/core/store';
 import type { Catalog, Obstacle, PlacedPanel } from '../src/core/types';
 
@@ -172,5 +173,57 @@ describe('the parts list tells the truth about a cut wall', () => {
       return n + h - skipped;
     }, 0);
     expect(described).toBe(params!.cellCount);
+  });
+});
+
+describe('junctions where panels meet', () => {
+  it('bridges them with the four-cell insert, not four separate fixings', () => {
+    // HSW-SPEC §4: the panels carry no screw holes of their own, and a
+    // multi-cell insert straddling the join is what holds them to each other
+    // as well as to the wall. Four single-cell fixings, one per plate, fix each
+    // plate and leave the join itself unsupported.
+    const tiled = [
+      { id: 'a', partId: 'wall-honeycomb-part', origin: { q: 0, r: 0 }, columns: 7, rows: 8 },
+      { id: 'b', partId: 'wall-honeycomb-part', origin: { q: 7, r: 0 }, columns: 7, rows: 8 },
+      { id: 'c', partId: 'wall-honeycomb-part', origin: { q: -4, r: 8 }, columns: 7, rows: 8 },
+      { id: 'd', partId: 'wall-honeycomb-part', origin: { q: 3, r: 8 }, columns: 7, rows: 8 },
+    ];
+    const plan = planFixings(tiled);
+    expect(plan.junctions.length).toBeGreaterThan(0);
+    for (const j of plan.junctions) {
+      // Three or more plates, or it is not a junction.
+      expect(j.panelIds.length).toBeGreaterThanOrEqual(3);
+      expect(j.cells).toHaveLength(4);
+    }
+  });
+
+  it('uses the shape the catalogue measured, not one invented here', () => {
+    // The footprint is copied into fixings.ts so the planner needs no
+    // catalogue; this is what stops the copy drifting from the real part.
+    const part = catalog.parts.find((p) => p.id === JUNCTION_FIXING_ID)!;
+    expect(part, JUNCTION_FIXING_ID).toBeDefined();
+    const norm = (cs: readonly { q: number; r: number }[]) =>
+      cs.map((c) => `${c.q},${c.r}`).sort().join(' ');
+    expect(norm(JUNCTION_FOOTPRINT)).toBe(norm(part.footprint));
+    // ...and it really does take a wall screw, or it is not a wall fixing.
+    expect(part.hardware.some((h) => /wall screw/i.test(h.item))).toBe(true);
+  });
+
+  it('counts a junction towards the spacing rather than on top of it', () => {
+    // Planned independently, 64 panels produced 56 junction inserts on top of
+    // 74 single ones: 128 holes in a wall that needs about 70.
+    const tiled = Array.from({ length: 9 }, (_, i) => ({
+      id: `p${i}`, partId: 'wall-honeycomb-part',
+      origin: { q: (i % 3) * 7 - Math.floor(i / 3) * 4, r: Math.floor(i / 3) * 8 },
+      columns: 7, rows: 8,
+    }));
+    const plan = planFixings(tiled);
+    const total = plan.cells.length + plan.junctions.length;
+    // Independent planning gave a junction at every meeting point PLUS a full
+    // spacing grid. Suppressed properly, the whole wall comes to well under two
+    // fixings per plate. (Per-m² is not the assertion: a small wall is denser
+    // than a large one because its edges are a bigger share of it.)
+    expect(total).toBeLessThan(tiled.length * 2);
+    expect(plan.junctions.length).toBeGreaterThan(0);
   });
 });

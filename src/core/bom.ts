@@ -35,7 +35,7 @@
  */
 
 import { customPanelGroups, isCustomPanel } from './customiser';
-import { fixingsFor } from './fixings';
+import { fixingsFor, JUNCTION_FIXING_ID } from './fixings';
 import { fastenersNeedReview } from './overrides';
 import { hexKey, hexSub, keyToHex, placedPanelCells, placeFootprint } from './hex';
 import { crossesSeam } from './tiling';
@@ -553,6 +553,17 @@ export function computeBom(doc: LayoutDoc, catalog: Catalog): Bom {
     const mount = wallMountPart(index);
     if (mount !== undefined) bump(quantities, mount.id, fixings.cells.length);
   }
+  /**
+   * Junctions get the four-cell countersunk insert, not four single-cell ones.
+   *
+   * HSW-SPEC §4: the panels have no screw holes of their own, and a multi-cell
+   * insert straddling the join is what holds them to each other as well as to
+   * the wall. Four separate fixings, one per plate, fix each plate and leave
+   * the join itself unsupported.
+   */
+  if (fixings.junctions.length > 0 && index.has(JUNCTION_FIXING_ID)) {
+    bump(quantities, JUNCTION_FIXING_ID, fixings.junctions.length);
+  }
 
   // Bought hardware, from every part in the BOM — including the inserts that
   // only got there via someone else's requires[].
@@ -671,7 +682,8 @@ export function computeBom(doc: LayoutDoc, catalog: Catalog): Bom {
       distinctParts: printed.length + fasteners.length,
     },
     fixings: {
-      count: fixings.cells.length,
+      count: fixings.cells.length + fixings.junctions.length,
+      junctions: fixings.junctions.length,
       spacingMm: fixings.spacingMm,
       perSquareMetre: roundTo(fixings.perSquareMetre, 1),
       starvedPanelIds: fixings.starvedPanelIds,

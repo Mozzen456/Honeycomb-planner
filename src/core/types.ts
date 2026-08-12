@@ -245,6 +245,12 @@ export interface BomLine {
 export interface WallFixings {
   /** How many countersunk inserts + wall screws hold the whole assembly up. */
   count: number;
+  /**
+   * How many of those are four-cell inserts bridging a junction where three or
+   * four plates meet. They hold the panels to each other as well as to the
+   * wall, which is what the single-cell ones cannot do (HSW-SPEC §4).
+   */
+  junctions: number;
   spacingMm: number;
   perSquareMetre: number;
   /** Panels with no free cell left for a fixing. */

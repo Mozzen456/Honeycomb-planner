@@ -463,6 +463,9 @@ export function BomPanel(props: BomPanelProps): JSX.Element {
                 {bom.fixings.perSquareMetre > 0
                   ? ` (${bom.fixings.perSquareMetre.toFixed(0)} per m²)`
                   : ''}
+                {bom.fixings.junctions > 0
+                  ? `, of which ${formatCount(bom.fixings.junctions)} are four-cell inserts bridging where panels meet`
+                  : ''}
                 .
               </p>
             )}

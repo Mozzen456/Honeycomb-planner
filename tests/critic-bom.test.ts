@@ -342,7 +342,9 @@ describe('1 — SMALL: 2 panels + a handful of accessories', () => {
       { item: WALL_SCREW, count: 4 },
     ]);
     // one screw per countersunk insert, not two, and not zero
-    expect(shop(bom, WALL_SCREW)).toBe(qty(bom, 'insert-countersunk'));
+    expect(shop(bom, WALL_SCREW)).toBe(
+      qty(bom, 'insert-countersunk') + qty(bom, 'insert-for-countersunk-hole-3'),
+    );
     // and the M3 fixings follow the insert, not the accessory: D11's rule is
     // that the fixing belongs to the part it passes through.
     expect(shop(bom, 'M3 bolt, 10-16 mm')).toBe(qty(bom, 'insert-with-m3'));
@@ -509,7 +511,9 @@ describe('2 — FULL GARAGE WALL: 2400 x 1200, bed256, 64 panels + 30 accessorie
   });
 
   it('required inserts multiply N x M across 64 panels', () => {
-    expect(qty(bom, 'insert-countersunk')).toBe(74); // the assembly's fixing plan
+    expect(qty(bom, 'insert-countersunk')).toBe(24); // single-cell fixings only
+    // ...the rest of the wall is held by four-cell inserts bridging the joins.
+    expect(qty(bom, 'insert-for-countersunk-hole-3')).toBe(56);
     expect(qty(bom, 'insert-empty')).toBe(40); // 3x10 + 2x5
     expect(qty(bom, 'insert-m4')).toBe(5); // 1 per box; box used to require none
 
@@ -526,9 +530,14 @@ describe('2 — FULL GARAGE WALL: 2400 x 1200, bed256, 64 panels + 30 accessorie
   });
 
   it('REGRESSION: 370 inserts -> 370 wall screws, not 740 and not 0', () => {
-    expect(shop(bom, WALL_SCREW)).toBe(74);
-    expect(shop(bom, WALL_PLUG)).toBe(74);
-    expect(shop(bom, WALL_SCREW)).toBe(qty(bom, 'insert-countersunk'));
+    // One screw and one plug per fixing, whether it is a single-cell insert or
+    // a four-cell one bridging a junction. That is the invariant; the split
+    // between the two kinds is the fixing plan's business.
+    expect(shop(bom, WALL_SCREW)).toBe(80);
+    expect(shop(bom, WALL_PLUG)).toBe(80);
+    expect(shop(bom, WALL_SCREW)).toBe(
+      qty(bom, 'insert-countersunk') + qty(bom, 'insert-for-countersunk-hole-3'),
+    );
     // ...and the wall is genuinely fixed: at least one per panel is the floor
     // the assembly plan guarantees (src/core/fixings.ts).
     expect(shop(bom, WALL_SCREW)).toBeGreaterThanOrEqual(panels.length);
@@ -543,26 +552,26 @@ describe('2 — FULL GARAGE WALL: 2400 x 1200, bed256, 64 panels + 30 accessorie
       // insert's bolt clamps the insert, the box's bolt clamps the box to it.
       { item: 'M4 bolt, 10-16 mm', count: 5 },
       { item: 'M4 nut', count: 5 },
-      { item: WALL_PLUG, count: 74 },
-      { item: WALL_SCREW, count: 74 },
+      { item: WALL_PLUG, count: 80 },
+      { item: WALL_SCREW, count: 80 },
     ]);
     expect(shop(bom, 'M4 nut')).toBe(qty(bom, 'insert-m4'));
   });
 
   it('totals match the hand arithmetic', () => {
-    expect(bom.totals.parts).toBe(213);
-    expect(bom.totals.distinctParts).toBe(10);
-    expect(bom.totals.minutes).toBe(35621);
-    expect(bom.totals.grams).toBe(5477.9);
-    expect(bom.totals.metres).toBe(1836.79);
+    expect(bom.totals.parts).toBe(219);
+    expect(bom.totals.distinctParts).toBe(11);
+    expect(bom.totals.minutes).toBe(38321);
+    expect(bom.totals.grams).toBe(5832.1);
+    expect(bom.totals.metres).toBe(1955.5);
   });
 
   it('totals are summed UNROUNDED, not from the rounded lines', () => {
     // Summing the rounded gram figures on the lines gives 5478.1; the honest
     // answer is 5477.9. If these are ever equal the accumulator was rounded early.
     const fromLines = [...bom.printed, ...bom.fasteners].reduce((a, l) => a + l.grams, 0);
-    expect(Number(fromLines.toFixed(1))).toBe(5478.1);
-    expect(bom.totals.grams).toBe(5477.9);
+    expect(Number(fromLines.toFixed(1))).toBe(5832.3);
+    expect(bom.totals.grams).toBe(5832.1);
 
     const expected = expectedTotals(
       new Map([
@@ -575,15 +584,16 @@ describe('2 — FULL GARAGE WALL: 2400 x 1200, bed256, 64 panels + 30 accessorie
         ['insert-with-m3', 5],
         ['insert-m4', 5],
         ['insert-empty', 40],
-        ['insert-countersunk', 74],
+        ['insert-countersunk', 24],
+        ['insert-for-countersunk-hole-3', 56],
       ]),
     );
     // Exact decimal sums for the fixing-planned wall: 35620.55 min, 5477.93 g,
     // 1836.9926 m. Recomputed, not adjusted -- the helper re-derives them from
     // the quantity map above rather than trusting the BOM.
-    expect(expected.rawMinutesHundredths).toBe(3562065);
-    expect(expected.rawGramsHundredths).toBe(547789);
-    expect(expected.rawMetresTenThousandths).toBe(18367864);
+    expect(expected.rawMinutesHundredths).toBe(3832143);
+    expect(expected.rawGramsHundredths).toBe(583211);
+    expect(expected.rawMetresTenThousandths).toBe(19554980);
     expect(bom.totals.parts).toBe(expected.parts);
     expect(bom.totals.grams).toBe(expected.grams);
     expect(bom.totals.metres).toBe(expected.metres);
