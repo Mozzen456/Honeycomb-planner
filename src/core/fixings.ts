@@ -78,6 +78,13 @@ export interface JunctionFixing {
   cells: Hex[];
   /** The panels it ties together — three or four, or it would not be one. */
   panelIds: string[];
+  /**
+   * Where and how it sits, so the 3D view can draw the real part rather than a
+   * token. Without these the renderer would have to re-derive the rotation from
+   * the cell set, which is the sort of second derivation that drifts.
+   */
+  anchor: Hex;
+  rotation: Rotation;
 }
 
 export interface FixingPlan {
@@ -160,7 +167,12 @@ export function planFixings(
         // Three or more plates is a junction; two is an ordinary seam, which
         // the interlocking edge already handles.
         if (panels.size < 3) continue;
-        junctions.push({ cells: placed, panelIds: [...panels].sort() });
+        junctions.push({
+          cells: placed,
+          panelIds: [...panels].sort(),
+          anchor,
+          rotation: rot as Rotation,
+        });
         for (const k of keys) {
           usedByJunction.add(k);
           chosen.set(k, owner.get(k)!);

@@ -19,7 +19,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import * as THREE from 'three';
 
 import { itemCells } from '../core/bom';
-import { fixingsFor } from '../core/fixings';
+import { fixingsFor, JUNCTION_FIXING_ID } from '../core/fixings';
 import { CELL, PANEL_DEPTH, PITCH } from '../core/constants';
 import { hexKey, hexToMm, panelCells, placedPanelCells, placeFootprint } from '../core/hex';
 import type { Catalog, CatalogPart, Hex, LayoutDoc, Rotation } from '../core/types';
@@ -601,11 +601,17 @@ export function WallView3D(props: WallView3DProps) {
    * what is ordered and exactly where it fits.
    */
   const [fixingMesh, setFixingMesh] = useState<PartMesh | null>(null);
+  const [junctionMesh, setJunctionMesh] = useState<PartMesh | null>(null);
   const fixingPart = useMemo(
     () => catalog.parts.find((p) => p.type === 'fastener' || p.type === 'insert'
       ? (p.hardware ?? []).some((h) => /wall (screw|plug)/i.test(h.item))
         && (p.footprint ?? []).length <= 1
       : false),
+    [catalog],
+  );
+
+  const junctionPart = useMemo(
+    () => catalog.parts.find((p) => p.id === JUNCTION_FIXING_ID),
     [catalog],
   );
 
@@ -617,6 +623,15 @@ export function WallView3D(props: WallView3DProps) {
     });
     return () => { live = false; };
   }, [fixingPart]);
+
+  useEffect(() => {
+    if (!junctionPart) return;
+    let live = true;
+    void loadPartMesh(junctionPart).then((m) => {
+      if (live && m !== null) setJunctionMesh(m);
+    });
+    return () => { live = false; };
+  }, [junctionPart]);
 
   useEffect(() => {
     const s = stateRef.current;
@@ -660,7 +675,48 @@ export function WallView3D(props: WallView3DProps) {
       mesh.userData['ownGeometry'] = fixingMesh === null;
       s.fixingGroup.add(mesh);
     }
-  }, [doc, catalog, ready, readTheme, themeTick, fixingMesh]);
+
+    /**
+     * The junction inserts, drawn as the four-cell part they are.
+     *
+     * Every part in the build is modelled, fastenings included — a fixing you
+     * cannot see is one you cannot check, and these are the ones holding the
+     * panels to each other. Placed on the centroid of the cells they occupy,
+     * which is the same convention a placed multi-cell item uses, and turned by
+     * the rotation the planner chose so the diamond lies along the seam it is
+     * bridging.
+     */
+    for (const junction of plan.junctions) {
+      let cx = 0;
+      let cy = 0;
+      for (const c of junction.cells) {
+        const p = hexToMm(c);
+        cx += p.x;
+        cy += p.y;
+      }
+      cx /= junction.cells.length;
+      cy /= junction.cells.length;
+
+      const mesh = junctionMesh
+        ? new THREE.Mesh(junctionMesh.geometry, mat)
+        : new THREE.Mesh(
+            new THREE.CylinderGeometry(
+              (CELL.mouthAcrossFlats * 1.6) / Math.sqrt(3),
+              (CELL.mouthAcrossFlats * 1.6) / Math.sqrt(3),
+              PANEL_DEPTH, 6,
+            ),
+            mat,
+          );
+      if (!junctionMesh) mesh.geometry.rotateX(Math.PI / 2);
+      mesh.rotation.z = (Math.PI / 3) * junction.rotation;
+      mesh.position.set(
+        cx, cy,
+        junctionMesh ? PANEL_DEPTH - junctionMesh.depthMm : PANEL_DEPTH / 2,
+      );
+      mesh.userData['ownGeometry'] = junctionMesh === null;
+      s.fixingGroup.add(mesh);
+    }
+  }, [doc, catalog, ready, readTheme, themeTick, fixingMesh, junctionMesh]);
 
   // --- obstacles ----------------------------------------------------------
 
