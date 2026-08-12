@@ -442,8 +442,68 @@ manifold. PrusaSlicer independently reports `manifold = yes` for `insert-empty.s
 | ≈ 42.58 mm across a two-hexagon span | 46.418 mm (diagonal) / 46.100 mm (axial) | **disagrees — files win** |
 
 On 28 vs 56: 56 hexagonal interiors were recovered from the cross-section, and 7 × 8 = 56 was
-derived independently from the size formula. Both agree. 28 is exactly half, so the community
-figure is plausibly a per-face count or a typo — but that is a guess, so it is recorded and left.
+derived independently from the size formula. Both agree. **Now settled by a third, documentary
+source — see §10: the designer's own dimensioned drawing of this panel shows 8 columns of 7,
+counted mechanically at 56 cells. 28 is folklore.**
 
 On 42.58: nothing in any file measures it. The nearest quantities in the geometry are
-2 × 20.438 = 40.876 and 20.438 + 22.0 = 42.438, neither convincing. Recorded in `UNKNOWN.md`.
+2 × 20.438 = 40.876 and 20.438 + 22.0 = 42.438, neither convincing. **Now answered indirectly —
+§10: the designer dimensions a two-hexagon span as `40.88`, which is 2 × 20.438 to within the
+drawing's own rounding. So the geometry's two-cell span has a stated value, and it is not 42.58.
+42.58 is recorded as folklore with no source in the designer's material.**
+
+---
+
+## 10. The designer's own drawings — provenance
+
+Source: `152592-honeycomb-storage-wall-7c3ddd75-ab96-4c17-9895-74008e6a8880.pdf`, in this repo
+root. It is the Printables listing for **"Honeycomb storage wall" by RostaP** (model 152592),
+exported to PDF; the listing is dated *published 12. 8. 2023, updated 12. 8. 2023* on its own first
+page, and links `https://www.printables.com/cs/model/530149-...` for the OpenSCAD customiser.
+Read locally 2026-08-13. The PDF embeds 22 large images; four are CAD drawings with dimension
+lines, the rest are photographs and renders.
+
+**These drawings are a source for *choices*, never for measurements. Where a drawing and a mesh
+disagree, the mesh wins (see the constraint in `CLAUDE.md`). Every number below agrees with the
+meshes to within the drawing's rounding, so nothing here overrules anything.**
+
+| Drawing | States | Against our measurement |
+|---|---|---|
+| Base panel | `170.32` × `177` × `8`; cell `20` across flats; walls `1.8` and `3.6` | `wall-honeycomb-part` = 177.000 × 170.317 × 8; 20.000 across flats — **agrees** |
+| Base panel | 8 columns × 7 cells, counted mechanically = **56 cells** | 56 from the cross-section — **agrees**, and refutes the community 28 |
+| Insert family | flange `22.5` across flats / `25.98` across corners | 22.5 flange — **agrees** (25.98 = 22.5 ÷ cos 30°) |
+| Insert family | four-cell insert spans `40.88` one way, `23.6` the other | 2 × ROW_STEP = 40.876, PITCH = 23.6 — **agrees** |
+| Insert family | bores `Ø10`, `Ø3.5`, `Ø3.2`, `5.8`, `7.5`, `10` | consistent with §5 |
+| Shelf | a shelf carries exactly **two** hexagonal pegs, `45.18` apart | `detect.mountPoints()` measures 2 on shelf-1/2/3 — **agrees**, and refutes the bounding-box guess of 3/5/7 |
+
+Two further statements are prose, not geometry, and are recorded because the BOM depends on them:
+
+- *"Hook bottom and side is prepared to insert to the empty insert part."* (listing, p. 7) — names
+  `insert-empty` as the fitting for `hook-bottom` and `hook-side`.
+- The changelog names the fastener for four parts: hooks 12 mm and 25 mm are *"screwed with M3
+  screw"*; the box and the SD-card holder are *"screwed with M4x10 screw"*; a second box and USB
+  holder are *"screw in no need"*. These agree with what the scanner already ordered.
+
+### 10.1 The frame: the wall hangs flat-top
+
+Both CAD drawings present the lattice **flat-top** — a hexagon with a flat edge up and a vertex to
+each side. The panel drawing puts `170.32` across and `177` down, i.e. the 20.438 step horizontal
+and the 23.6 pitch vertical, which is the pointy-top frame of §2 turned 90°. The insert drawing
+does the same: `25.98` across corners is horizontal, `22.5` across flats is vertical.
+
+The drawings only show how the designer *presents* the parts. What settles the question is the
+meshes, measured here on 2026-08-13:
+
+**A shelf has an unambiguous up** — its tray floor is horizontal in use. On all four shelves the
+tray floor's ~2100 mm² faces are perpendicular to Z, the hexagonal peg runs along Y (into the
+wall), and the peg's six side normals sit at 0°, ±60°, ±120°, 180° from +Z. A normal pointing
+straight up means **a flat edge on top**. `hook-to-empty`, `hook-to-empty-long` and
+`box-without-screw` are drawn in the same frame and agree.
+
+So a part's peg presents a flat edge upward when the part is used the right way up, and therefore
+the wall cell receiving it is flat-top. **The wall hangs flat-top.** This is a measurement, and it
+agrees with both drawings and with the mounted-part photographs noted in PARKED P9.
+
+The app draws the wall pointy-top (§2), which is this frame turned 90°. That is a rendering
+question, not a geometry one — no number in this spec changes — but it is why
+`FITTING_SEAT_RADIANS` exists. See DECISIONS D31.

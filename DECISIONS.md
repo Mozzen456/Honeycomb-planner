@@ -652,3 +652,40 @@ lattice positions. The first derivation failed it, which is the whole reason it 
 through `placedPanelCells`**, never `panelCells` on the raw origin/columns/rows. The two modules
 most likely to forget are the ones deciding where fixings go and whether an accessory is off-panel,
 and both would fail silently.
+
+---
+
+## D31. The wall hangs flat-top — measured, and the app still draws it pointy-top
+
+**The question.** PARKED P9 left this open: the app draws the wall pointy-top, every photograph of
+a mounted part looks flat-top, and 30° is not a multiple of 60°, so no rotation of a part
+reconciles them. `FITTING_SEAT_RADIANS` in `WallView3D.tsx` turns fittings by 30° to hide it.
+
+**The evidence, three independent lines, all agreeing.** Recorded with provenance in HSW-SPEC §10.
+
+1. **The designer's own dimensioned drawings** (in `152592-honeycomb-storage-wall-*.pdf`, the
+   Printables listing for RostaP's model 152592, read 2026-08-13). Both the base-panel drawing and
+   the insert-family drawing present the lattice flat-top: the panel is `170.32` across by `177`
+   down — the 20.438 step horizontal, the 23.6 pitch vertical — and the insert's `25.98` across
+   corners is horizontal while its `22.5` across flats is vertical.
+2. **The meshes, which are the authority.** A shelf's tray floor is horizontal in use, so a shelf
+   fixes "up" without appeal to any photograph. On all four shelves the tray floor is perpendicular
+   to Z, the hexagonal peg runs along Y into the wall, and the peg's six side normals fall at 0°,
+   ±60°, ±120°, 180° from +Z — a face normal pointing straight up, which is a flat edge on top.
+   `hook-to-empty`, `hook-to-empty-long` and `box-without-screw` share that frame.
+3. **The photographs** already noted in P9 — mounted parts read flat-top.
+
+**Decision: the wall hangs flat-top, and this is recorded as a fact about the product.** It costs
+nothing in the BOM: the lattice, adjacency, footprints and tiling are identical under a 90° turn of
+the viewing frame, so no number in HSW-SPEC changes and no test moves.
+
+**What is deliberately NOT done here.** The app's renderers are left pointy-top for now, and
+`FITTING_SEAT_RADIANS` stays. Turning the frame is a real change — `hexToMm`, `panelCells`, the
+tiler, `panel-parity.test.ts`, the customiser round-trip and both renderers — and the parity test
+exists precisely because a stagger error there is a mirrored plate that is invisible until it is
+printed. That is worth doing deliberately, not as a side effect of settling the evidence. It is
+carried in PARKED P9 as the one remaining action, now with the answer attached rather than the
+question.
+
+**What changes immediately:** nothing in code. The 30° seat is no longer an unexplained fudge —
+it is a known 90° frame difference, documented, with the measurement that proves the direction.

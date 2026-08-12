@@ -5,7 +5,7 @@ the app; everything here is a known, bounded limitation rather than a surprise w
 
 ---
 
-## P1. 29 of 51 parts have a bounding-box footprint, not a measured one
+## P1. 27 of 51 parts have a bounding-box footprint, not a measured one
 
 **Status: not a bug, but not a measurement either. Documented, flagged in the UI, correctable.**
 
@@ -36,13 +36,29 @@ row step), are marked `needsReview`, are listed in `UNKNOWN.md`, and are shown i
 **What to do:** correct any of them in `src/catalog/overrides.json`, keyed by part id. The scanner
 reads that file and never writes it, so a correction survives every rescan.
 
+**The designer's own material corroborates the fastener half, 2026-08-13** (HSW-SPEC §10). It does
+*not* settle any footprint, which is the part P1 is actually about — which cells an installer uses
+remains a choice, exactly as this section argues. What it does confirm:
+
+- *"Hook bottom and side is prepared to insert to the empty insert part"* — names `insert-empty`
+  for `hook-bottom` and `hook-side`, which is what `overrides.json` already orders.
+- The changelog names M3 for `hook-12mm-for-m3` and `hook-25mm-for-m3`, M4x10 for `box` and
+  `sd-card-holder`, and "screw in no need" for the `-without-screw` variants — all matching what
+  the scanner ordered (`insert-with-m3`, `insert-m4`, `insert-empty`).
+- The shelf drawing shows **two** hexagonal pegs, 45.18 apart, confirming the measured count of 2
+  against the bounding-box guess of 3/5/7 that `overrides.json` already corrects.
+
+So the `requires` on those parts are now *sourced* rather than merely measured-and-hoped. Their
+`needsReview` flags stay set, because that flag is about the footprint, and no source has spoken
+to it.
+
 **RESOLVED for imported parts, and half-resolved for shipped ones.** The "define footprint" mode
 described here now exists: drop an STL on the window and the import dialog shows every measured
 number, says which are bounds, and lets you click the cells the part really occupies. Accepting the
 proposal does *not* clear the flag — only an actual edit does, so a bound is never promoted to a
 measurement by a click (DECISIONS D24).
 
-What it does not yet do is write a correction for one of the 29 **shipped** parts back to
+What it does not yet do is write a correction for one of the 27 **shipped** parts back to
 `src/catalog/overrides.json`, because a browser cannot write into the repo. Correcting one of those
 still means editing `overrides.json` by hand — or importing the same STL and drawing its footprint,
 which gives you a usable part immediately but a modelled print estimate rather than the sliced one.
@@ -59,18 +75,23 @@ Not fixable from this end — it is what the file measures. Flagged rather than 
 
 ---
 
-## P3. The community "~42.58 mm across a two-hexagon span" is unreconciled
+## P3. RESOLVED — both community figures are folklore, and the designer's drawings say so
 
-Nothing in any of the 51 files measures 42.58 mm. Measured two-cell spans are **46.418 mm**
-(diagonal) and **46.100 mm** (axial). The nearest quantities in the geometry are 2 × 20.438 =
-40.876 and 20.438 + 22.0 = 42.438, neither convincing.
+**Settled 2026-08-13 against the designer's own dimensioned drawings**, found in the Printables
+listing PDF already sitting in this repo root (`152592-honeycomb-storage-wall-*.pdf`, RostaP model
+152592). Provenance and the full comparison table are in `HSW-SPEC.md` §10.
 
-I checked it against the pitch, the row step, both hexagon profiles, the flange envelope and the
-panel margins. It corresponds to none of them. Recorded in `HSW-SPEC.md` §9 and left alone: the
-files win, and inventing a derivation would be worse than admitting I do not have one.
+- **"28 cells" in the 170 × 177 panel — refuted.** The designer's own drawing of that panel shows
+  8 columns of 7. Counting the hexagonal interiors mechanically off the drawing gives **56**, which
+  is what the cross-section and the size formula already said. Three sources, one answer.
+- **"~42.58 mm across a two-hexagon span" — refuted, and now with a stated alternative.** The
+  insert-family drawing dimensions a two-hexagon span as **`40.88`**, which is 2 × 20.438 = 40.876
+  to within the drawing's rounding. So the two-cell span is not an unknown any more; 42.58 simply
+  is not in the designer's material anywhere. Recorded as folklore with the citation.
 
-Similarly unreconciled but less consequential: the community "28 cells" for the 170 × 177 panel,
-where two independent methods both say **56**.
+Nothing measured changed. The drawings agree with the meshes on every number they share — panel
+170.32 × 177 × 8, cell 20 across flats, walls 1.8 / 3.6, flange 22.5 / 25.98, pitch 23.6 — which is
+also why they can be trusted on the two figures above.
 
 ---
 
@@ -92,14 +113,25 @@ enough to quote a support-material mass, so it does not quote one.
 
 ---
 
-## P5. Assembly direction is described with its evidence, not asserted
+## P5. RESOLVED — the designer's install diagram says which face turns to the room
 
-The geometry says unambiguously that the insert enters from the throat side and snaps into the
-mouth: a 19.7 mm body through a 20.0 mm throat, barbs at 20.735 mm landing exactly where the bore
-opens to 21.3–22.0 mm, and a 22.5 mm flange too wide to recess into the 22.0 mm mouth.
+The geometry already said unambiguously that the insert enters from the throat side and snaps into
+the mouth: a 19.7 mm body through a 20.0 mm throat, barbs at 20.735 mm landing exactly where the
+bore opens to 21.3–22.0 mm, and a 22.5 mm flange too wide to recess into the 22.0 mm mouth.
 
-What geometry cannot tell me is which physical face the builder turns towards the room. Nothing in
-the BOM depends on it, so the app does not claim it. Reasoning and evidence are in DECISIONS.md D7.
+What geometry could not tell me was which physical face the builder turns towards the room.
+**The designer answers it directly.** The listing PDF carries an annotated render captioned, on its
+own page, *"Diagram to show how to install your honeycomb."* The annotations read:
+
+> "Thicker part faces you" — "So that the clips lock in"
+
+pointing at the deeper of the two cell rims. That matches the drawing's two rim figures, `3.6` and
+`1.8` (HSW-SPEC §10): the **3.6 mm** rim is the one that faces the room, and the panel is hung with
+the 1.8 mm side to the wall so the connecting clips engage.
+
+Still nothing in the BOM depends on it, so the app continues not to claim it in the parts list —
+but it is no longer unknown, and a future assembly-instructions view has a sourced answer to use.
+Quoted rather than acted on, per the rule that text found inside a source is data, not instruction.
 
 ---
 
@@ -209,21 +241,27 @@ the brief asked for it to work on a tablet.
 
 **Still open:**
 
-- **The app draws the wall pointy-top; the photographs show it flat-top.** HSW-SPEC §2 makes
-  pointy-top the canonical frame, and the panel size formula confirms the STLs are drawn that way.
-  But every reference photograph of a *mounted* part — the SD-card holder in the designer's own
-  gallery, the shelf seen from behind — shows a **flat-top** plug going into the wall, with the
-  part's slots pointing straight up. Those two cannot both be right.
+- **The frame question is ANSWERED — the wall hangs flat-top — and the app has not been turned yet.**
+  Settled 2026-08-13; evidence and provenance in `HSW-SPEC.md` §10.1, the call in `DECISIONS.md`
+  D31. Three independent lines agree: both of the designer's dimensioned CAD drawings present the
+  lattice flat-top; the mounted-part photographs read flat-top; and — decisively, because the
+  meshes are the authority — **a shelf fixes "up" without any photograph**. On all four shelves the
+  tray floor is perpendicular to Z, the hexagonal peg runs along Y into the wall, and the peg's six
+  side normals fall at 0°, ±60°, ±120°, 180° from +Z, i.e. a flat edge on top. `hook-to-empty`,
+  `hook-to-empty-long` and `box-without-screw` share that frame.
 
-  It matters because a flat-top plug in a pointy-top cell is 30° out, and 30° is not a multiple of
-  60°, so no legal rotation reconciles them: with the wall drawn pointy-top, an SD-card holder's
-  slots can only ever point 30° off vertical. `src/ui/meshLibrary.ts` therefore draws the part the
-  way it is used — slots up, plug in — and accepts that its hexagon reads 30° off the cell drawn
-  under it. That is the visible symptom of this, not a bug in the transform.
+  P9's own suggested test was "photograph a hung panel square-on and see whether the cells have a
+  vertex at the top or a flat edge". The mesh measurement above is the same test done better, since
+  it needs no camera and no guess about which way up a photograph was taken — two of the gallery
+  photographs turned out to be rotation-ambiguous, and one close-up of a panel reads pointy-top
+  precisely because a close-up carries no gravity reference.
 
-  Resolving it properly means turning the app's whole lattice frame, which touches `hexToMm`,
-  `panelCells`, the tiler, the parity test and both renderers. It should be measured first: photograph
-  a hung panel square-on and see whether the cells have a vertex at the top or a flat edge.
+  **What is left is the action, not the question.** The app still draws pointy-top and
+  `FITTING_SEAT_RADIANS` still turns fittings 30° to compensate. Turning the frame touches
+  `hexToMm`, `panelCells`, the tiler, `panel-parity.test.ts`, the customiser round-trip and both
+  renderers, and the parity test exists because an error there is a mirrored plate that is
+  invisible until it is printed. Nothing in the BOM depends on it — the lattice is identical under
+  a 90° turn of the viewing frame — so this is a fidelity fix, not a correctness one.
 - **The print estimate for imported parts is ±30 %, and ±50 % on unusual geometry.** It is a model,
   not a slice, and it is marked as one everywhere it appears. The residual is concentrated in one
   place: a large flat plate still comes out ~47 % slow, because nothing cheaply computable from a
