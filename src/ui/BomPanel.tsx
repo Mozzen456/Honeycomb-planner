@@ -29,6 +29,8 @@ export interface BomPanelProps {
   catalog: Catalog;
   doc: LayoutDoc;
   onExport: (format: BomExportFormat) => void;
+  /** Rendered under the parts list: obstacles, and the custom panels they force. */
+  extras?: JSX.Element;
   /** Clicking a line highlights that part on the wall. */
   onSelectPart?: (partId: string) => void;
   /** Index into `bom.issues` as given — not the display order. */
@@ -317,7 +319,7 @@ const EXPORTS: readonly { format: BomExportFormat; label: string; hint: string }
 // ---------------------------------------------------------------------------
 
 export function BomPanel(props: BomPanelProps): JSX.Element {
-  const { bom, catalog, doc, onExport, onSelectPart, onDismissIssue } = props;
+  const { bom, catalog, doc, onExport, onSelectPart, onDismissIssue, extras } = props;
 
   const index = useMemo(() => {
     const map = new Map<string, CatalogPart>();
@@ -452,8 +454,21 @@ export function BomPanel(props: BomPanelProps): JSX.Element {
               emptyText="Nothing here yet — inserts are added automatically by the parts that need them."
             />
             <ShoppingSection items={shopping} />
+            {/* Fixings are an assembly figure, not a per-plate one: the spacing
+                is what a builder has to sanity-check against their own wall. */}
+            {bom.fixings.count > 0 && (
+              <p className="bom-panel__fixings tabular-nums">
+                {formatCount(bom.fixings.count)} wall fixings, spaced about{' '}
+                {formatCount(bom.fixings.spacingMm)} mm apart
+                {bom.fixings.perSquareMetre > 0
+                  ? ` (${bom.fixings.perSquareMetre.toFixed(0)} per m²)`
+                  : ''}
+                .
+              </p>
+            )}
           </>
         )}
+        {extras}
       </div>
 
       <footer className="bom-totals" aria-label="Totals">

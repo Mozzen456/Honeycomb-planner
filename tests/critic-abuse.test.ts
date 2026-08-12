@@ -190,7 +190,11 @@ describe('scale', () => {
     if (ratio > 2) console.log(`[pending] P8.5 still open: per-item cost grew ${ratio.toFixed(1)}x from 200 to 2000 items`);
     expect(perItemRest, 'bulk placement crossed from "slow" into "unusable"').toBeLessThan(50);
 
-    timed('validate 2000', () => expect(validate(doc, catalog)).toEqual([]));
+    // 2000 accessories on one panel take every cell, so the fixing planner has
+    // nowhere left to put the fixing that holds that panel up and says so. That
+    // is the one legitimate complaint about this layout; nothing else may fire.
+    timed('validate 2000', () =>
+      expect(validate(doc, catalog).map((i) => i.code)).toEqual(['no-room-for-mounts']));
     timed('bom 2000', () => expect(computeBom(doc, catalog).totals.parts).toBe(2001));
     const text = timed('serialize 2000', () => serialize(doc));
     // eslint-disable-next-line no-console

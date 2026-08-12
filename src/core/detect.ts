@@ -866,3 +866,195 @@ function insertFed(mesh: MeshData, cellMm: number): Detection {
     bores: detectBores(mesh, bestAxis, cellMm),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Mounting points
+// ---------------------------------------------------------------------------
+
+/**
+ * How many places this part is actually fixed to the wall.
+ *
+ * This is the measurement that was missing, and its absence was the worst
+ * defect in the parts list. `tools/scan.py` had no way to count a part's
+ * mounting bosses, so it did two wrong things instead: where it found a bolt
+ * bore it ordered one insert, and where it found nothing it either ordered
+ * NOTHING AT ALL — ten accessories, including both 200 mm wrench racks, came
+ * with no fastener whatsoever — or fell back to `insert-empty × cells`, where
+ * `cells` is the bounding-box BOUND that PARKED P1 explicitly says is not a
+ * measurement. A 7-cell shelf with two pegs ordered seven inserts.
+ *
+ * A tier-3 part is fixed by discrete bosses on its wall face: a peg into an
+ * insert's 13.4 mm socket (15.47 mm across corners), or a bolt through it. Both
+ * are separate lumps of material sitting on lattice positions, which is exactly
+ * what a raster can count.
+ *
+ * Answers with a confidence, and the caller is expected to respect it. A count
+ * that is not stable across depth is reported as unknown rather than guessed —
+ * the same rule the footprint bound follows.
+ */
+export interface MountPoints {
+  count: number;
+  confident: boolean;
+  /** Across-corners size of each boss found, mm. */
+  spansMm: number[];
+  notes: string[];
+}
+
+/** A boss for the 13.4 mm socket measures ~15.5 across corners; a 19.7 mm wall
+ *  body ~22.7. Outside this band it is the part's body, or a card slot. */
+const BOSS_MIN_SPAN = 11;
+const BOSS_MAX_SPAN = 26;
+
+export function mountPoints(mesh: MeshData, detection: Detection): MountPoints {
+  // A wall-clipping part carries its own interface: it needs no insert at all,
+  // and its mounting points ARE its cells.
+  if (detection.tier === 'wall-clip' || detection.tier === 'panel') {
+    return {
+      count: detection.cells.length,
+      confident: true,
+      spansMm: [],
+      notes: ['clips straight into the wall; no separate insert needed'],
+    };
+  }
+
+  const axis = detection.wallFaceAxis === 'n/a' ? 'z' : detection.wallFaceAxis;
+  const { lo, hi } = boundsAlong(mesh, axis);
+  const extent = hi - lo;
+  if (extent <= 0) return { count: 0, confident: false, spansMm: [], notes: ['no extent'] };
+
+  const cellMm = Math.min(0.3, Math.max(0.15, extent / 200));
+
+  /**
+   * Both ends, not just the one `matingEnd` names.
+   *
+   * For a tier-3 part `matingEnd` comes from the contact-area heuristic, which
+   * is a guess by construction — the part carries no wall interface to measure
+   * from. Scanning both ends and keeping whichever gives the more stable count
+   * costs two rasters and removes that guess from the answer: shelf-4 read 1
+   * boss from the guessed end and 3 from the other.
+   */
+  let tally = new Map<number, { hits: number; spans: number[] }>();
+  let bestEndHits = -1;
+  const ends: ('low' | 'high')[] =
+    detection.matingEnd === 'high' ? ['high', 'low'] : ['low', 'high'];
+
+  for (const end of ends) {
+    const local = new Map<number, { hits: number; spans: number[] }>();
+    for (let d = 0.3; d < Math.min(10, extent * 0.6); d += 0.4) {
+      const at = end === 'low' ? lo + d : hi - d - 0.5;
+      const found = materialBlobs(mesh, axis, { lo: at, hi: at + 0.5 }, cellMm).filter(
+        (b) => b.span >= BOSS_MIN_SPAN && b.span <= BOSS_MAX_SPAN && b.areaMm2 > 50,
+      );
+      if (found.length === 0) continue;
+      if (!separatedOnLattice(found)) continue;
+      const entry = local.get(found.length) ?? { hits: 0, spans: [] };
+      entry.hits += 1;
+      if (entry.spans.length === 0) entry.spans = found.map((f) => f.span);
+      local.set(found.length, entry);
+    }
+    // Prefer the end that agrees with itself most often, and on a tie the one
+    // that found more mounting points — a merged boss reads as fewer, never
+    // as more, so the larger count is the one that resolved them.
+    let hits = 0;
+    let count = 0;
+    for (const [n, entry] of local) {
+      if (entry.hits > hits || (entry.hits === hits && n > count)) {
+        hits = entry.hits;
+        count = n;
+      }
+    }
+    const score = hits * 100 + count;
+    if (score > bestEndHits) {
+      bestEndHits = score;
+      tally = local;
+    }
+  }
+
+  let best = 0;
+  let bestHits = 0;
+  let spans: number[] = [];
+  for (const [count, entry] of tally) {
+    if (entry.hits > bestHits || (entry.hits === bestHits && count > best)) {
+      best = count;
+      bestHits = entry.hits;
+      spans = entry.spans;
+    }
+  }
+
+  // Stability is the whole test. One depth agreeing with itself proves nothing;
+  // a boss is a prism several millimetres long and shows the same count at
+  // several depths.
+  const confident = bestHits >= 2 && best > 0;
+  return {
+    count: best,
+    confident,
+    spansMm: spans.map((s) => Math.round(s * 10) / 10),
+    notes: confident
+      ? [`${best} mounting boss(es) on the ${axis} wall face, stable across ${bestHits} depths, ` +
+         `${spans.map((s) => s.toFixed(1)).join('/')} mm across corners`]
+      : ['could not count the mounting bosses reliably — the fastener count needs checking'],
+  };
+}
+
+/** Connected components of MATERIAL in a slab — the inverse of enclosedRegions. */
+function materialBlobs(
+  mesh: MeshData, axis: Axis, slab: Slab, cellMm: number,
+): { areaMm2: number; span: number; u: number; v: number }[] {
+  const r = rasterise(mesh, axis, cellMm, slab);
+  const { cols, rows, data } = r;
+  const seen = new Uint8Array(cols * rows);
+  const out: { areaMm2: number; span: number; u: number; v: number }[] = [];
+  for (let start = 0; start < data.length; start++) {
+    if (data[start] !== 1 || seen[start] === 1) continue;
+    let n = 0, su = 0, sv = 0, minX = cols, maxX = -1, minY = rows, maxY = -1;
+    const queue = [start];
+    seen[start] = 1;
+    while (queue.length > 0) {
+      const i = queue.pop()!;
+      const x = i % cols;
+      const y = (i - x) / cols;
+      n++; su += x; sv += y;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+      for (const nb of [i - 1, i + 1, i - cols, i + cols]) {
+        if (nb < 0 || nb >= data.length || seen[nb] === 1 || data[nb] !== 1) continue;
+        if (nb === i - 1 && x === 0) continue;
+        if (nb === i + 1 && x === cols - 1) continue;
+        seen[nb] = 1;
+        queue.push(nb);
+      }
+    }
+    out.push({
+      areaMm2: n * cellMm * cellMm,
+      span: Math.max(maxX - minX + 1, maxY - minY + 1) * cellMm,
+      u: r.minU + (su / n + 0.5) * cellMm,
+      v: r.minV + (sv / n + 0.5) * cellMm,
+    });
+  }
+  return out;
+}
+
+/**
+ * Are these bosses far enough apart, and on lattice steps?
+ *
+ * Two lumps 3 mm apart are one feature the raster split, not two mounting
+ * points. Two lumps a whole pitch apart are two cells, which is what a
+ * multi-point part looks like.
+ */
+function separatedOnLattice(pts: readonly { u: number; v: number }[]): boolean {
+  if (pts.length < 2) return true;
+  const steps = [PITCH, ROW_STEP, PITCH / 2];
+  for (let i = 0; i < pts.length; i++) {
+    for (let j = i + 1; j < pts.length; j++) {
+      const du = Math.abs(pts[i]!.u - pts[j]!.u);
+      const dv = Math.abs(pts[i]!.v - pts[j]!.v);
+      if (Math.hypot(du, dv) < 12) return false;
+      const fits = (d: number): boolean =>
+        d < 1 || steps.some((s) => Math.abs(d / s - Math.round(d / s)) < 0.2);
+      if (!fits(du) || !fits(dv)) return false;
+    }
+  }
+  return true;
+}

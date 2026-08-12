@@ -117,6 +117,35 @@ export interface PlacedPanel {
   origin: Hex;
   columns: number;
   rows: number;
+  /**
+   * Cells cut OUT of the block, in absolute lattice coordinates.
+   *
+   * A stock panel has none. A panel with `omit` is a CUSTOM panel: the same
+   * block with holes left out so it can go round a light switch, a socket or a
+   * pipe. It is not one of the seven shipped STLs any more, so it has to be
+   * generated — `src/core/customiser.ts` turns it into parameters for the
+   * OpenSCAD honeycomb customiser, which works on this exact lattice.
+   */
+  omit?: Hex[];
+}
+
+/**
+ * Something on the wall the honeycomb has to avoid.
+ *
+ * Rectangular in wall millimetres because that is how you measure one with a
+ * tape: a light switch is 86 × 86, a double socket 146 × 86. The planner turns
+ * that into cells and cuts them out of whichever panels they land in.
+ */
+export interface Obstacle {
+  id: string;
+  label: string;
+  /** Lower-left corner, in the same wall millimetres as `WallSpec`. */
+  xMm: number;
+  yMm: number;
+  widthMm: number;
+  heightMm: number;
+  /** Extra gap to leave all round — for a switch plate's bevel, or fingers. */
+  clearanceMm: number;
 }
 
 export interface PlacedItem {
@@ -147,6 +176,8 @@ export interface LayoutDoc {
   panels: PlacedPanel[];
   items: PlacedItem[];
   groups: Group[];
+  /** Switches, sockets and pipes the wall has to go round. */
+  obstacles?: Obstacle[];
 }
 
 // ---------------------------------------------------------------------------
@@ -202,6 +233,22 @@ export interface BomLine {
   needsReview: boolean;
   /** The print figures are modelled rather than sliced (an imported part). */
   estimated: boolean;
+  /**
+   * How many fixings this part takes could not be measured, so whatever is
+   * ordered for it is a guess. Ten shipped accessories used to order NOTHING
+   * and hang on the wall by magic; the ones that still cannot be counted say so
+   * instead.
+   */
+  fastenersUnknown: boolean;
+}
+
+export interface WallFixings {
+  /** How many countersunk inserts + wall screws hold the whole assembly up. */
+  count: number;
+  spacingMm: number;
+  perSquareMetre: number;
+  /** Panels with no free cell left for a fixing. */
+  starvedPanelIds: string[];
 }
 
 export interface Bom {
@@ -217,5 +264,11 @@ export interface Bom {
     metres: number;
     distinctParts: number;
   };
+  /**
+   * The wall fixings, as a whole-assembly figure rather than a per-panel one.
+   * Present so the sheet can state the spacing it assumed — the number a
+   * builder needs to sanity-check against their own wall.
+   */
+  fixings: WallFixings;
   issues: Issue[];
 }

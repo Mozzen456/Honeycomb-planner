@@ -12,7 +12,8 @@
  */
 
 import { computeBom, itemCells, validate } from './bom';
-import { hexKey, hexRotate, panelCells, placeFootprint } from './hex';
+import { hexKey, hexRotate, panelCells, placedPanelCells, placeFootprint } from './hex';
+import { obstructedCells } from './obstacles';
 import { crossesSeam } from './tiling';
 import type {
   Bom,
@@ -256,7 +257,7 @@ export class Store {
     const set = new Set<string>();
     for (const p of panels) {
       // Reuse the same generator the tiler used, so the two can never disagree.
-      for (const c of panelCellsOf(p.origin, p.columns, p.rows)) set.add(hexKey(c));
+      for (const c of placedPanelCells(p)) set.add(hexKey(c));
     }
     this.panelSetCache = { panels, set };
     return set;
@@ -372,7 +373,24 @@ export class Store {
 
   setPanels(panels: LayoutDoc['panels'], label = 'Lay out panels'): void {
     this.commit(label, {
-      doc: { ...this.current.doc, panels },
+      doc: { ...this.current.doc, panels: cutAroundObstacles(panels, this.current.doc.obstacles) },
+      selection: this.current.selection,
+    });
+  }
+
+  /**
+   * Switches, sockets and pipes the wall has to go round.
+   *
+   * Re-cuts the panels immediately: an obstacle you add after solving has to
+   * take effect without pressing Solve again, or the wall on screen is a lie.
+   */
+  setObstacles(obstacles: LayoutDoc['obstacles'], label = 'Change obstacles'): void {
+    this.commit(label, {
+      doc: {
+        ...this.current.doc,
+        obstacles,
+        panels: cutAroundObstacles(this.current.doc.panels, obstacles),
+      },
       selection: this.current.selection,
     });
   }
@@ -653,6 +671,41 @@ export function isExclusive(part: CatalogPart): boolean {
   return part.type === 'insert' || part.type === 'fastener';
 }
 
+/**
+ * Cut every panel around the obstacles, and drop any panel left with nothing.
+ *
+ * `omit` is recomputed from scratch each time rather than accumulated, so
+ * moving a switch back where it was restores the cells it had taken — an
+ * accumulated cut would leave the wall permanently pockmarked by every position
+ * an obstacle had ever occupied.
+ */
+export function cutAroundObstacles(
+  panels: readonly LayoutDoc['panels'][number][],
+  obstacles: LayoutDoc['obstacles'],
+): LayoutDoc['panels'] {
+  if (!obstacles || obstacles.length === 0) {
+    return panels.map((p) => {
+      if (p.omit === undefined) return p;
+      const { omit: _drop, ...rest } = p;
+      return rest;
+    });
+  }
+  const out: LayoutDoc['panels'] = [];
+  for (const panel of panels) {
+    const block = panelCells(panel.origin, panel.columns, panel.rows);
+    const blocked = obstructedCells(obstacles, block);
+    if (blocked.size === 0) {
+      const { omit: _drop, ...rest } = panel;
+      out.push(rest);
+      continue;
+    }
+    // Every cell taken: there is no plate left to print here at all.
+    if (blocked.size >= block.length) continue;
+    out.push({ ...panel, omit: block.filter((c) => blocked.has(hexKey(c))) });
+  }
+  return out;
+}
+
 /** Cells of a placement that need a hole to themselves. */
 export function exclusiveCellsOf(part: CatalogPart, cells: readonly Hex[]): Set<string> {
   return isExclusive(part) ? new Set(cells.map(hexKey)) : new Set<string>();
@@ -713,4 +766,3 @@ export function partCells(part: CatalogPart, at: Hex, rotation: Rotation): Hex[]
 }
 
 const rotateAxial = hexRotate;
-const panelCellsOf = panelCells;

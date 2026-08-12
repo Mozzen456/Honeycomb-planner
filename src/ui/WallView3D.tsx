@@ -20,7 +20,7 @@ import * as THREE from 'three';
 
 import { itemCells } from '../core/bom';
 import { CELL, PANEL_DEPTH, PITCH } from '../core/constants';
-import { hexKey, hexToMm, panelCells, placeFootprint } from '../core/hex';
+import { hexKey, hexToMm, panelCells, placedPanelCells, placeFootprint } from '../core/hex';
 import type { Catalog, CatalogPart, Hex, LayoutDoc, Rotation } from '../core/types';
 import { loadPartMesh, type PartMesh } from './meshLibrary';
 import './WallView3D.css';
@@ -170,9 +170,16 @@ function unionOutline(cells: readonly Hex[]): THREE.Vector2[] {
 function buildPanelGeometry(
   columns: number,
   rows: number,
+  omit: readonly Hex[] = [],
 ): { back: THREE.BufferGeometry; front: THREE.BufferGeometry } {
-  const cells = panelCells({ q: 0, r: 0 }, columns, rows);
+  const cells = placedPanelCells({ origin: { q: 0, r: 0 }, columns, rows, omit });
+  // The silhouette follows whatever cells remain, so a switch cut out of an
+  // EDGE shows up in the outline for free. A cut in the MIDDLE cannot: the
+  // outline walk returns the outer loop only, so those cells are added below as
+  // full-cell voids instead. Without that they were drawn as solid plate —
+  // exactly the material you had to remove.
   const outline = unionOutline(cells);
+  const cut = omit.map((c) => ({ q: c.q, r: c.r }));
 
   const make = (holeAcrossFlats: number, depth: number) => {
     const shape = new THREE.Shape(outline);
@@ -181,6 +188,12 @@ function buildPanelGeometry(
       const pts: THREE.Vector2[] = [];
       // Clockwise, so it reads as a hole against the counter-clockwise outline.
       for (let k = 5; k >= 0; k--) pts.push(corner(centre, k, holeAcrossFlats));
+      shape.holes.push(new THREE.Path(pts));
+    }
+    for (const c of cut) {
+      const centre = hexToMm(c);
+      const pts: THREE.Vector2[] = [];
+      for (let k = 5; k >= 0; k--) pts.push(corner(centre, k, PITCH));
       shape.holes.push(new THREE.Path(pts));
     }
     const g = new THREE.ExtrudeGeometry([shape], {
@@ -239,6 +252,7 @@ export function WallView3D(props: WallView3DProps) {
     panelGroup: THREE.Group;
     itemGroup: THREE.Group;
     ghostGroup: THREE.Group;
+    obstacleGroup: THREE.Group;
     frame: number;
   } | null>(null);
 
@@ -317,7 +331,8 @@ export function WallView3D(props: WallView3DProps) {
     const panelGroup = new THREE.Group();
     const itemGroup = new THREE.Group();
     const ghostGroup = new THREE.Group();
-    scene.add(panelGroup, itemGroup, ghostGroup);
+    const obstacleGroup = new THREE.Group();
+    scene.add(panelGroup, itemGroup, ghostGroup, obstacleGroup);
 
     stateRef.current = {
       renderer, scene, camera,
@@ -325,7 +340,7 @@ export function WallView3D(props: WallView3DProps) {
       // Picking happens on the panel's FRONT face, which is where the user is
       // pointing — not on z = 0, which would put the cursor behind the plate.
       plane: new THREE.Plane(new THREE.Vector3(0, 0, 1), -PANEL_DEPTH),
-      panelGroup, itemGroup, ghostGroup, frame: 0,
+      panelGroup, itemGroup, ghostGroup, obstacleGroup, frame: 0,
     };
     setReady(true);
 
@@ -424,11 +439,26 @@ export function WallView3D(props: WallView3DProps) {
       m.geometry?.dispose();
     }
 
-    // One geometry per distinct size, instanced across every panel using it.
-    const bySize = new Map<string, { columns: number; rows: number; origins: Hex[] }>();
+    // One geometry per distinct SHAPE, instanced across every panel using it.
+    // A panel cut round a light switch is a different shape from the stock
+    // block it came from, so the key has to include what it omits — keying on
+    // columns × rows alone drew the cut panels solid.
+    const bySize = new Map<
+      string,
+      { columns: number; rows: number; omit: Hex[]; origins: Hex[] }
+    >();
     for (const p of doc.panels) {
-      const k = `${p.columns}x${p.rows}`;
-      const e = bySize.get(k) ?? { columns: p.columns, rows: p.rows, origins: [] };
+      const cut = (p.omit ?? [])
+        .map((c) => hexKey({ q: c.q - p.origin.q, r: c.r - p.origin.r }))
+        .sort()
+        .join(' ');
+      const k = `${p.columns}x${p.rows}|${cut}`;
+      const e = bySize.get(k) ?? {
+        columns: p.columns,
+        rows: p.rows,
+        omit: (p.omit ?? []).map((c) => ({ q: c.q - p.origin.q, r: c.r - p.origin.r })),
+        origins: [],
+      };
       e.origins.push(p.origin);
       bySize.set(k, e);
     }
@@ -447,8 +477,8 @@ export function WallView3D(props: WallView3DProps) {
       color: theme.panel.clone().lerp(new THREE.Color(0xffffff), 0.18),
     });
 
-    for (const { columns, rows, origins } of bySize.values()) {
-      const { back, front } = buildPanelGeometry(columns, rows);
+    for (const { columns, rows, omit, origins } of bySize.values()) {
+      const { back, front } = buildPanelGeometry(columns, rows, omit);
       for (const [geo, mat] of [[back, bodyMat], [front, faceMat]] as const) {
         const mesh = new THREE.InstancedMesh(geo, mat, origins.length);
         const m4 = new THREE.Matrix4();
@@ -553,6 +583,36 @@ export function WallView3D(props: WallView3DProps) {
       }
     }
   }, [doc.items, selection, catalog, partOf, ready, readTheme, themeTick, meshTick]);
+
+  // --- obstacles ----------------------------------------------------------
+
+  /**
+   * Switches and sockets, drawn as what they are: a plate standing off the
+   * wall where the honeycomb cannot go. Shown in the danger colour because the
+   * one thing you need to see is whether a part is about to sit on top of one.
+   */
+  useEffect(() => {
+    const s = stateRef.current;
+    if (!s || !ready) return;
+    const theme = readTheme();
+    for (const child of [...s.obstacleGroup.children]) {
+      s.obstacleGroup.remove(child);
+      const m = child as THREE.Mesh;
+      m.geometry?.dispose();
+      (m.material as THREE.Material)?.dispose?.();
+    }
+    for (const o of doc.obstacles ?? []) {
+      const mat = new THREE.MeshLambertMaterial({
+        color: theme.bad, transparent: true, opacity: 0.75,
+      });
+      const box = new THREE.Mesh(
+        new THREE.BoxGeometry(Math.max(1, o.widthMm), Math.max(1, o.heightMm), 10),
+        mat,
+      );
+      box.position.set(o.xMm + o.widthMm / 2, o.yMm + o.heightMm / 2, PANEL_DEPTH / 2 + 5);
+      s.obstacleGroup.add(box);
+    }
+  }, [doc.obstacles, ready, readTheme, themeTick]);
 
   // --- ghost preview ------------------------------------------------------
 

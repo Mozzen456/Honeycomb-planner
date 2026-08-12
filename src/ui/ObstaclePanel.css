@@ -1,0 +1,136 @@
+/* Obstacles and the custom panels they force. Tokens only. */
+
+.obstacles {
+  display: grid;
+  gap: var(--space-2);
+  padding-block-start: var(--space-4);
+  border-block-start: var(--border-width-hair) solid var(--border-subtle);
+}
+
+.obstacles__title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: var(--letter-spacing-caps);
+  text-transform: uppercase;
+}
+
+.obstacles__count {
+  margin-inline-start: auto;
+  color: var(--text-tertiary);
+  font-weight: var(--font-weight-regular);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.obstacles__hint {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-relaxed);
+}
+
+.obstacles__add {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.obstacles__add select {
+  flex: 1;
+  min-inline-size: var(--space-0);
+  font-size: var(--font-size-xs);
+}
+
+.obstacles__list {
+  display: grid;
+  gap: var(--space-2);
+  padding-inline-start: var(--space-0);
+  list-style: none;
+}
+
+.obstacle {
+  position: relative;
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border: var(--border-width-hair) solid var(--border-default);
+  border-radius: var(--radius-md);
+  background-color: var(--surface-2);
+}
+
+.obstacle__label {
+  inline-size: 100%;
+  padding-inline-end: var(--space-5);
+  font-size: var(--font-size-sm);
+}
+
+.obstacle__remove {
+  position: absolute;
+  inset-block-start: var(--space-2);
+  inset-inline-end: var(--space-2);
+  inline-size: var(--space-4);
+  block-size: var(--space-4);
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  color: var(--text-tertiary);
+  line-height: var(--line-height-none);
+}
+
+.obstacle__remove:hover { background-color: var(--danger-bg); color: var(--danger-fg); }
+
+.obstacle__fields {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(var(--space-0), 1fr));
+  gap: var(--space-1);
+}
+
+.obstacle__fields label {
+  display: grid;
+  gap: var(--space-0-5);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-2xs);
+}
+
+.obstacle__fields input {
+  inline-size: 100%;
+  min-inline-size: var(--space-0);
+  padding-inline: var(--space-1);
+  font-size: var(--font-size-2xs);
+}
+
+/* ---------- custom panels ---------- */
+
+.custom-panel {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border: var(--border-width-hair) solid var(--accent);
+  border-radius: var(--radius-md);
+  background-color: var(--accent-bg);
+}
+
+.custom-panel--bad {
+  border-color: var(--warning-border);
+  background-color: var(--warning-bg);
+}
+
+.custom-panel__name {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.custom-panel__qty { margin-inline-start: auto; color: var(--text-secondary); }
+
+.custom-panel__meta {
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-snug);
+}
+
+.custom-panel .button { justify-self: start; font-size: var(--font-size-xs); }

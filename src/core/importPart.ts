@@ -217,7 +217,21 @@ function requirements(
     if (ids.has(pid)) requires.push({ partId: pid, count: 1 });
     else hardware.push({ item: `${tag} bolt, 10-16 mm`, count: 1 });
   } else if (ids.has('insert-empty')) {
-    requires.push({ partId: 'insert-empty', count: cells });
+    requires.push({ partId: 'insert-empty', count: 1 });
+  }
+
+  /**
+   * A second-tier part is never fastened by nothing.
+   *
+   * It mounts through a hexagonal peg that slides into an INSERT, which clips
+   * into a wall cell (HSW-SPEC §5) — so a count of zero is not a measurement,
+   * it is a missing one. Ten shipped accessories reached the parts list that
+   * way, including two 200 mm wrench racks that hung on the wall by magic.
+   * Floored at one, because under-ordering stops a build dead while
+   * over-ordering costs a 2 g print.
+   */
+  if (requires.length === 0 && hardware.length === 0 && ids.has('insert-empty')) {
+    requires.push({ partId: 'insert-empty', count: 1 });
   }
   return { requires, hardware };
 }

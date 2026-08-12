@@ -10,9 +10,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import catalogJson from '../catalog/catalog.json';
+import overridesJson from '../catalog/overrides.json';
 import { BEDS } from '../core/constants';
 import { toCsv, toMarkdownChecklist, toPrintableHtml, downloadName } from '../core/exporters';
 import { proposePart, type ImportedPart, type ImportProposal } from '../core/importPart';
+import { applyOverrides } from '../core/overrides';
 import { decodeShareUrl, encodeShareUrl, deserialize, serialize } from '../core/persist';
 import { emptyDoc, Store, type EditorState, type DropResult } from '../core/store';
 import { solveTiling, type PanelSize } from '../core/tiling';
@@ -22,12 +24,17 @@ import {
 } from '../core/userCatalog';
 import { BomPanel } from './BomPanel';
 import { CatalogPanel } from './CatalogPanel';
+import { ObstaclePanel } from './ObstaclePanel';
 import { ImportDialog } from './ImportDialog';
 import { WallCanvas, ghostCells, type DragPayload } from './WallCanvas';
 import { WallView3D } from './WallView3D';
 import './App.css';
 
-const baseCatalog = catalogJson as unknown as Catalog;
+/**
+ * The generated catalogue with the human corrections in `overrides.json`
+ * applied. The scanner applies the same file, so a rescan and the app agree.
+ */
+const baseCatalog = applyOverrides(catalogJson as unknown as Catalog, overridesJson);
 
 type Theme = 'system' | 'light' | 'dark';
 
@@ -642,6 +649,16 @@ export function App() {
             onExport={onExport}
             onSelectPart={(partId) =>
               store.select(state.doc.items.filter((i) => i.partId === partId).map((i) => i.id))
+            }
+            extras={
+              <ObstaclePanel
+                doc={state.doc}
+                onChange={(obstacles) => store.setObstacles(obstacles)}
+                onCopy={(text, what) => {
+                  void navigator.clipboard?.writeText(text);
+                  say(`${what} settings copied — paste them into the customiser`, 'ok');
+                }}
+              />
             }
           />
         </aside>

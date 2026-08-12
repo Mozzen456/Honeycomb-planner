@@ -105,6 +105,7 @@ function line(over: Partial<BomLine> = {}): BomLine {
     supports: false,
     needsReview: false,
     estimated: false,
+    fastenersUnknown: false,
     ...over,
   };
 }
@@ -125,6 +126,7 @@ function makeBom(over: Partial<Bom> = {}): Bom {
       { item: 'M4 × 30 screw', count: 12 },
       { item: 'Wall plug, 8 mm "brown"', count: 12 },
     ],
+    fixings: { count: 0, spacingMm: 220, perSquareMetre: 0, starvedPanelIds: [] },
     totals: { parts: 33, minutes: 1155, grams: 470.5, metres: 158.4, distinctParts: 4 },
     issues: [],
     ...over,
@@ -162,6 +164,7 @@ describe('toCsv', () => {
       'supports',
       'footprint_estimated',
       'print_estimated',
+      'fastener_count_unknown',
       'minutes_each',
       'grams_each',
       'metres_each',
@@ -217,12 +220,12 @@ describe('toCsv', () => {
     const rows = parseCsv(toCsv(makeBom({ printed: [line()], fasteners: [], shopping: [] })));
     const row = rows[1]!;
     expect(row[1]).toBe('4'); // quantity
-    expect(row[9]).toBe('12.5'); // minutes each, from the catalogue
-    expect(row[12]).toBe('50'); // minutes total, straight from the BOM line
-    expect(row[10]).toBe('4.25'); // grams each
-    expect(row[13]).toBe('17');
-    expect(row[11]).toBe('1.4'); // metres each
-    expect(row[14]).toBe('5.6');
+    expect(row[10]).toBe('12.5'); // minutes each, from the catalogue
+    expect(row[13]).toBe('50'); // minutes total, straight from the BOM line
+    expect(row[11]).toBe('4.25'); // grams each
+    expect(row[14]).toBe('17');
+    expect(row[12]).toBe('1.4'); // metres each
+    expect(row[15]).toBe('5.6');
   });
 
   /**
@@ -235,8 +238,8 @@ describe('toCsv', () => {
     const rows = parseCsv(
       toCsv(makeBom({ printed: [line({ quantity: 0 })], fasteners: [], shopping: [] })),
     );
-    expect(rows[1]![9]).toBe('12.5');
-    expect(rows[1]![10]).toBe('4.25');
+    expect(rows[1]![10]).toBe('12.5');
+    expect(rows[1]![11]).toBe('4.25');
   });
 
   it('marks a bounded footprint and a modelled print estimate', () => {
@@ -281,7 +284,8 @@ describe('toCsv', () => {
       printed: [],
       fasteners: [],
       shopping: [],
-      totals: { parts: 0, minutes: 0, grams: 0, metres: 0, distinctParts: 0 },
+      fixings: { count: 0, spacingMm: 220, perSquareMetre: 0, starvedPanelIds: [] },
+    totals: { parts: 0, minutes: 0, grams: 0, metres: 0, distinctParts: 0 },
       issues: [],
     });
     expect(parseCsv(csv)).toHaveLength(1); // header only
@@ -384,7 +388,8 @@ describe('toMarkdownChecklist', () => {
         printed: [],
         fasteners: [],
         shopping: [],
-        totals: { parts: 0, minutes: 0, grams: 0, metres: 0, distinctParts: 0 },
+        fixings: { count: 0, spacingMm: 220, perSquareMetre: 0, starvedPanelIds: [] },
+    totals: { parts: 0, minutes: 0, grams: 0, metres: 0, distinctParts: 0 },
         issues: [],
       },
       makeDoc({ name: '' }),
@@ -493,7 +498,8 @@ describe('toPrintableHtml', () => {
         printed: [],
         fasteners: [],
         shopping: [],
-        totals: { parts: 0, minutes: 0, grams: 0, metres: 0, distinctParts: 0 },
+        fixings: { count: 0, spacingMm: 220, perSquareMetre: 0, starvedPanelIds: [] },
+    totals: { parts: 0, minutes: 0, grams: 0, metres: 0, distinctParts: 0 },
         issues: [],
       },
       makeDoc(),

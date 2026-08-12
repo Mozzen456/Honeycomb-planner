@@ -1,0 +1,183 @@
+{
+ "_": "Human/measured corrections to the GENERATED catalogue, keyed by part id.",
+ "_why": "tools/scan.py could not count a part's mounting bosses, so it ordered one insert per bolt bore, or nothing at all, or `insert-empty x cells` where cells is the bounding-box BOUND that PARKED P1 says is not a measurement. Ten accessories came with no fastener at all; a 7-cell shelf with two pegs ordered seven inserts.",
+ "_rule": "A second-tier accessory mounts through a hexagonal peg that slides into an INSERT, which in turn clips into a wall cell (HSW-SPEC section 5). So its fastener count is never zero. Where detect.mountPoints() could count the pegs, that count is used; where it could not, the part gets a floor of one AND a fastenersNeedReview flag, because under-ordering stops a build dead while over-ordering costs a 2 g print.",
+ "_applied_by": "src/core/overrides.ts (the app) and tools/scan.py (a rescan). Never written into catalog.json.",
+ "_regenerate": "npx vitest run tests/mountpoints.test.ts",
+ "parts": {
+  "box": {
+   "fastenersNeedReview": true,
+   "_note": "the mounting pegs could not be counted reliably; the catalogue orders 1 and that number is a guess, not a measurement"
+  },
+  "box-and-usb-holder-cover": {
+   "fastenersNeedReview": true,
+   "requires": [
+    {
+     "partId": "insert-empty",
+     "count": 1
+    }
+   ],
+   "_note": "the mounting pegs could not be counted, and the catalogue ordered NONE - which cannot be right: a second-tier part hangs on the wall through an insert. Floored at one, and flagged: count the pegs on the model"
+  },
+  "box-without-screw": {
+   "fastenersNeedReview": true,
+   "_note": "the mounting pegs could not be counted reliably; the catalogue orders 3 and that number is a guess, not a measurement"
+  },
+  "caliper-mount": {
+   "requires": [
+    {
+     "partId": "insert-empty",
+     "count": 1
+    }
+   ],
+   "_note": "1 mounting boss(es) measured on the wall face (20 mm across corners); the catalogue ordered 0"
+  },
+  "cover-contersunk": {
+   "fastenersNeedReview": true,
+   "_note": "the mounting pegs could not be counted reliably; the catalogue orders 1 and that number is a guess, not a measurement"
+  },
+  "hook-25mm-for-m3": {
+   "fastenersNeedReview": true,
+   "_note": "the mounting pegs could not be counted reliably; the catalogue orders 1 and that number is a guess, not a measurement"
+  },
+  "hook-bottom": {
+   "requires": [
+    {
+     "partId": "insert-empty",
+     "count": 1
+    }
+   ],
+   "_note": "1 mounting boss(es) measured on the wall face (13.2 mm across corners); the catalogue ordered 0"
+  },
+  "hook-keyboard-bottom": {
+   "requires": [
+    {
+     "partId": "insert-empty",
+     "count": 1
+    }
+   ],
+   "_note": "1 mounting boss(es) measured on the wall face (22.5 mm across corners); the catalogue ordered 0"
+  },
+  "hook-keyboard-side": {
+   "requires": [
+    {
+     "partId": "insert-empty",
+     "count": 1
+    }
+   ],
+   "_note": "1 mounting boss(es) measured on the wall face (13.5 mm across corners); the catalogue ordered 0"
+  },
+  "hook-side": {
+   "requires": [
+    {
+     "partId": "insert-empty",
+     "count": 2
+    }
+   ],
+   "_note": "2 mounting boss(es) measured on the wall face (16.7/16.2 mm across corners); the catalogue ordered 0"
+  },
+  "hook-to-empty": {
+   "fastenersNeedReview": true,
+   "_note": "the mounting pegs could not be counted reliably; the catalogue orders 2 and that number is a guess, not a measurement"
+  },
+  "hook-to-empty-long": {
+   "fastenersNeedReview": true,
+   "_note": "the mounting pegs could not be counted reliably; the catalogue orders 5 and that number is a guess, not a measurement"
+  },
+  "insert-cable-holder": {
+   "requires": [
+    {
+     "partId": "insert-empty",
+     "count": 1
+    }
+   ],
+   "_note": "1 mounting boss(es) measured on the wall face (25.2 mm across corners); the catalogue ordered 0"
+  },
+  "screw-holder": {
+   "fastenersNeedReview": true,
+   "_note": "the mounting pegs could not be counted reliably; the catalogue orders 1 and that number is a guess, not a measurement"
+  },
+  "sd-card-holder": {
+   "fastenersNeedReview": true,
+   "_note": "the mounting pegs could not be counted reliably; the catalogue orders 1 and that number is a guess, not a measurement"
+  },
+  "sd-card-holder-cover": {
+   "fastenersNeedReview": true,
+   "requires": [
+    {
+     "partId": "insert-empty",
+     "count": 1
+    }
+   ],
+   "_note": "the mounting pegs could not be counted, and the catalogue ordered NONE - which cannot be right: a second-tier part hangs on the wall through an insert. Floored at one, and flagged: count the pegs on the model"
+  },
+  "sd-card-holder-without-screw": {
+   "fastenersNeedReview": true,
+   "_note": "the mounting pegs could not be counted reliably; the catalogue orders 3 and that number is a guess, not a measurement"
+  },
+  "shelf-1": {
+   "requires": [
+    {
+     "partId": "insert-empty",
+     "count": 2
+    }
+   ],
+   "_note": "2 mounting boss(es) measured on the wall face (15.6/15.8 mm across corners); the catalogue ordered 3"
+  },
+  "shelf-2": {
+   "requires": [
+    {
+     "partId": "insert-empty",
+     "count": 2
+    }
+   ],
+   "_note": "2 mounting boss(es) measured on the wall face (15.6/15.6 mm across corners); the catalogue ordered 5"
+  },
+  "shelf-3": {
+   "requires": [
+    {
+     "partId": "insert-empty",
+     "count": 2
+    }
+   ],
+   "_note": "2 mounting boss(es) measured on the wall face (15.6/15.8 mm across corners); the catalogue ordered 7"
+  },
+  "shelf-4": {
+   "requires": [
+    {
+     "partId": "insert-empty",
+     "count": 3
+    }
+   ],
+   "_note": "3 mounting boss(es) measured on the wall face (15.6/15.6/15.6 mm across corners); the catalogue ordered 9"
+  },
+  "usb-holder": {
+   "fastenersNeedReview": true,
+   "_note": "the mounting pegs could not be counted reliably; the catalogue orders 1 and that number is a guess, not a measurement"
+  },
+  "usb-holder-without-screw": {
+   "fastenersNeedReview": true,
+   "_note": "the mounting pegs could not be counted reliably; the catalogue orders 3 and that number is a guess, not a measurement"
+  },
+  "wranch-hoks-1": {
+   "fastenersNeedReview": true,
+   "requires": [
+    {
+     "partId": "insert-empty",
+     "count": 1
+    }
+   ],
+   "_note": "the mounting pegs could not be counted, and the catalogue ordered NONE - which cannot be right: a second-tier part hangs on the wall through an insert. Floored at one, and flagged: count the pegs on the model"
+  },
+  "wranch-hoks-2": {
+   "fastenersNeedReview": true,
+   "requires": [
+    {
+     "partId": "insert-empty",
+     "count": 1
+    }
+   ],
+   "_note": "the mounting pegs could not be counted, and the catalogue ordered NONE - which cannot be right: a second-tier part hangs on the wall through an insert. Floored at one, and flagged: count the pegs on the model"
+  }
+ }
+}

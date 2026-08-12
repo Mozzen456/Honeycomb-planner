@@ -172,16 +172,35 @@ describe('a 2400 x 1200 garage wall', () => {
     }
 
     // 4. Required inserts are counted, not forgotten.
+    //
+    // Wall fixings are excluded from this re-derivation: they are a property of
+    // the assembly, planned across the whole wall at a spacing, not the sum of
+    // each plate's declared requirement (src/core/fixings.ts). They are checked
+    // on their own terms below.
+    const isWallMount = (id: string): boolean =>
+      (catalog.parts.find((p) => p.id === id)?.hardware ?? []).some((h) =>
+        /wall (screw|plug)/i.test(h.item),
+      );
     const requiredInserts = new Map<string, number>();
     for (const [partId, n] of expected) {
       const part = catalog.parts.find((p) => p.id === partId);
+      if (part?.type === 'panel') continue;
       for (const req of part?.requires ?? []) {
+        if (isWallMount(req.partId)) continue;
         requiredInserts.set(req.partId, (requiredInserts.get(req.partId) ?? 0) + req.count * n);
       }
     }
     for (const [partId, n] of requiredInserts) {
       expect(bomCounts.get(partId) ?? 0, `BOM forgot required ${partId}`).toBeGreaterThanOrEqual(n);
     }
+
+    // 4b. The wall is actually fixed to the wall: at least one fixing per panel,
+    // and exactly one screw and one plug per fixing.
+    expect(bom.fixings.count).toBeGreaterThanOrEqual(doc.panels.length);
+    const screws = bom.shopping.find((s) => /wall screw/i.test(s.item))?.count ?? 0;
+    const plugs = bom.shopping.find((s) => /wall plug/i.test(s.item))?.count ?? 0;
+    expect(screws).toBe(bom.fixings.count);
+    expect(plugs).toBe(bom.fixings.count);
 
     // 5. Totals are positive and self-consistent.
     expect(bom.totals.parts).toBeGreaterThan(30);

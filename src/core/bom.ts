@@ -34,7 +34,10 @@
  *      lines by name then partId, shopping by item name, issues grouped by code.
  */
 
-import { hexKey, hexSub, keyToHex, panelCells, placeFootprint } from './hex';
+import { customPanelGroups, isCustomPanel } from './customiser';
+import { fixingsFor } from './fixings';
+import { fastenersNeedReview } from './overrides';
+import { hexKey, hexSub, keyToHex, placedPanelCells, placeFootprint } from './hex';
 import { crossesSeam } from './tiling';
 import type {
   Bom,
@@ -154,6 +157,37 @@ const needsReviewOf = (part: CatalogPart): boolean =>
 /** Modelled print figures rather than a real slice. */
 const isEstimated = (part: CatalogPart): boolean => part.print?.source === 'volume';
 
+/**
+ * Does this part take a screw into the WALL, as opposed to a bolt into another
+ * printed part? Read from the hardware it asks for, not from its name.
+ */
+const isWallMount = (part: CatalogPart): boolean =>
+  asArray(part.hardware).some((h) => /wall (screw|plug)/i.test(h?.item ?? ''));
+
+/**
+ * The catalogue's wall-mount fastener: the lightest one-cell insert that takes
+ * a wall screw.
+ *
+ * The type check is load-bearing, not defensive. A PANEL may legitimately carry
+ * `Wall plug` in its own hardware — that is the fallback `tools/scan.py` writes
+ * when the catalogue has no countersunk insert to require — and without this,
+ * the fixing plan picked the panel as its own fastener and multiplied the
+ * panel's hardware by the fixing count. A test fixture caught it; a real
+ * catalogue would have too, one panel at a time.
+ */
+function wallMountPart(index: ReadonlyMap<string, CatalogPart>): CatalogPart | undefined {
+  let best: CatalogPart | undefined;
+  for (const part of index.values()) {
+    if (part.type !== 'insert' && part.type !== 'fastener') continue;
+    if (!isWallMount(part)) continue;
+    // One cell each, so the plan's cell count and the order agree. A two-cell
+    // wall fastener would need the plan to reserve two cells per fixing.
+    if (asArray(part.footprint).length > 1) continue;
+    if (best === undefined || finite(part.print?.grams) < finite(best.print?.grams)) best = part;
+  }
+  return best;
+}
+
 // ---------------------------------------------------------------------------
 // Footprints
 // ---------------------------------------------------------------------------
@@ -198,9 +232,12 @@ export function itemCells(item: PlacedItem, catalog: Catalog): Hex[] {
 
 /** The cells a placed panel covers. The document's own columns/rows are authoritative. */
 function panelCellsOf(panel: PlacedPanel): Hex[] {
-  const columns = Math.floor(countOf(panel.columns));
-  const rows = Math.floor(countOf(panel.rows));
-  return panelCells(panel.origin ?? ORIGIN, columns, rows);
+  return placedPanelCells({
+    origin: panel.origin ?? ORIGIN,
+    columns: Math.floor(countOf(panel.columns)),
+    rows: Math.floor(countOf(panel.rows)),
+    omit: panel.omit,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -405,59 +442,30 @@ export function validate(doc: LayoutDoc, catalog: Catalog): Issue[] {
 
   // --- no-room-for-mounts -------------------------------------------------
   // A panel hangs on the wall through its own cells: a countersunk insert drops
-  // into one and takes a wall screw. Fill every cell with accessories and the
-  // BOM still orders those inserts, with nowhere left to put them — a parts
-  // list that is correct about what to print and silent about what cannot be
-  // built. Counted per panel, because a mount has to be in the panel it holds.
-  for (const panel of panels) {
-    const part = index.get(panel.partId);
-    if (part === undefined) continue;
-    const mounts = wallMountsRequired(part, index);
-    if (mounts === 0) continue;
-
-    const cells = panelCellsOf(panel);
-    const taken = new Set<string>();
-    for (const footprint of itemFootprints) {
-      for (const cell of footprint.cells) taken.add(hexKey(cell));
-    }
-    const free = cells.filter((c) => !taken.has(hexKey(c))).length;
-    if (free >= mounts) continue;
-
+  // into one and takes a wall screw. Fill every cell with accessories and there
+  // is nowhere left to put one — a parts list that is correct about what to
+  // print and silent about what cannot be built.
+  //
+  // The fixing planner routes around occupied cells, so the only panels left
+  // are the ones with NO free cell at all. That is a much sharper warning than
+  // the old free-cells-versus-a-quota arithmetic, and it comes from the same
+  // plan that ordered the fixings, so the two cannot drift apart.
+  const taken = new Set<string>();
+  for (const footprint of itemFootprints) {
+    for (const cell of footprint.cells) taken.add(hexKey(cell));
+  }
+  for (const panelId of fixingsFor(doc, undefined, taken).starvedPanelIds) {
     issues.push({
       level: 'warning',
       code: 'no-room-for-mounts',
       message:
-        `Panel "${panel.id}" needs ${mounts} free cell${mounts === 1 ? '' : 's'} for the ` +
-        `wall mounts that hold it up, and has ${free}. Clear ${mounts - free} cell` +
-        `${mounts - free === 1 ? '' : 's'}, or fit the mounts before the accessories.`,
-      itemIds: [panel.id],
+        `Panel "${panelId}" has no free cell left for the fixing that holds it to the ` +
+        `wall — accessories occupy all of them. Clear one cell, or fit its fixing first.`,
+      itemIds: [panelId],
     });
   }
 
   return issues;
-}
-
-/**
- * How many cells this panel's own fixings will occupy.
- *
- * Read from the panel's `requires[]` rather than recomputing the 4-plus-one-per-
- * 50-cells rule, so the count that is warned about is exactly the count that is
- * ordered — two rules would drift the moment either changed. Only requirements
- * that actually plug into a cell are counted.
- */
-function wallMountsRequired(
-  panel: CatalogPart,
-  index: ReadonlyMap<string, CatalogPart>,
-): number {
-  let total = 0;
-  for (const req of asArray(panel.requires)) {
-    const part = req ? index.get(req.partId) : undefined;
-    if (part === undefined) continue;
-    if (part.type !== 'insert' && part.type !== 'fastener') continue;
-    const cells = Math.max(1, asArray(part.footprint).length);
-    total += countOf(req.count) * cells;
-  }
-  return total;
 }
 
 // ---------------------------------------------------------------------------
@@ -477,7 +485,15 @@ export function computeBom(doc: LayoutDoc, catalog: Catalog): Bom {
 
   // How many times each partId was placed on the wall (panels and items alike).
   const placements = new Map<string, number>();
-  for (const panel of asArray(doc?.panels)) bump(placements, panel.partId, 1);
+  const asPanel = new Map<string, number>();
+  for (const panel of asArray(doc?.panels)) {
+    // A panel cut round a light switch is NOT the stock plate any more, and
+    // counting it as one would have you print 50 copies of a file when four of
+    // them will not fit. Custom panels are reported on their own lines below.
+    if (isCustomPanel(panel)) continue;
+    bump(placements, panel.partId, 1);
+    bump(asPanel, panel.partId, 1);
+  }
   for (const item of asArray(doc?.items)) bump(placements, item.partId, 1);
 
   // partId -> total physical count, placements plus rolled-up requirements.
@@ -485,14 +501,57 @@ export function computeBom(doc: LayoutDoc, catalog: Catalog): Bom {
   for (const [partId, times] of placements) {
     if (index.has(partId)) bump(quantities, partId, times);
   }
+
+  /**
+   * Wall fixings are a property of the ASSEMBLY, not of one plate.
+   *
+   * `tools/scan.py` writes `requires: insert-countersunk × (4 + cells/50)` onto
+   * every panel part, and multiplying that by the number of plates gave 370
+   * wall screws for a 2400 × 1200 wall — one every 88 mm. The panels interlock
+   * and multi-cell inserts bridge the seams, so the sheet takes fixings at a
+   * spacing, and `fixings.ts` decides where. A panel's own requirement for a
+   * wall-mount fastener is therefore superseded here rather than expanded.
+   *
+   * Superseded only for panels placed AS PANELS. A panel part dropped as a
+   * loose item is not part of the assembly the plan covers, so it keeps its own
+   * declared requirement — otherwise its fixings would vanish entirely.
+   *
+   * A rescan will stop emitting the per-panel requirement (see the note in
+   * tools/scan.py), at which point this becomes a no-op rather than a
+   * correction.
+   */
+  const occupied = new Set<string>();
+  for (const item of asArray(doc?.items)) {
+    for (const cell of itemCells(item, catalog)) occupied.add(hexKey(cell));
+  }
+  const fixings = fixingsFor(doc, undefined, occupied);
+  const isWallMountOf = (requiredId: string): boolean => {
+    const required = index.get(requiredId);
+    return (
+      required !== undefined &&
+      (required.type === 'fastener' || required.type === 'insert') &&
+      isWallMount(required)
+    );
+  };
+
   for (const [partId, times] of placements) {
     const part = index.get(partId);
     if (part === undefined) continue;
+    // Placements of this part that the fixing plan already covers.
+    const covered = part.type === 'panel' ? countOf(asPanel.get(partId)) : 0;
+    const expand = times - covered;
     for (const req of asArray(part.requires)) {
       if (!req || !index.has(req.partId)) continue;
-      const needed = countOf(req.count) * times;
+      const uses = isWallMountOf(req.partId) ? expand : times;
+      const needed = countOf(req.count) * uses;
       if (needed > 0) bump(quantities, req.partId, needed);
     }
+  }
+
+  // ...and the plan's own fixings go in once, for the whole wall.
+  if (fixings.cells.length > 0) {
+    const mount = wallMountPart(index);
+    if (mount !== undefined) bump(quantities, mount.id, fixings.cells.length);
   }
 
   // Bought hardware, from every part in the BOM — including the inserts that
@@ -543,8 +602,52 @@ export function computeBom(doc: LayoutDoc, catalog: Catalog): Bom {
       supports: est.supports,
       needsReview: needsReviewOf(part),
       estimated: isEstimated(part),
+      fastenersUnknown: fastenersNeedReview(part),
     };
     (isFastener(part) ? fasteners : printed).push(line);
+  }
+
+  /**
+   * Custom panels: the same block with cells cut out, generated rather than
+   * printed from a shipped STL.
+   *
+   * The print estimate is the stock plate's, scaled by the fraction of cells
+   * that survive. That is a model, not a slice — a hole removes plate as well as
+   * a bore, so the true saving is slightly larger — and it is marked estimated
+   * like every other modelled figure.
+   */
+  for (const [index_, group] of customPanelGroups(asArray(doc?.panels)).entries()) {
+    const first = group.panels[0]!;
+    const stock = index.get(first.partId);
+    const stockCells = Math.max(1, asArray(stock?.footprint).length);
+    const kept = group.params?.cellCount ?? stockCells;
+    const share = Math.min(1, kept / stockCells);
+    const est = stock ? estimateOf(stock) : { minutes: 0, grams: 0, metres: 0, supports: false };
+    const quantity = group.panels.length;
+    const label = `Custom panel ${String.fromCharCode(65 + index_)}`;
+
+    totalParts += quantity;
+    totalMinutes += est.minutes * share * quantity;
+    totalGrams += est.grams * share * quantity;
+    totalMetres += est.metres * share * quantity;
+
+    printed.push({
+      partId: `custom/${group.key}`,
+      name: `${label} — ${kept} cells, cut round an obstacle`,
+      file: '',
+      type: 'panel',
+      quantity,
+      minutes: roundMinutes(est.minutes * share * quantity),
+      grams: roundGrams(est.grams * share * quantity),
+      metres: roundMetres(est.metres * share * quantity),
+      minutesEach: roundTo(est.minutes * share, 2),
+      gramsEach: roundGrams(est.grams * share),
+      metresEach: roundMetres(est.metres * share),
+      supports: est.supports,
+      needsReview: false,
+      estimated: true,
+      fastenersUnknown: false,
+    });
   }
 
   const byNameThenId = (a: BomLine, b: BomLine): number =>
@@ -566,6 +669,12 @@ export function computeBom(doc: LayoutDoc, catalog: Catalog): Bom {
       grams: roundGrams(totalGrams),
       metres: roundMetres(totalMetres),
       distinctParts: printed.length + fasteners.length,
+    },
+    fixings: {
+      count: fixings.cells.length,
+      spacingMm: fixings.spacingMm,
+      perSquareMetre: roundTo(fixings.perSquareMetre, 1),
+      starvedPanelIds: fixings.starvedPanelIds,
     },
     issues,
   };

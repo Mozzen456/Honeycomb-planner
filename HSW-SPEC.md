@@ -255,6 +255,37 @@ HSW here is **two-level**, which is not obvious from the outside and matters for
 say which cells its installer will put its inserts in — that is a choice, not a feature. Those
 parts carry a bounding-box footprint and are flagged in `UNKNOWN.md` rather than guessed at.
 
+### How many inserts a second-tier part takes
+
+A shelf, a hook, a rack — each carries one or more **hexagonal pegs** on its wall face. The peg
+slides into an insert's socket; the insert clips into a wall cell. So the chain is always
+
+```
+accessory  --peg-->  insert  --snap-->  wall cell
+```
+
+and it follows that **a second-tier part is never fastened by nothing.** Its fastener count is at
+least one, whatever the geometry says.
+
+The pegs are countable: `detect.mountPoints()` finds them as separate lumps of material on the
+wall-facing side, at lattice spacings, stable across depth. Measured across the shipped set they
+come out at **15.6 mm across corners** — the 13.4 mm socket (15.47 across corners) of §5's standard
+insert, on every shelf. That is the number the parts list orders.
+
+| part | pegs measured | the catalogue used to order |
+|---|---|---|
+| `shelf-1` | 2 | 3 |
+| `shelf-2` | 2 | 5 |
+| `shelf-3` | 2 | **7** |
+| `shelf-4` | 3 | 9 |
+| `hook-side`, `hook-bottom` | 2, 2 | **0** |
+| `wranch-hoks-1`, `wranch-hoks-2` | not countable | **0** |
+
+The old numbers came from `insert-empty × cells`, where `cells` is the bounding-box bound P1 calls
+not-a-measurement — or from nothing at all. Where the pegs cannot be counted the part now gets a
+floor of one **and** a flag, because under-ordering stops a build dead and over-ordering costs a 2 g
+print. Corrections live in `src/catalog/overrides.json`.
+
 ---
 
 ## 6. Catalogue

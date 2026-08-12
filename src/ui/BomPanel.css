@@ -503,3 +503,11 @@
     min-block-size: var(--icon-size-md);
   }
 }
+
+/* Wall fixings: an assembly figure, stated with the spacing it assumed so a
+   builder can argue with it. 370 screws in a 2.4 m wall was the alternative. */
+.bom-panel__fixings {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-relaxed);
+}

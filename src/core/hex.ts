@@ -232,6 +232,27 @@ export function panelCells(origin: Hex, columns: number, rows: number): Hex[] {
   return out;
 }
 
+/**
+ * The cells a PLACED panel actually covers.
+ *
+ * The block minus whatever it omits. Every consumer must go through this rather
+ * than calling `panelCells` on the panel's origin/columns/rows, or a custom
+ * panel with a hole cut for a light switch would be treated as solid by
+ * whichever module forgot — and the two most likely to forget are the ones that
+ * decide where fixings go and whether an accessory is off-panel.
+ */
+export function placedPanelCells(panel: {
+  origin: Hex;
+  columns: number;
+  rows: number;
+  omit?: readonly Hex[];
+}): Hex[] {
+  const cells = panelCells(panel.origin ?? { q: 0, r: 0 }, panel.columns, panel.rows);
+  if (!panel.omit || panel.omit.length === 0) return cells;
+  const cut = new Set(panel.omit.map(hexKey));
+  return cells.filter((c) => !cut.has(hexKey(c)));
+}
+
 /** Bounding box of a set of cells, in wall millimetres, including cell extents. */
 export function cellsBoundsMm(cells: readonly Hex[]): {
   minX: number;

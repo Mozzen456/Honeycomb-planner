@@ -13,7 +13,7 @@ copied from any published description. `HSW-SPEC.md` records every number with i
 
 ```bash
 npm run dev          # Vite dev server
-npm test             # vitest run — 467 tests
+npm test             # vitest run — 515 tests
 npm run typecheck    # tsc --noEmit
 npm run build        # typecheck + vite build (also copies models/ into dist/)
 
@@ -65,6 +65,25 @@ M3 hole buying two M3 bolts. The regression test in `tests/critic-bom.test.ts` �
 (any part vs anything it requires, any thread size); keep it that way rather than adding another
 guard for one string.
 
+**Wall fixings belong to the ASSEMBLY, not to a panel.** `tools/scan.py` writes
+`requires: insert-countersunk × (4 + cells/50)` onto every panel part; multiplying that by the
+number of plates gave 370 wall screws on a 2400 × 1200 wall — one every 88 mm. `src/core/fixings.ts`
+plans them across the whole sheet at a spacing instead (~74, 26/m²), and `bom.ts` supersedes the
+per-panel requirement for panels placed *as panels*. A panel part dropped as a loose item keeps its
+own requirement, or its fixings would vanish.
+
+**A fastener count must never come from the cell bound.** That bound is the bounding-box estimate
+PARKED P1 says is not a measurement, and laundering it into a shopping list made a 7-cell shelf
+with two pegs order seven inserts. `detect.mountPoints()` counts the mounting bosses on the wall
+face and refuses to answer when the count is not stable across depth; the corrections live in
+`src/catalog/overrides.json`, which both the scanner and the app now apply.
+
+**A panel with `omit` is a CUSTOM panel and is not the stock STL any more.** It is generated from
+the OpenSCAD customiser (`src/core/customiser.ts`), so it must never be counted as a copy of the
+shipped file — you would print 50 plates and find four of them do not fit round the light switch.
+Every derivation of a panel's cells must go through `placedPanelCells`, never `panelCells` on the
+raw origin/columns/rows.
+
 **Overlap is allowed.** The wall exists to mount things *on*, so accessories may share cells freely
 and silently — no warning, no issue. The only impossibility is two parts that plug *into* a cell
 (`type` `insert` or `fastener`) sharing one. See `isExclusive` in `src/core/store.ts`.
@@ -106,6 +125,14 @@ The UI is a thin shell.
 - **`src/core/importPart.ts`** — an STL plus a file name becomes a `CatalogPart`.
 - **`src/core/userCatalog.ts`** — imported parts: validation, storage, merge with the generated
   catalogue. Ids carry a `user/` prefix so a collision is impossible.
+- **`src/core/overrides.ts`** — human corrections to the generated catalogue, applied by the app
+  as well as by the scanner.
+- **`src/core/fixings.ts`** — where the wall fixings go, across the assembly.
+- **`src/core/obstacles.ts`** — switches, sockets and pipes, as cells the wall must avoid.
+- **`src/core/customiser.ts`** — a cut panel as OpenSCAD customiser parameters. The customiser is on
+  the same lattice (23.6 / 20.438 / 8), flat-top where the wall is pointy-top, so the conversion is
+  a 90° turn plus a stagger parity — pinned by round-trip in `tests/customiser.test.ts` for the same
+  reason `panel-parity.test.ts` exists.
 
 Two invariants the whole thing rests on:
 

@@ -20,7 +20,7 @@ npm run dev
 Then: set your wall size, pick your printer, hit **Solve panels**, and drag accessories on.
 
 ```bash
-npm test          # 467 tests over the pure engines
+npm test          # 515 tests over the pure engines
 npm run typecheck
 npm run build
 ```
@@ -115,6 +115,14 @@ they cannot disagree.
 
 Right-drag orbits, shift-drag pans, the wheel zooms.
 
+## Planning round a light switch
+
+Add an obstacle — switch, socket, thermostat, pipe — in the parts-list panel, and the planner cuts
+those cells out of whichever panels they land in. Those panels are no longer stock plates, so they
+are listed separately and each comes with a block of parameters for the OpenSCAD honeycomb
+customiser in `Customiser/`, which generates the plate. It runs on the same 23.6 mm lattice, so what
+it prints drops straight into the wall.
+
 ## What the app enforces
 
 - **Things may overlap, freely and silently.** Accessories bolt onto an insert and stand proud of
@@ -122,6 +130,9 @@ Right-drag orbits, shift-drag pans, the wheel zooms.
   would cry wolf on every second drop.
 - **One insert per hole.** The single genuine impossibility: two parts that plug *into* a cell
   cannot share it, and that is refused with a reason naming the occupant.
+- **Wall fixings are planned across the wall, not per plate.** The panels interlock and multi-cell
+  inserts bridge the seams, so the sheet takes fixings at a spacing (~220 mm) rather than four per
+  plate. On a 2400 × 1200 wall that is 74 screws, not 370.
 - **Off-panel is refused**, and distinguished from a clash ("hangs off the panel edge — 2 cells
   unsupported" is a different problem from a hole that is already filled).
 - **Seam crossing is flagged, not blocked.** An accessory spanning two panels is the classic HSW

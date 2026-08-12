@@ -13,7 +13,7 @@
  */
 
 import { BEDS } from './constants';
-import type { Group, Hex, LayoutDoc, PlacedItem, PlacedPanel, Rotation, WallSpec } from './types';
+import type { Group, Hex, LayoutDoc, Obstacle, PlacedItem, PlacedPanel, Rotation, WallSpec } from './types';
 
 /** Schema version this build writes. Bumped whenever the document shape changes. */
 export const CURRENT_SCHEMA = 1;
@@ -64,13 +64,21 @@ function canonicalDoc(doc: LayoutDoc): Record<string, unknown> {
     name: doc.name,
     wall: { widthMm: doc.wall.widthMm, heightMm: doc.wall.heightMm },
     bedId: doc.bedId,
-    panels: doc.panels.map((p) => ({
-      id: p.id,
-      partId: p.partId,
-      origin: { q: p.origin.q, r: p.origin.r },
-      columns: p.columns,
-      rows: p.rows,
-    })),
+    panels: doc.panels.map((p) => {
+      const out: Record<string, unknown> = {
+        id: p.id,
+        partId: p.partId,
+        origin: { q: p.origin.q, r: p.origin.r },
+        columns: p.columns,
+        rows: p.rows,
+      };
+      // Only when the panel really is cut: a stock plate must round-trip to the
+      // same bytes it always did.
+      if (p.omit && p.omit.length > 0) {
+        out['omit'] = p.omit.map((c) => ({ q: c.q, r: c.r }));
+      }
+      return out;
+    }),
     items: doc.items.map((it) => {
       const out: Record<string, unknown> = {
         id: it.id,
@@ -88,6 +96,19 @@ function canonicalDoc(doc: LayoutDoc): Record<string, unknown> {
       if (g.label !== undefined) out['label'] = g.label;
       return out;
     }),
+    ...(doc.obstacles && doc.obstacles.length > 0
+      ? {
+          obstacles: doc.obstacles.map((o) => ({
+            id: o.id,
+            label: o.label,
+            xMm: o.xMm,
+            yMm: o.yMm,
+            widthMm: o.widthMm,
+            heightMm: o.heightMm,
+            clearanceMm: o.clearanceMm,
+          })),
+        }
+      : {}),
   };
 }
 
@@ -248,6 +269,22 @@ function readCoord(v: unknown, path: string, errors: string[]): number | null {
     return null;
   }
   return v;
+}
+
+/**
+ * A millimetre measurement on the wall: finite, and inside the same envelope
+ * `readCoord` allows for cells. An obstacle 1e9 mm wide would blank the wall.
+ */
+function readCoordMm(v: unknown, path: string, errors: string[]): number | null {
+  if (typeof v !== 'number' || !Number.isFinite(v)) {
+    errors.push(`${path} should be a number of millimetres but is ${describe(v)}.`);
+    return null;
+  }
+  if (Math.abs(v) > 100000) {
+    errors.push(`${path} is ${String(v)} mm, which is far outside any real wall.`);
+    return null;
+  }
+  return Math.round(v * 10) / 10;
 }
 
 function readHex(v: unknown, path: string, errors: string[]): Hex | null {
@@ -449,7 +486,21 @@ export function migrate(raw: unknown): LoadResult {
     }
     const finalId = uniqueId(pid, usedIds);
     if (finalId !== pid) errors.push(`${where}.id "${pid}" is used twice; renamed this one to "${finalId}".`);
-    panels.push({ id: finalId, partId, origin, columns, rows });
+    const panel: PlacedPanel = { id: finalId, partId, origin, columns, rows };
+    // Cut-outs for a light switch or a socket. A cell that is not a legal
+    // coordinate is dropped rather than taking the whole panel with it: the
+    // worst case is a plate with one hole too few, which is visible, against a
+    // plate that vanished, which is not.
+    const rawOmit = p['omit'];
+    if (Array.isArray(rawOmit)) {
+      const omit: Hex[] = [];
+      for (let k = 0; k < rawOmit.length; k++) {
+        const cell = readHex(rawOmit[k], `${where}.omit[${k}]`, errors);
+        if (cell !== null) omit.push(cell);
+      }
+      if (omit.length > 0) panel.omit = omit;
+    }
+    panels.push(panel);
   }
 
   // --- items --------------------------------------------------------------
@@ -515,6 +566,41 @@ export function migrate(raw: unknown): LoadResult {
     groups.push(group);
   }
 
+  // --- obstacles ----------------------------------------------------------
+  const obstacles: Obstacle[] = [];
+  if (value['obstacles'] !== undefined) {
+    const rawObstacles = readArray(value['obstacles'], 'obstacles', errors);
+    for (let i = 0; i < rawObstacles.length; i++) {
+      const o = rawObstacles[i];
+      const where = `obstacles[${i}]`;
+      if (!isPlainObject(o)) {
+        errors.push(`${where} is ${describe(o)}, not an obstacle; dropped.`);
+        continue;
+      }
+      const local: string[] = [];
+      const x = readCoordMm(o['xMm'], `${where}.xMm`, local);
+      const y = readCoordMm(o['yMm'], `${where}.yMm`, local);
+      const w = readCoordMm(o['widthMm'], `${where}.widthMm`, local);
+      const h = readCoordMm(o['heightMm'], `${where}.heightMm`, local);
+      if (x === null || y === null || w === null || h === null || w <= 0 || h <= 0) {
+        errors.push(...local);
+        errors.push(`${where} was dropped because it is not a usable obstacle.`);
+        continue;
+      }
+      errors.push(...local);
+      const clearance = readCoordMm(o['clearanceMm'], `${where}.clearanceMm`, []) ?? 0;
+      obstacles.push({
+        id: typeof o['id'] === 'string' && o['id'] !== '' ? (o['id'] as string) : `obstacle-${i}`,
+        label: typeof o['label'] === 'string' ? (o['label'] as string) : 'Obstacle',
+        xMm: x,
+        yMm: y,
+        widthMm: w,
+        heightMm: h,
+        clearanceMm: Math.max(0, clearance),
+      });
+    }
+  }
+
   const doc: LayoutDoc = {
     schemaVersion: CURRENT_SCHEMA,
     id,
@@ -524,6 +610,10 @@ export function migrate(raw: unknown): LoadResult {
     panels,
     items,
     groups,
+    // Only when there are any. An absent key must round-trip to an absent key,
+    // or every layout saved before obstacles existed fails an equality check
+    // against its own reload.
+    ...(obstacles.length > 0 ? { obstacles } : {}),
   };
   return { doc, errors };
 }

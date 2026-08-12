@@ -59,6 +59,7 @@ const CSV_HEADER = [
   'supports',
   'footprint_estimated',
   'print_estimated',
+  'fastener_count_unknown',
   'minutes_each',
   'grams_each',
   'metres_each',
@@ -101,6 +102,7 @@ function csvLineFor(section: string, line: BomLine): (string | number)[] {
     line.supports ? 'yes' : 'no',
     line.needsReview ? 'yes' : 'no',
     line.estimated ? 'yes' : 'no',
+    line.fastenersUnknown ? 'yes' : 'no',
     num(line.minutesEach ?? 0),
     num(line.gramsEach ?? 0),
     num(line.metresEach ?? 0),
@@ -127,6 +129,7 @@ export function toCsv(bom: Bom): string {
         '',
         buy.item ?? '',
         'bought',
+        '',
         '',
         '',
         '',
@@ -177,6 +180,9 @@ function checklistLine(line: BomLine): string {
   // are the `est.` badge; here they are words, because a badge does not print.
   if (line.needsReview) detail.push('footprint estimated');
   if (line.estimated) detail.push('print time estimated');
+  // The one that stops a build: you get to the wall and find out the parts list
+  // never knew how many inserts this thing takes.
+  if (line.fastenersUnknown) detail.push('CHECK how many inserts this needs');
   const tail = detail.length ? ` — ${detail.join(', ')}` : '';
   const file = line.file ? ` \`${mdText(line.file)}\`` : '';
   return `- [ ] **${num(q, 0)} ×** ${mdText(line.name || line.partId)}${tail}${file}`;
@@ -270,6 +276,7 @@ function htmlRows(rows: BomLine[]): string {
           (line.supports ? '<span class="flag">supports</span>' : '') +
           (line.needsReview ? '<span class="flag">footprint est.</span>' : '') +
           (line.estimated ? '<span class="flag">print est.</span>' : '') +
+          (line.fastenersUnknown ? '<span class="flag">check fixings</span>' : '') +
           '</td>',
         `  <td class="n">${escapeHtml(formatMinutes(line.minutes))}</td>`,
         `  <td class="n">${escapeHtml(num(line.grams, 1))} g</td>`,
