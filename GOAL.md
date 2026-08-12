@@ -53,14 +53,23 @@ measured number; a source may settle a *choice*, never overrule a measurement.
 
 ## Worklist
 
-- [ ] P1a — the 27 `needsReview` parts. Mine the local PDF first
-      (`152592-honeycomb-storage-wall-*.pdf`), then designer listings/galleries. Groups: shelves
-      (4), hooks (8), boxes/holders (8), covers (3), wrench holders (2), misc (2).
-- [ ] P9a — pointy-top vs flat-top frame question. Needs a square-on photograph of a mounted panel.
-- [ ] P3a — 42.58 mm span: find the source that states it, or record as folklore with citation.
-- [ ] P3b — "28 cells" for the 170×177 panel: same treatment.
-- [ ] P1b — `PARKED.md` P1 header says 29 parts; catalogue and `UNKNOWN.md` both say 27. Fix the
-      stale count when P1 is next edited.
+- [x] **Mine the local PDF.** Done 2026-08-13. It is RostaP's Printables listing for model 152592
+      and carries four dimensioned CAD drawings plus the install diagram. Settled P3 (both halves),
+      P5, the frame question's *evidence*, and sourced the fastener half of P1. HSW-SPEC §10.
+- [ ] P1a — the 27 `needsReview` parts, **footprints only** — the PDF sourced their fasteners but
+      says nothing about which cells an installer uses. Next sources: the designer's Printables /
+      MakerWorld galleries and remix threads. Groups: shelves (4), hooks (8), boxes/holders (8),
+      covers (3), wrench holders (2), misc (2).
+- [ ] **P9a — DECISION FOR THE USER.** The frame question is answered (flat-top, HSW-SPEC §10.1,
+      DECISIONS D31). What remains is whether to actually turn the app's lattice — `hexToMm`,
+      `panelCells`, the tiler, `panel-parity.test.ts`, the customiser round-trip, both renderers —
+      or keep `FITTING_SEAT_RADIANS` and the written-up decision. No BOM number depends on it.
+- [x] P3a — 42.58 mm span: refuted. The designer dimensions the two-hexagon span as `40.88`
+      (= 2 × 20.438). Recorded as folklore with citation. HSW-SPEC §9 + §10.
+- [x] P3b — "28 cells": refuted. The designer's own panel drawing shows 8 columns of 7; counted
+      mechanically off the drawing = 56.
+- [x] P1b — stale count fixed, 29 → 27 in both places in PARKED P1.
+- [x] P5 — closed. The install diagram states the 3.6 mm rim faces the room.
 - [ ] Not actionable, record only: P2 (375×389 fits no listed bed — a measurement), P4 (one slicer
       profile), P5 (which face turns to the room), P6 (untested surfaces), P9 residuals (imported
       print estimate ±30 %, phone layout).
@@ -72,3 +81,11 @@ measured number; a source may settle a *choice*, never overrule a measurement.
   `scan.py --verify` now runnable via scratchpad venv: geometry byte-identical across all 51 parts,
   differing only in this machine's PrusaSlicer profile hash and ≤0.02 min on four slice times.
   `src/catalog/catalog.json` itself is untouched in git. No code or catalogue changes yet.
+- 2026-08-13 — Pass 1, "mine the local PDF". The repo-root PDF is RostaP's Printables listing
+  (model 152592) and carries four dimensioned CAD drawings. Closed P3 (both halves: 56 cells from
+  the designer's own panel drawing; two-hexagon span dimensioned 40.88, so 42.58 is folklore) and
+  P5 (install diagram: the 3.6 mm rim faces the room). Settled the frame question — **flat-top** —
+  from the shelves' own meshes: tray floor ⊥ Z, peg along Y, peg normals at 0/±60/±120/180° from
+  +Z. Sourced the fastener half of P1; footprints untouched, `needsReview` unchanged. HSW-SPEC §10
+  + §10.1, DECISIONS D31. `npm test` 519 passed, `tsc` clean, catalogue not touched so no rescan.
+  Commit 897d717. **Stopping: the remaining P9 action is a decision for the user.**
