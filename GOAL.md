@@ -60,10 +60,41 @@ measured number; a source may settle a *choice*, never overrule a measurement.
       says nothing about which cells an installer uses. Next sources: the designer's Printables /
       MakerWorld galleries and remix threads. Groups: shelves (4), hooks (8), boxes/holders (8),
       covers (3), wrench holders (2), misc (2).
-- [ ] **P9a — DECISION FOR THE USER.** The frame question is answered (flat-top, HSW-SPEC §10.1,
-      DECISIONS D31). What remains is whether to actually turn the app's lattice — `hexToMm`,
-      `panelCells`, the tiler, `panel-parity.test.ts`, the customiser round-trip, both renderers —
-      or keep `FITTING_SEAT_RADIANS` and the written-up decision. No BOM number depends on it.
+- [ ] **P9a — turning the lattice. USER CHOSE "turn it properly" (2026-08-13). BLOCKED on one
+      conflict before any geometry is touched — see "The catalogue problem" below.**
+
+      The turn itself is now fully specified. New embedding (this IS a rotation, not a reflection —
+      both bases have determinant `+PITCH·ROW_STEP`, checked):
+
+          x = ROW_STEP · q                 (columns step 20.438 horizontally)
+          y = PITCH · (r + q/2)            (cells step 23.6 vertically within a column)
+
+      This is exactly the designer's frame: 23.6 vertical and 40.88 = 2 × 20.438 horizontal are the
+      two numbers on the insert drawing. Confirmed against the panel counts — `wall-honeycomb-part`
+      is `cols 7 × rows 8` = 177.00 × 170.32 today; the designer dimensions that same plate
+      **170.32 wide × 177 tall**. So the app currently draws every panel 90° from its own source.
+
+      Also needed: `MARGIN_X` ↔ `MARGIN_Y` swap (11.8 is the flat, 13.6254664 the corner, and which
+      axis each sits on swaps); `hexCorners` starts at `60·i` not `60·i − 90`; `panelCells` builds
+      its block along q instead of r; `FITTING_SEAT_RADIANS` deletes itself.
+
+      **The catalogue problem — why this is not just a `hex.ts` edit.** `panelCells` must produce a
+      block that is rectangular *in the new embedding*. A cell set cannot be rectangular in both
+      frames — they differ by 30° plus a relabel, and the 30° cannot be absorbed by any relabeling
+      of (q, r). So every stored `footprint` in `catalog.json` — all 51 parts, not just the 7
+      panels — has to be re-expressed in the new frame. `tests/panel-parity.test.ts` checks
+      `panelCells` against those stored footprints and `tests/detect.test.ts` pins the TS detector
+      against the committed catalogue, so both fail until the catalogue is regenerated, which also
+      means changing the lattice convention in `tools/footprint.py` and `src/core/detect.ts`
+      together (CLAUDE.md: "there are now two footprint detectors and they must agree").
+
+      **The conflict:** that regeneration rewrites `src/catalog/catalog.json`, and the Done-when
+      criterion asks for `scan.py --verify` byte-identical — which on this machine cannot pass
+      anyway, because the local PrusaSlicer stamps a different profile hash (see Environment).
+      Regenerating here would bake this machine's slicer hash into all 51 entries and discard the
+      committed provenance. Needs a call from the user: regenerate anyway and accept the hash
+      churn, regenerate footprints only while preserving the committed `estimate` blocks, or turn
+      the frame on a machine whose slicer matches.
 - [x] P3a — 42.58 mm span: refuted. The designer dimensions the two-hexagon span as `40.88`
       (= 2 × 20.438). Recorded as folklore with citation. HSW-SPEC §9 + §10.
 - [x] P3b — "28 cells": refuted. The designer's own panel drawing shows 8 columns of 7; counted
@@ -89,3 +120,12 @@ measured number; a source may settle a *choice*, never overrule a measurement.
   +Z. Sourced the fastener half of P1; footprints untouched, `needsReview` unchanged. HSW-SPEC §10
   + §10.1, DECISIONS D31. `npm test` 519 passed, `tsc` clean, catalogue not touched so no rescan.
   Commit 897d717. **Stopping: the remaining P9 action is a decision for the user.**
+- 2026-08-13 — Pass 2, "turn the lattice". User chose to turn it properly. Specified the whole
+  change and verified the new basis is a rotation, not a reflection (both determinants
+  `+PITCH·ROW_STEP`). Confirmed the app draws every panel 90° from the designer's own dimensions:
+  `wall-honeycomb-part` is 177.00 × 170.32 in the app, 170.32 × 177 on the drawing. **Stopped
+  before touching geometry**: the turn forces every stored `footprint` in `catalog.json` to be
+  re-expressed, which regenerates the catalogue and collides with the "`--verify` byte-identical"
+  criterion — and `--verify` cannot be byte-identical here regardless, because of the local
+  PrusaSlicer hash. No code changed; `npm test` 519 and `tsc` still green. Awaiting the user's call
+  on how to handle the catalogue.
