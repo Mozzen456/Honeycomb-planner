@@ -13,7 +13,7 @@ copied from any published description. `HSW-SPEC.md` records every number with i
 
 ```bash
 npm run dev          # Vite dev server
-npm test             # vitest run — 519 tests
+npm test             # vitest run — 593 tests
 npm run typecheck    # tsc --noEmit
 npm run build        # typecheck + vite build (also copies models/ into dist/)
 
@@ -147,6 +147,25 @@ reflection, and a mirrored footprint is silently wrong.
 promoted to a measurement by a click is the exact dishonesty PARKED P1 exists to prevent, and
 `withFootprint` in `src/core/importPart.ts` is where that rule lives.
 
+**A PANEL drawn pointy-top needs its mesh spun 90°; nothing else does.** `meshLibrary.orient`
+refuses the drawn-orientation spin because a part is drawn in the orientation it is USED — spinning
+an SD-card holder points its slots sideways. That argument rests on the part having a meaningful up,
+and a plate has none: it must match its own CELL BLOCK, which `toAxial` derives by spinning a
+pointy-drawn part's cells. Unspun, `wall-honeycomb-part` draws 177 × 170.32 where the block needs
+170.32 × 177. It hides on a wall of ONE pointy panel — every plate wrong the same way reads as a
+continuous honeycomb — and only shows when a bed mixes pointy with flat. `tests/panel-mesh.test.ts`
+compares every plate's bbox with its block.
+
+**`WallView3D` keeps a SECOND mesh cache in front of `meshLibrary`'s.** `forgetPartMesh` clears the
+library's copy and nothing else; the view's `meshes` ref is dropped on `catalog` identity. Miss that
+and a saved mounting correction updates the catalogue, drops the library entry, rebuilds the item
+group — and redraws from the stale local copy, so the part never visibly turns.
+
+**`THREE.Spherical` is Y-up. `PartInspector` is Z-up.** Reading a Z-up camera position into a Y-up
+spherical and back turns a vertical drag into rotation about the wrong pole (it comes out sideways)
+and the `phi` clamp blocks it. The inspector holds azimuth/elevation itself. `WallView3D` is Y-up
+throughout and is fine — do not "unify" them without checking which frame each actually uses.
+
 **A control inside the 3D canvas host needs `setPointerCapture` skipped.** The host captures the
 pointer on `pointerdown`, which swallows the click of any button inside it. This made `Fit` and
 `Front` dead to a mouse while working when called from code — see the guard in `WallView3D.tsx`.
@@ -173,6 +192,11 @@ The UI is a thin shell.
 - **`src/core/importPart.ts`** — an STL plus a file name becomes a `CatalogPart`.
 - **`src/core/userCatalog.ts`** — imported parts: validation, storage, merge with the generated
   catalogue. Ids carry a `user/` prefix so a collision is impossible.
+- **`src/core/peg.ts`** — measures the hexagonal PEG a part mates through, giving a mounting axis
+  and end that `detect.ts` cannot: an insert-fed part has no wall interface, so `insertFed` guesses
+  from bulk and picks a shelf's tray. Reports a confidence and NO width (see the note in the file).
+- **`src/core/userOverrides.ts`** — corrections made in the browser, layered over `overrides.json`
+  and exportable in its shape. A browser cannot write the repo file, so it does both.
 - **`src/core/overrides.ts`** — human corrections to the generated catalogue, applied by the app
   as well as by the scanner.
 - **`src/core/fixings.ts`** — where the wall fixings go, across the assembly.
@@ -184,6 +208,24 @@ The UI is a thin shell.
   is a stagger parity and nothing else — the 90° turn it used to carry is gone (D35). Still pinned
   by round-trip in `tests/customiser.test.ts`, for the same reason `panel-parity.test.ts` exists:
   a parity error is a mirrored plate, invisible until it is printed.
+
+### Correcting a part's mounting
+
+`detect.ts` cannot say which face of an insert-fed part goes against the wall — 27 of 51 have no
+wall interface at all — so there is a human channel, and it is one channel with two front doors:
+
+- **`PartInspector`** (⌖ on any catalogue tile) — the part in 3D against a patch of wall. Pick a
+  face by clicking it or by one of six buttons; arrows spin it and move it in/out of the wall.
+- **`AlignPanel`** ("Align" in the top bar) — every part at once, the catalogue's axis beside
+  `detectPeg`'s, disagreements sorted to the top, one button to accept the confident ones.
+
+Both write the same `MountingOverride` (`wallFaceAxis`, `matingEnd`, `spinSteps`, `offsetMm`) into
+`userOverrides`, which `applyOverrides` folds into the catalogue. The face is fed to `detect()` as a
+**constraint**, never stapled onto its result, so the footprint and projection are re-derived from
+it — otherwise a part's cells are measured off one face and its mesh hung off another.
+
+Picking a face does NOT clear `needsReview`. Knowing the face removes the detector's main ambiguity;
+a tier-3 part's CELLS are still the bound PARKED P1 describes.
 
 Two invariants the whole thing rests on:
 
