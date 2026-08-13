@@ -281,7 +281,15 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
       new THREE.MeshLambertMaterial({ color: 0x1d2430 }),
     );
     cell.geometry.rotateX(Math.PI / 2);
-    cell.rotation.z = (Math.PI / 6) * spin;
+    /*
+     * The cell does NOT turn. The wall does not turn.
+     *
+     * The spin used to be applied here, and that is backwards: pressing the spin
+     * control rotated the HOLE while the part sat still, which is the opposite of
+     * what is being decided. A cell is a fixture of the wall — it is the thing
+     * the part has to line up WITH — so it stays put and the part moves against
+     * it, which is also what `meshLibrary` does when it saves the result.
+     */
     group.add(cell);
 
     // Stand the plate off the chosen face, normal pointing back at the part.
@@ -309,6 +317,21 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
       const out = end === 'high' ? -1 : 1;
       s.part.position.set(0, 0, 0);
       s.part.position.setComponent(i, out * offset);
+
+      /*
+       * ...and the PART carries the spin, about the wall normal.
+       *
+       * Same sign as the depth, and for the same reason: the normal points away
+       * from the plate, so it is `+axis` at a low mating end and `−axis` at a
+       * high one. Matching it here means the preview turns the part the way
+       * `meshLibrary.rotateZ` will once the correction is saved — otherwise you
+       * would line a part up in this dialog and find it mirrored on the wall.
+       */
+      const angle = out * (Math.PI / 6) * spin;
+      s.part.rotation.set(0, 0, 0);
+      if (i === 0) s.part.rotation.x = angle;
+      else if (i === 1) s.part.rotation.y = angle;
+      else s.part.rotation.z = angle;
     }
   }, [axis, end, spin, offset, status]);
 
