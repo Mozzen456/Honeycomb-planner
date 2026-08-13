@@ -890,3 +890,37 @@ and a control that only exists on hover is one you must already know about. Now 
 **Verified by the picture, not by the store.** Placed an SD-card holder, changed its mounting face
 from `Left (−X)` to `Front (−Y)`, saved, and compared screenshots: the wide comb becomes a compact
 end-on block. Checking `localStorage` would have passed before the fix as well.
+
+---
+
+## D39 — The catalogue shows a rendered preview of each part
+
+**Asked for: "a small 3D preview or a photo of the part in the list."**
+
+A name and a cell count do not tell you what a part IS. `hook-to-empty` and `hook-side` are two
+hooks; `insert-hollow-tre` and `insert-hollow-for` differ only in cell count; and many of the 51
+names describe the part's FIXING rather than its shape. Picking the right one meant dragging it onto
+the wall to look at it.
+
+**Rendered, not photographed.** There are no photographs of most of these parts, and a render is
+generated from the same STL the planner already trusts — so it cannot drift from what will be
+printed, and an imported part gets a preview for free.
+
+**One offscreen renderer, not one canvas per tile.** A browser allows on the order of sixteen live
+WebGL contexts and the catalogue has fifty-one tiles; a canvas each would have the oldest contexts
+killed and those tiles go blank. Instead each part is drawn into a single shared renderer in turn
+and read out as a PNG data URL, which is an ordinary `<img>` from then on.
+
+**Lazy, via `IntersectionObserver` with a screenful of margin.** Fifty-one previews means fifty-one
+STL fetches and parses, and the rail shows about six at a time.
+
+**The bounding BOX is fitted, not the bounding sphere.** The obvious sphere fit wasted most of the
+frame on this part set: a panel is a wide flat plate, its sphere radius is half its *diagonal*, and
+framing that left the plate an unreadable smudge in a 48 px tile. Projecting the box corners onto
+the camera's own axes and fitting the widest is exact for any proportion — a plate fills the frame
+and a hook still fits. The tile is 64 px, which is where the shapes became legible.
+
+**Both caches are dropped together.** The preview draws the ORIENTED mesh, so picking a new mounting
+face (D34) invalidates it exactly as it invalidates the geometry — and removing an imported part
+clears both, since an imported id can be reused by a later import and would otherwise show the old
+part's shape under the new one's name.

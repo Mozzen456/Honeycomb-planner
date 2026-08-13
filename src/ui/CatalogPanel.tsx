@@ -9,9 +9,10 @@
  * this view and of nothing else.
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { isImported } from '../core/userCatalog';
+import { thumbnailFor } from './partThumbnails';
 import type { Catalog, CatalogPart, PartType } from '../core/types';
 
 import './CatalogPanel.css';
@@ -121,6 +122,56 @@ function activateFromKeyboard(
 }
 
 // ---------------------------------------------------------------------------
+// Preview
+// ---------------------------------------------------------------------------
+
+/**
+ * A rendered preview of the part, drawn only once the tile is near the screen.
+ *
+ * Lazy on purpose. Fifty-one previews means fifty-one STL fetches and parses,
+ * and the rail shows about six at a time — doing them all on mount would stall
+ * the first paint of the catalogue to draw pictures nobody has scrolled to. The
+ * observer's margin starts the work a screenful early so the image is usually
+ * there before the tile is.
+ *
+ * A part with no preview keeps the plain tile: `models/` may be absent entirely
+ * (the app builds with `base: './'` and can be opened from a file:// URL), and
+ * a planner that cannot fetch a model still plans.
+ */
+function PartPreview({ part }: { part: CatalogPart }): JSX.Element {
+  const ref = useRef<HTMLSpanElement | null>(null);
+  const [url, setUrl] = useState<string | null>(null);
+  const [near, setNear] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (el === null) return;
+    if (typeof IntersectionObserver !== 'function') { setNear(true); return; }
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) {
+        setNear(true);
+        io.disconnect();
+      }
+    }, { rootMargin: '400px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!near) return;
+    let live = true;
+    void thumbnailFor(part).then((u) => { if (live) setUrl(u); });
+    return () => { live = false; };
+  }, [near, part]);
+
+  return (
+    <span className="catalog-tile__preview" ref={ref} aria-hidden="true">
+      {url === null ? null : <img src={url} alt="" draggable={false} />}
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Tile
 // ---------------------------------------------------------------------------
 
@@ -168,6 +219,7 @@ function CatalogTile(
         onPointerDown={(event) => onDragStart(part.id, event)}
         onKeyDown={(event) => activateFromKeyboard(event, part.id, onActivate)}
       >
+        <PartPreview part={part} />
         <span className="catalog-tile__name">{name}</span>
         <span className="catalog-tile__cells tabular-nums">
           {cells}

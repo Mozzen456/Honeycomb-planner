@@ -191,7 +191,9 @@
 
 .catalog-tile {
   display: grid;
-  grid-template-columns: minmax(var(--space-0), 1fr) auto;
+  /* A preview column, then the name, then the cell count. The preview spans
+     both rows so the name and the metrics line up beside it. */
+  grid-template-columns: auto minmax(var(--space-0), 1fr) auto;
   align-items: baseline;
   gap: var(--space-0-5) var(--space-2);
   padding: var(--space-2);
@@ -226,7 +228,9 @@
 }
 
 .catalog-tile__name {
-  grid-column: 1;
+  /* Column 2: column 1 is the preview. These placements are explicit, so adding
+     a column in front of them shifts every one of them by hand. */
+  grid-column: 2;
   color: var(--text-primary);
   font-size: var(--font-size-sm);
   line-height: var(--line-height-snug);
@@ -235,7 +239,7 @@
 
 /* Cell count — a count badge, which is the one thing the pill radius is for. */
 .catalog-tile__cells {
-  grid-column: 2;
+  grid-column: 3;
   grid-row: 1;
   justify-self: end;
   min-inline-size: var(--space-4);
@@ -249,7 +253,7 @@
 }
 
 .catalog-tile__metrics {
-  grid-column: 1 / -1;
+  grid-column: 2 / -1;
   color: var(--text-tertiary);
   font-size: var(--font-size-2xs);
   letter-spacing: var(--letter-spacing-wide);
@@ -343,6 +347,31 @@
   .catalog-panel__clear {
     min-block-size: var(--icon-size-md);
   }
+}
+
+/*
+  The rendered preview. Sized in the same units as the type around it, so it
+  scales with the rail rather than being a fixed pixel block, and reserved even
+  while empty — a preview that pops in and reflows the tile under the pointer is
+  worse than one that arrives quietly into a space already made for it.
+*/
+.catalog-tile__preview {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  align-self: center;
+  inline-size: var(--space-8);
+  block-size: var(--space-8);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background-color: var(--surface-1);
+}
+
+.catalog-tile__preview img {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: contain;
 }
 
 /*

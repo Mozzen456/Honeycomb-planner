@@ -32,6 +32,7 @@ import {
 } from '../core/userOverrides';
 import { PartInspector } from './PartInspector';
 import { forgetPartMesh } from './meshLibrary';
+import { forgetThumbnail } from './partThumbnails';
 import { WallCanvas, ghostCells, type DragPayload } from './WallCanvas';
 import { WallView3D } from './WallView3D';
 import './App.css';
@@ -230,6 +231,8 @@ export function App() {
     (partId: string, mounting: MountingOverride) => {
       setUserOverrides((prev) => setMounting(prev, partId, mounting, 'mounting face picked by hand'));
       forgetPartMesh(partId);
+      // The catalogue preview draws the ORIENTED mesh, so it is now stale too.
+      forgetThumbnail(partId);
       setInspecting(null);
       say('Mounting face saved — Download overrides to keep it in the repo', 'ok');
     },
@@ -240,6 +243,7 @@ export function App() {
     (partId: string) => {
       setUserOverrides((prev) => clearMounting(prev, partId));
       forgetPartMesh(partId);
+      forgetThumbnail(partId);
       setInspecting(null);
       say('Correction cleared — back to the detector\u2019s own answer', 'ok');
     },
@@ -503,6 +507,11 @@ export function App() {
         return next;
       });
       void deleteModelBytes(partId);
+      // Both caches are keyed on part id, and an imported id can be reused by a
+      // later import of a different model. Leaving either behind would show the
+      // removed part's shape under the new one's name.
+      forgetPartMesh(partId);
+      forgetThumbnail(partId);
       say('Removed from the catalogue', 'ok');
     },
     [store, say],
