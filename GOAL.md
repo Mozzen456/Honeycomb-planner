@@ -52,7 +52,7 @@ wall 90° from the designer's own drawings.
 
 ## Worklist
 
-- [~] **P9a — turn the lattice. IN FLIGHT, tree is RED (509/556). Do not start over.**
+- [~] **P9a — turn the lattice. NEARLY DONE, 541/557. Do not start over.**
       **THE TRANSFORM IS PINNED BY DATA — do not re-derive it, and do not "simplify" it.**
 
       DONE: `constants.ts` margins swapped; `hex.ts` `hexToMm`/`mmToHex`/`hexCorners`/`panelCells`
@@ -61,10 +61,17 @@ wall 90° from the designer's own drawings.
       `tiling.ts` transposed to vertical bands; `panel-parity.test.ts` green and IMPROVED — all 7
       panels now match as drawn, where `mk3s` used to need a 180°.
 
-      LEFT, in dependency order: `src/core/detect.ts` + `tools/footprint.py` must emit new-frame
-      labels together; `customiser.ts` (its 90°+parity conversion changes — round-trip is the
-      chirality guard); both renderers; delete `FITTING_SEAT_RADIANS`; then the ~47 red tests, which
-      are overwhelmingly hard-coded old-frame `(q,r)` literals rather than logic faults.
+      ALSO DONE: `detect.ts` + `footprint.py` both turned and agreeing (detect 27/27);
+      `customiser.ts` conversion collapsed to the identity plus stagger, round-trip green 10/10;
+      both renderers flat-top; `FITTING_SEAT_RADIANS` deleted and replaced by `cellPrism`;
+      `firstFittingCell` and `JUNCTION_FOOTPRINT` turned; hex/store/obstacles/bom/critic-abuse/
+      tiling tests all green.
+
+      LEFT: **16 failures, all in `tests/critic-bom.test.ts`.** Not mechanical — they are
+      hand-computed BOM figures (insert counts, minutes, grams, metres, shopping list) that need
+      genuine re-derivation from `catalog.json` rather than reading the numbers off `bom.ts`, which
+      would destroy the independence that makes the test worth having. Sections 3, 4 and 7 also
+      carry hard-coded `(q,r)` literals for their seam and overlap scenarios.
 
           relabel:   (q, r)  ->  (-r, q + r)
           embedding: x = ROW_STEP * q,  y = PITCH * (r + q/2)
@@ -161,3 +168,20 @@ wall 90° from the designer's own drawings.
   (400), though 8-column bands tile the height exactly and would cover 5600 cells against 5280. That
   is a pre-existing greedy limitation in `isBetterBand`, unmasked by the turn rather than caused by
   it, and `allowRotation` is `false` in the app regardless. Recorded, not tuned away.
+- 2026-08-13 — Pass 6, "keep on fixing". 509 -> 541 of 557. Every load-bearing geometry guard is
+  green: panel-parity 10/10, detect 27/27 (both detectors agreeing on all 51 models), customiser
+  round-trip 10/10, fitting-seat 4/4, hex 82/82. `tsc` and `npm run build` clean.
+  **Three of the six Done-when criteria are now met and were checked this turn**: `hexCorners`
+  starts at `60·i`; `wall-honeycomb-part` measures 170.32 wide × 177 tall, the designer's own
+  dimensions, where it used to come out transposed; `FITTING_SEAT_RADIANS` is gone from the code
+  (the one remaining mention is the comment explaining why it went).
+  `FITTING_SEAT_RADIANS` did not simply vanish — the correction INVERTED. A mesh from a file now
+  seats unturned, while geometry the view builds (the collar, the two placeholder prisms) needs the
+  30° that real meshes no longer do, because `CylinderGeometry(…,6).rotateX(90°)` lands on a
+  pointy-top cell. That now lives in one helper, `cellPrism`, instead of three separate
+  `rotation.z` terms — which is how it shipped wrong in two of four places before.
+  Two findings worth keeping. The tiler's behaviour TRANSPOSED exactly: the old 2400×1200 result
+  (64 panels, 5784 cells, 96.87%) is now what 1200×2400 gives, and 2400×1200 gives 67 panels at
+  91.64%. That is honest — the app used to measure the plate at 177 × 170.32, which flattered a wide
+  wall. And `mk3s` no longer needs its 180°: it never was an oddity in the plate, it was the
+  pointy-top stagger parity disagreeing with how the panel is drawn.

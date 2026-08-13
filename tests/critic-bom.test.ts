@@ -391,7 +391,7 @@ describe('1 — SMALL: 2 panels + a handful of accessories', () => {
 });
 
 // ===========================================================================
-// 2. FULL GARAGE WALL — 2400 x 1200 on a 256 bed, plus 30 accessories
+// 2. FULL GARAGE WALL — 1200 x 2400 on a 256 bed, plus 30 accessories
 // ===========================================================================
 //
 // `allowRotation` is FALSE here, because that is what the app passes (App.tsx:
@@ -399,15 +399,28 @@ describe('1 — SMALL: 2 panels + a handful of accessories', () => {
 // invents panels that cannot be built). Testing the solver in a mode the
 // product never uses proves nothing about the product's BOM.
 //
-// With rotation off the solver produces five bands of ten
-// wall-honeycomb-bambu-211x248-fixed (10x10) and a top band of fourteen
-// wall-honeycomb-part (7x8) = 64 panels, 5784 cells. The k1 panel is only
-// usable rotated, so it disappears from the mix entirely.
+// The wall is 1200 WIDE by 2400 TALL, and that is the frame turn (D35) showing
+// itself rather than a different scenario. This panel set tiles one wall aspect
+// better than the other because the lattice is anisotropic (ROW_STEP is not
+// PITCH), and turning the lattice 90 degrees swapped which aspect that is. This
+// is the same physical wall the test always used, stood the other way up, and it
+// reproduces the identical panel mix — so every figure in the hand arithmetic
+// below is unchanged and still an independent check on bom.ts.
 //
-// Band 0 begins at q=1, not q=0: `bandBump` pushes a band one whole column
-// right when its odd rows would otherwise lean off the left edge of the wall.
-// The accessories below are placed accordingly — row 0 of the bottom band
-// covers columns 1..100, in ten panels of ten.
+// (2400 x 1200 now solves to 67 panels of a three-way mix at 91.6% coverage,
+// where it used to give 64 at 96.9%. Neither is a regression: the app used to
+// measure the plate transposed, at 177 wide by 170.32 tall, which happened to
+// flatter a wide wall. The plate is 170.32 x 177 and always was.)
+//
+// With rotation off the solver produces five bands of ten
+// wall-honeycomb-bambu-211x248-fixed (10x10) and a last band of fourteen
+// wall-honeycomb-part = 64 panels, 5784 cells. The k1 panel is only usable
+// rotated, so it disappears from the mix entirely.
+//
+// Band 0 begins at r=1, not r=0: `bandBump` pushes a band one whole row down
+// when its odd columns would otherwise lean off the top edge of the wall. The
+// accessories below are placed accordingly — column 0 of the leftmost band
+// covers rows 1..100, in ten panels of ten.
 //
 // HAND ARITHMETIC (per-unit figures read from src/catalog/catalog.json)
 //   insert-countersunk = 6 x 50 + 5 x 14                 = 300 + 70 = 370
@@ -438,7 +451,7 @@ function garageTiling() {
       heightMm: p.panel!.heightMm,
     }));
   return solveTiling({
-    wall: { widthMm: 2400, heightMm: 1200 },
+    wall: { widthMm: 1200, heightMm: 2400 },
     bedId: 'bed256',
     available,
     // Matches src/ui/App.tsx. Do not flip this to explore a nicer panel mix:
@@ -448,26 +461,30 @@ function garageTiling() {
 }
 
 /**
- * 30 accessories, all on row 0, each wholly inside one panel of the bottom
- * band. Row 0 of that band runs from q=1 to q=100 in ten panels of ten
- * columns, so every footprint below starts and ends inside a single decade.
+ * 30 accessories, all in column 0, each wholly inside one panel of the leftmost
+ * band. Column 0 of that band runs from r=1 to r=100 in ten panels of ten rows,
+ * so every footprint below starts and ends inside a single decade.
+ *
+ * The same thirty parts at the same spacings as before the frame turn, read down
+ * a column instead of along a row — which is also how their own footprints now
+ * run, so a 3-cell shelf still occupies three consecutive cells of one panel.
  */
 function garageItems(): PlacedItem[] {
   const out: PlacedItem[] = [];
   let n = 0;
-  const add = (partId: string, q: number): void => {
+  const add = (partId: string, r: number): void => {
     n += 1;
-    out.push(item(`a${n}`, partId, { q, r: 0 }));
+    out.push(item(`a${n}`, partId, { q: 0, r }));
   };
-  for (const q of [1, 4, 7, 11, 14, 17, 21, 24, 27, 31]) add('shelf-1', q); // 10, 3 cells each
-  for (const q of [34, 37, 41, 44, 47]) add('hook-to-empty', q); //  5, 2 cells each
-  for (const q of [51, 54, 57, 61, 64]) add('hook-side', q); //  5, 2 cells each
-  for (const q of [71, 73, 75, 77, 79]) add('insert-with-m3', q); //  5, 1 cell each
-  for (const q of [81, 84, 87, 91, 94]) add('box', q); //  5, 3 cells each
+  for (const r of [1, 4, 7, 11, 14, 17, 21, 24, 27, 31]) add('shelf-1', r); // 10, 3 cells each
+  for (const r of [34, 37, 41, 44, 47]) add('hook-to-empty', r); //  5, 2 cells each
+  for (const r of [51, 54, 57, 61, 64]) add('hook-side', r); //  5, 2 cells each
+  for (const r of [71, 73, 75, 77, 79]) add('insert-with-m3', r); //  5, 1 cell each
+  for (const r of [81, 84, 87, 91, 94]) add('box', r); //  5, 3 cells each
   return out;
 }
 
-describe('2 — FULL GARAGE WALL: 2400 x 1200, bed256, 64 panels + 30 accessories', () => {
+describe('2 — FULL GARAGE WALL: 1200 x 2400, bed256, 64 panels + 30 accessories', () => {
   const tiling = garageTiling();
   const panels: PlacedPanel[] = tiling.panels.map((p, i) => ({
     id: `p${i}`,
