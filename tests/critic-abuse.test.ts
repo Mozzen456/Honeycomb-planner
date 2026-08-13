@@ -125,9 +125,12 @@ describe('scale', () => {
     const s = new Store(docWith(40, 40), catalog);
     const place = timed('place 200 items', () => {
       let placed = 0;
+      // Walked down columns, undoing the flat-top stagger (-floor(q/2)) so
+      // every cell lands on the 40x40 block. It was walked along rows against
+      // the pointy-top stagger before (D35).
       for (let i = 0; i < 200; i++) {
-        const row = Math.floor(i / 20);
-        const r = s.addItem('single', { q: (i % 20) - Math.floor(row / 2), r: row });
+        const col = Math.floor(i / 20);
+        const r = s.addItem('single', { q: col, r: (i % 20) - Math.floor(col / 2) });
         if (r.ok) placed++;
       }
       return placed;
@@ -150,13 +153,14 @@ describe('scale', () => {
   }, 60_000);
 
   it('2000 items: reports how the cost scales against 200', () => {
+    // 50 columns of 40 on the flat-top wall (D35): walk DOWN each column and
+    // undo the -floor(q/2) stagger, or the grid runs off the block and the drops
+    // are (correctly) refused. The same trap the pointy-top version documented,
+    // read along the other axis.
     const s = new Store(docWith(50, 40), catalog);
-    // -ceil(row/2), matching panelCells: odd rows lean half a pitch LEFT, so a
-    // grid built with -floor(row/2) ran one column off the right-hand edge of
-    // every odd row and 20 of the 2000 drops were (correctly) refused.
     const cell = (i: number): Hex => {
-      const row = Math.floor(i / 50);
-      return { q: (i % 50) - Math.ceil(row / 2), r: row };
+      const col = Math.floor(i / 40);
+      return { q: col, r: (i % 40) - Math.floor(col / 2) };
     };
     const t200 = timed('place first 200 of 2000', () => {
       for (let i = 0; i < 200; i++) s.addItem('single', cell(i));
@@ -317,10 +321,12 @@ describe('placement abuse', () => {
   });
 
   it('accepts a drop that sits exactly on the boundary', () => {
-    const r = store.addItem('pair', { q: 8, r: 0 }); // cells 8 and 9: the last column
+    // `pair` is two cells along +q, so the last legal start is column 8.
+    const r = store.addItem('pair', { q: 8, r: 0 });
     expect(r.ok, `boundary drop refused: ${r.reason}`).toBe(true);
-    const last = store.addItem('single', { q: -4, r: 9 }); // bottom-left-most cell of row 9
-    expect(panelCells({ q: 0, r: 0 }, 10, 10).some((c) => c.q === -4 && c.r === 9)).toBe(true);
+    // The far corner of the block: column 9 is staggered up by -floor(9/2) = 4.
+    const last = store.addItem('single', { q: 9, r: -4 });
+    expect(panelCells({ q: 0, r: 0 }, 10, 10).some((c) => c.q === 9 && c.r === -4)).toBe(true);
     expect(last.ok, `boundary drop refused: ${last.reason}`).toBe(true);
   });
 

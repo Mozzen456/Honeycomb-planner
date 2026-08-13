@@ -199,15 +199,22 @@ describe('solveTiling — degenerate walls', () => {
 
 describe('solveTiling — rotation', () => {
   it('uses the rotated footprint when that is what suits the wall', () => {
-    // 8 columns × 10 rows only exists as the 90° spin of the 10 × 8 K1 panel.
+    // 10 columns × 8 rows only exists as the 90° spin of the 8 × 10 panel.
+    //
+    // Drawn TALLER than it is wide, deliberately. Bands run vertically on the
+    // flat-top wall (D35) and `fillBand` packs each band by `rows`, so the
+    // variant that leaves less unused height wins — which is the one with the
+    // FEWER rows. A panel drawn wider than tall is therefore already the better
+    // of its two forms and rotation has nothing to offer it. Before the turn the
+    // same argument ran along the other axis and picked the opposite variant.
     const available: PanelSize[] = [
-      { partId: 'wall-honeycomb-k1', columns: 10, rows: 8, widthMm: 211.1947, heightMm: 200.6 },
+      { partId: 'wall-honeycomb-k1', columns: 8, rows: 10, widthMm: 200.6, heightMm: 211.1947 },
     ];
     const rotated = solveTiling(request(2400, 1200, { available, allowRotation: true }));
     const fixed = solveTiling(request(2400, 1200, { available, allowRotation: false }));
 
-    expect(rotated.panels.some((p) => p.columns === 8 && p.rows === 10)).toBe(true);
-    expect(fixed.panels.every((p) => p.columns === 10 && p.rows === 8)).toBe(true);
+    expect(rotated.panels.some((p) => p.columns === 10 && p.rows === 8)).toBe(true);
+    expect(fixed.panels.every((p) => p.columns === 8 && p.rows === 10)).toBe(true);
   });
 
   it('rejects a panel whose bed footprint only fits when spun, if rotation is off', () => {

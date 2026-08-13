@@ -385,12 +385,12 @@ describe('validate', () => {
 
     expect(clash).toHaveLength(1);
     expect(clash[0]!.itemIds).toEqual(['p1', 'p2']);
-    // panelCells staggers row r by -ceil(r/2), so row 1 leans half a pitch LEFT
-    // of row 0 (hex.ts, verified in tests/panel-parity.test.ts):
-    //   p1 covers (0,0),(1,0) and (-1,1),(0,1)
-    //   p2 covers (1,0),(2,0) and ( 0,1),(1,1)
-    // which share (1,0) on row 0 and (0,1) on row 1.
-    expect(cells(clash[0]!.cells ?? [])).toEqual(['0,1', '1,0']);
+    // panelCells staggers column q by -floor(q/2) on the flat-top wall (D35), so
+    // the two 2x2 blocks one column apart overlap down their shared column:
+    //   p1 covers (0,0),(0,1) and (1,0),(1,1)
+    //   p2 covers (1,0),(1,1) and (2,0),(2,1)
+    // which share the whole of column 1.
+    expect(cells(clash[0]!.cells ?? [])).toEqual(['1,0', '1,1']);
   });
 
   it('reports an unknown partId once, listing every placement that wants it', () => {
