@@ -71,11 +71,9 @@ wall 90° from the designer's own drawings.
       `firstFittingCell` and `JUNCTION_FOOTPRINT` turned; hex/store/obstacles/bom/critic-abuse/
       tiling tests all green.
 
-      LEFT: **16 failures, all in `tests/critic-bom.test.ts`.** Not mechanical — they are
-      hand-computed BOM figures (insert counts, minutes, grams, metres, shopping list) that need
-      genuine re-derivation from `catalog.json` rather than reading the numbers off `bom.ts`, which
-      would destroy the independence that makes the test worth having. Sections 3, 4 and 7 also
-      carry hard-coded `(q,r)` literals for their seam and overlap scenarios.
+      FINISHED: `critic-bom` re-derived (figures computed from `catalog.json` and then compared
+      with `bom.ts`, never copied from it), the plate-outline edge/corner shift, and both detectors
+      agreeing on all 51 parts. Suite 557/557.
 
           relabel:   (q, r)  ->  (-r, q + r)
           embedding: x = ROW_STEP * q,  y = PITCH * (r + q/2)
@@ -94,19 +92,19 @@ wall 90° from the designer's own drawings.
         relabelled stored footprints, **`(−r,q+r)` + `floor` matches all 7 panels**;
         `(r,−q−r)` + `floor` matches 6 and fails on exactly `mk3s` — the panel CLAUDE.md flags as
         needing a 180°. The canary worked.
-- [ ] **Re-express every stored `footprint` in `catalog.json` by the pinned relabel** — all 51
-      parts. This is a lossless data migration, NOT a rescan: it needs no PrusaSlicer, so the
-      committed `print`/estimate blocks and their provenance survive untouched and this machine's
-      slicer hash is never baked in. `tools/footprint.py` and `src/core/detect.ts` must emit the new
-      labels too (CLAUDE.md: two detectors, they must agree).
-- [ ] **Plan a full wall in the app and photograph it.** The acceptance test proves the numbers;
-      only the screenshot proves the picture. Compare against the PDF drawings and
-      `Customiser/network_wall` photograph.
-- [ ] P1a — footprints for the 27 `needsReview` parts. The PDF sourced their fasteners but says
+- [x] **Re-express every stored `footprint`** — done by `tools/turn_frame.py`. A lossless relabel,
+      not a rescan: no PrusaSlicer, so every committed `print` block survives byte-for-byte. One
+      part (`insert-hollow-tre`) needed the detector's own answer instead of a blind rotation, and
+      that it was only ONE is the evidence the rotation is right for the other fifty.
+- [x] **Plan a full wall in the app and photograph it.** Done: 400 × 400, 4 panels, an SD-card
+      holder and a shelf placed by keyboard, screenshotted. Flat-top throughout, slots pointing up.
+      It found two bugs no test could — see the pass-7 log entry.
+- [ ] **NEXT.** P1a — footprints for the 27 `needsReview` parts. The PDF sourced their fasteners but says
       nothing about which cells an installer uses. The D34 inspector now gives a human route for the
       mounting face; the cells still need a source. Groups: shelves (4), hooks (8), boxes/holders
       (8), covers (3), wrench holders (2), misc (2).
-- [ ] Write the rundown into `HSW-SPEC.md` §11 — measured vs assumed, module by module.
+- [x] Write the rundown into `HSW-SPEC.md` §11 — done, and §2/§4 rewritten to the flat-top frame,
+      which they contradicted.
 - [ ] Not actionable, record only: P2 (375×389 fits no listed bed — a measurement), P4 (one slicer
       profile), P6 (untested surfaces), P9 residuals (imported print estimate ±30 %, phone layout).
 
