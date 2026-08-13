@@ -366,7 +366,12 @@
   color: var(--text-tertiary);
   font-size: var(--font-size-sm);
   line-height: var(--line-height-none);
-  opacity: 0;
+  /* Visible at rest, unlike the remove control beside it.
+     Setting a part's mounting face is a thing you go LOOKING for, and a control
+     that only exists on hover is one you have to already know about. The remove
+     control can stay hidden because it is destructive and its absence is safe;
+     this one being invisible made the whole inspector undiscoverable. */
+  opacity: 0.45;
   transition: opacity var(--duration-fast) var(--ease-standard);
 }
 

@@ -619,6 +619,25 @@ export function WallView3D(props: WallView3DProps) {
   const [meshTick, setMeshTick] = useState(0);
   const meshes = useRef(new Map<string, PartMesh | null>());
 
+  /**
+   * Drop this view's own copy whenever the catalogue changes identity.
+   *
+   * `meshLibrary` caches oriented geometry per part id and `forgetPartMesh`
+   * clears it — but THIS ref is a second cache in front of that one, and nothing
+   * was clearing it. So picking a new mounting face (D34) updated the catalogue,
+   * dropped the library's copy, and then the view redrew from its own stale
+   * entry: the part never visibly turned, which made the whole inspector look
+   * like it did nothing.
+   *
+   * Keyed on the catalogue rather than on a bespoke signal because that is
+   * exactly what changes when a correction is saved — and it costs nothing to be
+   * broad here, since `loadPartMesh` still returns its cached promise for every
+   * part whose geometry did not actually change.
+   */
+  useEffect(() => {
+    meshes.current.clear();
+  }, [catalog]);
+
   useEffect(() => {
     const s = stateRef.current;
     if (!s || !ready) return;

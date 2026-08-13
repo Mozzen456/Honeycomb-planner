@@ -191,7 +191,7 @@ function CatalogTile(
           className="catalog-tile__inspect hit-area"
           /* Not inside the tile div: that one owns pointerdown for the drag
              gesture, and a button nested in it would have its click swallowed. */
-          title={`Set which face of ${part.name} mounts against the wall`}
+          title={`Set which face of ${part.name} goes against the wall — click the surface in 3D`}
           aria-label={`Set the mounting face for ${part.name}`}
           onClick={() => onInspect(part.id)}
         >

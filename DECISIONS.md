@@ -862,3 +862,31 @@ of printed plates, and which one you are pointing at is a real question: it is t
 hang and count. The seams are zig-zags through the grid and are genuinely hard to read face-on.
 
 Both together answer the two questions at once: which plate, and which hole in it.
+
+---
+
+## D38 — The mounting-face inspector actually re-orients the part now
+
+**Reported as a new request — "let me click the surface that should face the honeycomb so parts
+get rotated correctly" — which is what D34 already built.** It was asked for again because it did
+not appear to work, and it genuinely did not.
+
+**`WallView3D` kept a second mesh cache.** `meshLibrary` caches oriented geometry per part id and
+`forgetPartMesh` clears it, which `saveMounting` calls. But the view holds its own
+`meshes` ref in front of that, and nothing was clearing it. So picking a face updated the
+catalogue, dropped the library's copy, rebuilt the item group — and then drew from the view's own
+stale entry. The part never turned. Saving worked, persistence worked, the export worked; the one
+visible consequence did not, which is the only part a person can see.
+
+Cleared on `catalog` identity, because that is exactly what changes when a correction is saved.
+Broad on purpose: `loadPartMesh` still returns its cached promise for every part whose geometry did
+not change, so the cost of being broad is a microtask.
+
+**The control was also undiscoverable.** The ⌖ button on a catalogue tile sat at `opacity: 0` until
+the tile was hovered, copying the remove control beside it. That is right for remove — destructive,
+and its absence is safe — and wrong here: setting a mounting face is something you go LOOKING for,
+and a control that only exists on hover is one you must already know about. Now visible at rest.
+
+**Verified by the picture, not by the store.** Placed an SD-card holder, changed its mounting face
+from `Left (−X)` to `Front (−Y)`, saved, and compared screenshots: the wide comb becomes a compact
+end-on block. Checking `localStorage` would have passed before the fix as well.
