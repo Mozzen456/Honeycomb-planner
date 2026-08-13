@@ -1,16 +1,19 @@
 /**
- * The seat correction, and who is allowed to receive it.
+ * View-built hexagons have to seat in a wall cell.
  *
- * `FITTING_SEAT_RADIANS` (30°) compensates the orientation a fitting's STL was
- * DRAWN in, so it exists only for meshes that came out of a file. Geometry the
- * view builds for itself — the placeholder prism used until an STL arrives, and
- * the collar drawn in each occupied cell — is already generated on the wall's
- * own lattice and must NOT be turned again.
+ * `FITTING_SEAT_RADIANS` is gone (D35). It compensated the 30° between flat-top
+ * parts and a pointy-top wall, and turning the wall removed the difference — a
+ * mesh loaded from a file now lands in its hole unturned.
  *
- * Getting that wrong is invisible in a still: a hexagon looks like a hexagon at
- * any angle, and it is only wrong relative to the cell under it. It shipped in
- * two of the four places that draw one, where the placeholder was laid across
- * the cell walls instead of into the hole. So the invariant is pinned here in
+ * The opposite correction is what survives, and it is the reason this file still
+ * exists. `CylinderGeometry(…, 6).rotateX(90°)` puts its corners at 30°/90°/…,
+ * which fitted a pointy-top cell exactly and is half a face out from a flat-top
+ * one. So the collar and the placeholder prisms need the turn that real meshes
+ * no longer do. `cellPrism` in WallView3D is where that lives.
+ *
+ * Getting it wrong is invisible in a still: a hexagon looks like a hexagon at any
+ * angle, and it is only wrong relative to the cell under it. That is exactly how
+ * it shipped in two of four places once already. So it is pinned here in
  * arithmetic rather than left to the eye.
  */
 
@@ -31,18 +34,28 @@ function vertexAngles(geometry: THREE.BufferGeometry): number[] {
 }
 
 /**
- * The corners of a pointy-top cell, straight out of `WallView3D.corner()`:
- * `60k − 90` degrees. A vertex at −90° is the point at the bottom.
+ * The corners of a FLAT-TOP cell, straight out of `hexCorners` in hex.ts and
+ * `corner()` in WallView3D: `60k` degrees. A corner at 0° is the point on the
+ * right, which puts a flat edge across the top.
  */
-const POINTY_TOP_CORNERS = [0, 1, 2, 3, 4, 5]
-  .map((k) => ((60 * k - 90) % 360 + 360) % 360)
+const FLAT_TOP_CORNERS = [0, 1, 2, 3, 4, 5]
+  .map((k) => ((60 * k) % 360 + 360) % 360)
   .sort((a, b) => a - b);
 
 describe('fitting seat', () => {
-  it('the view-built hexagonal prism already lands on the cell, unturned', () => {
+  it('a raw prism is half a face out from the cell, which is why cellPrism exists', () => {
     const g = new THREE.CylinderGeometry(10, 10, 5, 6);
     g.rotateX(Math.PI / 2);
-    expect(vertexAngles(g)).toEqual(POINTY_TOP_CORNERS);
+    expect(vertexAngles(g)).not.toEqual(FLAT_TOP_CORNERS);
+  });
+
+  it('cellPrism lands on the cell exactly', () => {
+    // The same two turns `cellPrism` applies, kept here as arithmetic so this
+    // does not become a test of itself.
+    const g = new THREE.CylinderGeometry(10, 10, 5, 6);
+    g.rotateX(Math.PI / 2);
+    g.rotateZ(Math.PI / 6);
+    expect(vertexAngles(g)).toEqual(FLAT_TOP_CORNERS);
   });
 
   /**
@@ -50,19 +63,18 @@ describe('fitting seat', () => {
    * its vertices where the cell's EDGE midpoints are — a fitting lying across
    * two cell walls rather than seated in the hole.
    */
-  it('turning that prism by the seat correction misaligns it with the cell', () => {
+  it('turning it a further 30° misaligns it again — the correction is not a nudge', () => {
     const g = new THREE.CylinderGeometry(10, 10, 5, 6);
     g.rotateX(Math.PI / 2);
-    g.rotateZ(Math.PI / 6);
     const turned = vertexAngles(g);
-    expect(turned).not.toEqual(POINTY_TOP_CORNERS);
+    expect(turned).not.toEqual(FLAT_TOP_CORNERS);
     // Exactly half a face out — the worst case available, not a graze.
     const circular = (a: number, b: number): number => {
       const d = Math.abs(a - b) % 360;
       return d > 180 ? 360 - d : d;
     };
     for (const a of turned) {
-      expect(Math.min(...POINTY_TOP_CORNERS.map((c) => circular(a, c)))).toBe(30);
+      expect(Math.min(...FLAT_TOP_CORNERS.map((c) => circular(a, c)))).toBe(30);
     }
   });
 

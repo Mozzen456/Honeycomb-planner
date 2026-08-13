@@ -41,15 +41,22 @@ function expand(p: CustomiserPanel): { col: number; row: number }[] {
   return out;
 }
 
-/** The app cells those (col,row) pairs mean, given the parity. */
+/**
+ * The app cells those (col,row) pairs mean, given the parity.
+ *
+ * The customiser's column IS the app's `q` now the wall is flat-top (D35) — the
+ * 90° swap this used to carry is gone, because both frames are the same one.
+ * Still derived from the customiser's side, not by inverting `toCustomiser`, so
+ * a mistake there cannot cancel itself out here.
+ */
 function toWallCells(
   pairs: { col: number; row: number }[], flip: boolean, colBase: number, rowBase: number,
 ): string[] {
   return pairs
     .map(({ col, row }) => {
-      const r = col + colBase;
-      const lo = (((r + (flip ? 1 : 0)) % 2) + 2) % 2;
-      const q = row + rowBase - (r - lo) / 2;
+      const q = col + colBase;
+      const lo = (((q + (flip ? 1 : 0)) % 2) + 2) % 2;
+      const r = row + rowBase - (q - lo) / 2;
       return hexKey({ q, r });
     })
     .sort();

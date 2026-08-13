@@ -66,22 +66,28 @@ export const CUSTOMISER_MAX_ROWS = 12;
 /**
  * A placed panel as customiser (column, row) pairs.
  *
- * Derivation. The app's wall frame is pointy-top:
- *     x = PITCH·(q + r/2)      y = ROW_STEP·r
+ * Derivation. The app's wall frame is flat-top (D35):
+ *     x = ROW_STEP·q           y = PITCH·(r + q/2)
  * The customiser lays its columns along its own x at ROW_STEP each, and steps
  * 23.6 down a column:
  *     X = ROW_STEP·col         Y = PITCH·(row + lo/2),  lo = (col + flip) % 2
  *
- * Those are the same lattice with the axes swapped: the app's `r` IS the
- * customiser's column, and the app's `q` carries the row. Equating the two and
- * solving for `row` gives the expression below; the half-step term is the
- * stagger, and it is why `lo` has to be computed rather than assumed.
+ * These are now THE SAME FRAME, which is the point: the customiser was always
+ * flat-top, and turning the wall to match it removed the 90° swap this function
+ * used to carry. The app's `q` IS the customiser's column. All that survives is
+ * the stagger, and `lo` still has to be computed rather than assumed because the
+ * customiser expresses it as a per-column parity rather than a shear.
+ *
+ * The round-trip in tests/customiser.test.ts is the guard, unchanged in strength:
+ * it asserts nothing by hand, it expands the parameters with the customiser's own
+ * loop and demands the identical cell set. A parity error here is a mirrored
+ * plate, invisible until it is printed.
  */
 function toCustomiser(cell: Hex, flip: boolean): { col: number; row: number } {
-  const col = cell.r;
+  const col = cell.q;
   const lo = ((col + (flip ? 1 : 0)) % 2 + 2) % 2;
-  // app x = PITCH·q + (PITCH/2)·r  must equal  PITCH·row + (PITCH/2)·lo
-  const row = cell.q + (cell.r - lo) / 2;
+  // app y = PITCH·r + (PITCH/2)·q  must equal  PITCH·row + (PITCH/2)·lo
+  const row = cell.r + (cell.q - lo) / 2;
   return { col, row };
 }
 

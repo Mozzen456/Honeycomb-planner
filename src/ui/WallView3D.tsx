@@ -54,29 +54,44 @@ const DIRS: readonly Hex[] = [
 ];
 
 /**
- * A fitting's hexagon has to seat in the cell's hexagon.
+ * A six-sided prism aligned to a WALL CELL, standing along +Z.
  *
- * The parts are drawn flat-top; the wall is drawn pointy-top (HSW-SPEC §2), so
- * a fitting needs 30° to line up with the hole it drops into. For an accessory
- * that 30° is refused, because the part has a meaningful up — an SD-card holder
- * whose slots point 30° off vertical spills its cards, and `meshLibrary` orients
- * those to the photographs instead.
+ * This replaces `FITTING_SEAT_RADIANS`, which is gone. That constant existed
+ * because the parts are drawn flat-top while the wall was drawn pointy-top, so
+ * every fitting needed 30° to seat in its hole — and its own comment said the
+ * real fix was the frame. The frame is turned (D35), so the correction for a
+ * real mesh is now zero and it has simply been deleted.
  *
- * An INSERT has no up. It is a hexagonal fitting and nothing about it reads
- * wrong at 60° intervals, so there is nothing to lose by turning it and a
- * misaligned one is obviously wrong. Applied here rather than in `meshLibrary`
- * because it depends on what the part is FOR, which is a catalogue fact, not a
- * mesh one.
+ * What remains is the opposite problem, and it is why this helper exists rather
+ * than nothing at all. `CylinderGeometry(…, 6)` puts its first vertex on an axis,
+ * which after `rotateX(90°)` lands the corners at 30°/90°/…/330° — that matched
+ * a pointy-top cell exactly, and it is 30° out from a flat-top one. So geometry
+ * the VIEW builds now needs the half-face turn that meshes from FILES no longer
+ * do. Building it in here, once, keeps that fact in one place instead of three
+ * `rotation.z` terms that have to be remembered separately.
  *
- * The real fix is the wall frame itself — see PARKED. This is what makes the
- * fittings sit in their holes until that is settled.
+ * `hexCorners` in hex.ts is the authority on where a cell's corners are; this
+ * matches it at 0°/60°/…/300°, and tests/fitting-seat.test.ts pins the two
+ * together.
  */
-const FITTING_SEAT_RADIANS = Math.PI / 6;
+function cellPrism(radius: number, depth: number): THREE.CylinderGeometry {
+  const g = new THREE.CylinderGeometry(radius, radius, depth, 6);
+  g.rotateX(Math.PI / 2);
+  g.rotateZ(Math.PI / 6);
+  return g;
+}
 
-/** Corner k of a pointy-top cell, in wall millimetres. */
+/**
+ * Corner k of a FLAT-TOP cell, in wall millimetres.
+ *
+ * Must stay identical to `hexCorners` in hex.ts — this builds the plate's
+ * outline and that draws the plan view, so a disagreement is a panel whose 3D
+ * silhouette does not match its own 2D drawing. The `− 90` that used to be here
+ * went with the frame (D35).
+ */
 function corner(centre: { x: number; y: number }, k: number, acrossFlats: number) {
   const R = acrossFlats / Math.sqrt(3);
-  const a = (Math.PI / 180) * (60 * (((k % 6) + 6) % 6) - 90);
+  const a = (Math.PI / 180) * (60 * (((k % 6) + 6) % 6));
   return new THREE.Vector2(centre.x + R * Math.cos(a), centre.y + R * Math.sin(a));
 }
 
@@ -582,8 +597,10 @@ export function WallView3D(props: WallView3DProps) {
         : new THREE.Mesh(new THREE.BoxGeometry(w, h, depth), mat);
       body.position.set(cx, cy, loaded ? PANEL_DEPTH : PANEL_DEPTH + depth / 2);
       const fitting = part.type === 'insert' || part.type === 'fastener';
-      body.rotation.z =
-        (Math.PI / 3) * it.rotation + (loaded && fitting ? FITTING_SEAT_RADIANS : 0);
+      // No seat correction: a mesh from a file is drawn flat-top and the wall
+      // is now flat-top too, so it lands in its hole unturned (D35).
+      void fitting;
+      body.rotation.z = (Math.PI / 3) * it.rotation;
       body.userData['itemId'] = it.id;
       body.userData['ownGeometry'] = loaded === null || loaded === undefined;
       s.itemGroup.add(body);
@@ -593,15 +610,9 @@ export function WallView3D(props: WallView3DProps) {
       for (const c of cells) {
         const p = hexToMm(c);
         const collar = new THREE.Mesh(
-          new THREE.CylinderGeometry(
-            (CELL.mouthAcrossFlats * 0.96) / Math.sqrt(3),
-            (CELL.mouthAcrossFlats * 0.96) / Math.sqrt(3),
-            CELL.mouthDepth * 1.2,
-            6,
-          ),
+          cellPrism((CELL.mouthAcrossFlats * 0.96) / Math.sqrt(3), CELL.mouthDepth * 1.2),
           mat,
         );
-        collar.geometry.rotateX(Math.PI / 2);
         collar.position.set(p.x, p.y, PANEL_DEPTH - CELL.mouthDepth * 0.4);
         collar.userData['itemId'] = it.id;
         s.itemGroup.add(collar);
@@ -683,22 +694,7 @@ export function WallView3D(props: WallView3DProps) {
       const p = hexToMm(cell);
       const mesh = fixingMesh
         ? new THREE.Mesh(fixingMesh.geometry, mat)
-        : new THREE.Mesh(
-            new THREE.CylinderGeometry(
-              CELL.mouthAcrossFlats / Math.sqrt(3), CELL.mouthAcrossFlats / Math.sqrt(3),
-              PANEL_DEPTH, 6,
-            ),
-            mat,
-          );
-      if (!fixingMesh) mesh.geometry.rotateX(Math.PI / 2);
-      // Only the REAL mesh gets the seat correction. `FITTING_SEAT_RADIANS`
-      // compensates the orientation an STL was drawn in; the fallback prism was
-      // built here, and `CylinderGeometry(…, 6).rotateX(90°)` already puts its
-      // vertices at 30/90/150/210/270/330 — exactly a pointy-top cell's corners.
-      // Turning that by another 30° laid the placeholder ACROSS the cell walls,
-      // which is the very thing the constant exists to prevent. The placed-item
-      // path has always guarded this with `loaded &&`; these two had not.
-      mesh.rotation.z = fixingMesh ? FITTING_SEAT_RADIANS : 0;
+        : new THREE.Mesh(cellPrism(CELL.mouthAcrossFlats / Math.sqrt(3), PANEL_DEPTH), mat);
       // Seated in the cell: the insert drops in from behind and its flange sits
       // proud of the front face, which is what the photographs show.
       mesh.position.set(p.x, p.y, fixingMesh ? PANEL_DEPTH - fixingMesh.depthMm : PANEL_DEPTH / 2);
@@ -729,18 +725,8 @@ export function WallView3D(props: WallView3DProps) {
 
       const mesh = junctionMesh
         ? new THREE.Mesh(junctionMesh.geometry, mat)
-        : new THREE.Mesh(
-            new THREE.CylinderGeometry(
-              (CELL.mouthAcrossFlats * 1.6) / Math.sqrt(3),
-              (CELL.mouthAcrossFlats * 1.6) / Math.sqrt(3),
-              PANEL_DEPTH, 6,
-            ),
-            mat,
-          );
-      if (!junctionMesh) mesh.geometry.rotateX(Math.PI / 2);
-      // Seat correction on the real mesh only — see the wall-fixing loop above.
-      mesh.rotation.z =
-        (Math.PI / 3) * junction.rotation + (junctionMesh ? FITTING_SEAT_RADIANS : 0);
+        : new THREE.Mesh(cellPrism((CELL.mouthAcrossFlats * 1.6) / Math.sqrt(3), PANEL_DEPTH), mat);
+      mesh.rotation.z = (Math.PI / 3) * junction.rotation;
       mesh.position.set(
         cx, cy,
         junctionMesh ? PANEL_DEPTH - junctionMesh.depthMm : PANEL_DEPTH / 2,

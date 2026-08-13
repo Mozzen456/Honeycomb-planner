@@ -298,8 +298,11 @@ export function WallCanvas(props: WallCanvasProps) {
     // 6 trig pairs × thousands of cells × every frame.
     const R0 = PITCH / Math.sqrt(3) / view.scale;
     const unit: Point[] = [];
+    // FLAT-TOP, matching `hexCorners` in hex.ts and `corner` in WallView3D —
+    // the plan view and the 3D view draw the same wall and must agree. The
+    // `− 90` that used to be here went with the frame (D35).
     for (let i = 0; i < 6; i++) {
-      const a = (Math.PI / 180) * (60 * i - 90);
+      const a = (Math.PI / 180) * (60 * i);
       unit.push({ x: Math.cos(a), y: Math.sin(a) });
     }
 
