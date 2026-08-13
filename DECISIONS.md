@@ -959,3 +959,254 @@ end — naming a face there would put an end on screen that nothing measured.
 
 Accepting writes the same `MountingOverride` the inspector writes, so it reaches `overrides.json`
 and exports identically. Not a second channel.
+
+---
+
+## D41 — Six degrees of freedom in the inspector, and one transform behind them
+
+**Asked for directly: "in the alignment tool I need all degrees of freedom to move this part into
+the exact position, so I need 6 degrees of freedom."**
+
+D34 gave the correction three and a half: the mounting face (two), a spin in 30° steps about the
+wall normal, and a depth along it. That is enough to say *this face, that way up*, and not enough to
+SEAT a part — a model drawn a couple of degrees off square, or whose mating peg is not centred in
+its own bounding box, cannot be put where it goes by naming a face and a depth. There was no way at
+all to slide a part sideways.
+
+**Decision: `MountingOverride` carries a full rigid transform** — `offsetXMm`, `offsetYMm`,
+`offsetMm` and `spinSteps` + `spinDeg`, `tiltXDeg`, `tiltYDeg` — in WALL coordinates: +X across the
+wall, +Y up it, +Z out of it. The two old fields keep their names and their meaning, so a
+correction written before this reads back as exactly itself, and an absent field means zero.
+
+**The spin stays in 30° steps with a trim on top, rather than becoming one free angle.** 30° is a
+turn the lattice itself has (D31/D34); the ↺/↻ buttons are how a hexagon is lined up, and counting
+thirty presses of a 1° control is not. The dialog shows the two as ONE angle in degrees and splits
+it on the way in — nobody thinks in "four steps and seven degrees".
+
+**One transform, in `src/ui/mountingTransform.ts`, and both consumers call it.** `meshLibrary` bakes
+it into the geometry the wall draws; `PartInspector` conjugates the same matrix into the file's own
+frame to preview it. Two copies of "rotate, rotate, translate" is precisely the failure this repo
+has paid for three times over — the hex inverse survived in three places because none of them named
+the function they duplicated — and here the symptom would be a part lined up in the dialog and
+somewhere else on the wall. The order is fixed and documented: spin about the normal, tilt about X,
+tilt about Y, then translate. Rotation first because "turn it, then put it where I want it" is the
+order a person can predict; the other way round every slide is re-aimed by whatever spin is set.
+
+**The pivot is the mating FACE, not the middle of the part.** On the wall `orient` puts the mating
+face at z = 0, so a tilt hinges on the wall surface. The inspector's mesh is centred on its own
+bounding box, so the preview needs the pivot moved there explicitly — otherwise the same six numbers
+would hinge about the part's middle and swing it off the plate. `halfAlongNormal` is the argument
+that carries it, and `tests/mounting-transform.test.ts` pins the hinge.
+
+**The wall plate is now FLUSH against the chosen face.** It stood off by half the part's LARGEST
+dimension plus 4%, which for anything that is not a cube left the part floating: zero depth looked
+wrong, and every reading of the depth was against a gap nobody chose. Zero now looks like what zero
+means.
+
+**Every number is typeable.** Buttons are for nudging while you watch, and nudging is hopeless for
+"3.2 mm out and 7° round", which is what matching a part to a measurement or a photograph asks for.
+The field holds its own text while focused — a controlled numeric input without that cannot be typed
+into, because clearing it to type `-3` parses to nothing and writes the old value back under the
+cursor.
+
+**Keyboard: the two pairs that existed still do what they did.** Bare arrows spin and set depth,
+`shift` slides, `alt` tilts. The common adjustments should not move because four more became
+possible.
+
+**What this does NOT touch: the detection.** The cells a part covers, its projection and its tier
+still come from `detect()` under the chosen face. A seating correction says where the mesh sits; a
+tier-3 part's footprint is still the bound PARKED P1 describes, and nudging a part 12 mm sideways
+does not promote it.
+
+---
+
+## D42 — The inspector says how much wall a part takes, and what it rests on
+
+**Asked for directly: "in the alignment tool I want to select the amount of space on the wall — I
+click the number of frames it should take — and I should be able to mount these on top of the
+inserts, since they are what's fastening it."**
+
+Two questions, and geometry can answer neither.
+
+**How much wall.** `detect()` gives every part a footprint, but for the 27 with no wall interface it
+is the bounding box laid over the lattice: a BOUND, not a measurement (PARKED P1). Which cells an
+installer actually uses is a choice — a shelf whose box spans seven cells is held by two pegs. The
+import dialog has had a cell editor since it shipped, for parts being added; parts already in the
+catalogue had no way to answer at all.
+
+**Decision: `PartOverride.footprint` — the same override file, the same merge, the same export.**
+It replaces the detected cells outright, re-anchors on the origin, and everything downstream follows
+because everything downstream reads `part.footprint`: `store.partCells` for what a drop covers,
+`bom.itemCells` for what the parts list reconciles, the ghost for what the drag shows.
+
+**Drawing the cells CLEARS `needsReview`; re-stating them does not.** That is the line
+`withFootprint` already draws for an imported part, and the reason is the same: the flag means
+"these cells are a bounding box", and an actual edit replaces the bound with a decision. Clicking a
+cell and clicking it back is not a decision, and promoting a bound by round-tripping the editor is
+exactly the dishonesty P1 exists to prevent.
+
+**It does NOT change what the part requires.** Cells are how much wall a part covers; pegs are what
+holds it up, counted by `detect.mountPoints()` from the wall face (HSW-SPEC §5). Deriving one from
+the other is what had a 7-cell shelf with two pegs ordering seven inserts, twice. The dialog now
+states the two side by side — "4 cells" and "the parts list orders 2 × insert-empty, counted from
+its own pegs rather than from these cells" — so nobody has to infer that they are different facts.
+
+**What it rests on.** HSW is two-level: the insert clips into the cell, the accessory pegs into the
+insert. The insert's 22.5 mm flange cannot enter the 22.0 mm mouth, so it seats proud, and a
+fastened part rests on the FLANGE — `INSERT.flangeThickness`, 2.5 mm, measured. `orient` puts every
+mating face at z = 0, which is where a part sits only if nothing is fastening it.
+
+**Decision: `MountingOverride.seat: 'wall' | 'insert'`, a datum rather than a number.** Typing 2.5
+into the depth would work today and say nothing: a reader six months later sees a nudge, not a
+reason, and it does not follow the flange if the flange is ever re-measured. `seatOffsetMm` reads
+the constant, `mountingTransform.depthMm` adds it under the person's own trim, and both the preview
+and the wall get it from that one function (D41).
+
+Default `wall`, not `insert`. It is the physically right answer for most accessories, and making it
+the default would silently move every part in every saved layout 2.5 mm out.
+
+**The inserts are drawn.** A toggle that only changes arithmetic is a toggle nobody trusts, so the
+patch grows a flange in each claimed cell and the part visibly rests on them.
+
+**The plate is now the part's OWN cells plus a ring.** It was a fixed centre-and-six, which is
+right for a one-cell hook and wrong for a four-cell shelf — the part spilled off the plate and the
+one question the plate exists to answer, does this cover the cells it claims, could not be asked.
+
+**And the fourth copy of the hex embedding turned up.** `FootprintEditor` carried
+`x = PITCH·(q + r/2), y = ROW_STEP·r` — the pointy-top frame from before D35, which is the TRANSPOSE
+of `hexToMm`. A transpose is a reflection: symmetric footprints looked identical and an L-shaped one
+came out mirrored from the shape that landed. It now calls `hexToMm` and `hexCorners`, like
+everything else. Extracted to `src/ui/FootprintEditor.tsx` so the import dialog and the inspector
+cannot drift apart, which is also how the bug survived — it was one component nobody compared with
+the wall.
+
+---
+
+## D43 — A cell of a part can be a socket: something else installs into it
+
+**Asked for directly: "on the thing that mounts to 4 panels and the wall, 3 of those are for
+mounting as well, so I want to be able to install things into those."**
+
+The thing is `insert-for-countersunk-hole-3` (and its sibling `insert-countersunk-with-m3x3`): a
+four-cell diamond that bridges a junction where four plates meet and takes one wall screw
+(HSW-SPEC §4, `fixings.ts`). The planner treated all four of its cells as filled, so dropping
+anything that plugs into a cell was refused — "one insert per hole". That rule is right for a plain
+insert and wrong for a part that IS the hole.
+
+**Which three, measured rather than assumed.** Rastering the mating face and matching each enclosed
+hole's centroid to a cell of the footprint gives, for both parts, the same answer: cells (0,0),
+(1,0) and (2,-1) carry a mounting hole and (1,-1) carries the 3.2 mm wall-screw bore. On
+`insert-for-countersunk-hole-3` the three are 13.2 mm across flats and 15.2 across corners — the
+standard 13.4 mm insert socket a peg plugs into; on `insert-countersunk-with-m3x3` they are 3.0 mm
+M3 bores. The whole hollow family came out of the same pass: `insert-hollow-dual`, `-tre` and `-for`
+are sockets in every cell. All five are in `overrides.json` with the measurement in the note.
+
+**Decision: `PartOverride.socketCells`, applied per cell, and a placement rule that reads it.** A
+cell offered as a socket accepts ONE thing installed into it; the next is refused, as is anything at
+all in the screw cell. Marked in the inspector by cycling a cell — empty → covered → a socket — and
+drawn open there and gold in the 3D patch, because a socket is a hole in the part rather than
+material.
+
+**What it did NOT change: the parts list.** A socket says something CAN go there, not that anything
+is ordered. Cells are how much wall a part covers, pegs are what holds a part up, and deriving a
+fastener count from cells is the seven-inserts-for-two-pegs bug this repo has already paid for
+twice. An insert installed in a socket is counted because it was placed, not because the socket
+exists.
+
+**It found a real bug on the way.** The occupancy index kept ONE item id per cell, last writer
+winning — so an accessory hung over an insert HID it, and the cell then accepted a second insert as
+if it were bare wall. The one-insert-per-hole rule had a hole in it, and only for the case a person
+would actually hit: hang a hook, then fit an insert. There is now a second index of what is IN each
+hole, which is what the rule was always describing.
+
+**And the validator had to learn the same rule, immediately.** Within a minute of the store allowing
+the install, the app accepted the drop and the parts list turned red: "only one part can occupy a
+cell". Same class of split as `partCells` vs `itemCells`, and the same fix — `itemSocketCells` in
+`bom.ts`, written as the same three steps as `itemCells`, consulted by both.
+
+---
+
+## D44 — The plate is perforated, the camera is in the room, and the fastener is a picture
+
+**Reported: "still not working on those fasteners, they disappear. Also with those fasteners in
+that alignment tool I want to select which one to use with the part, so have a photo of the
+selection."**
+
+**They disappeared because a cell was drawn as MATERIAL.** The inspector's wall patch was a slab
+with an opaque hexagonal prism plugged into every cell. That is invisible behind an accessory, which
+stands proud of the wall, and fatal for anything that goes INTO the cells:
+`insert-for-countersunk-hole-3` sat exactly inside four solid prisms and could not be seen at all.
+A cell is a hole. The plate is now one extruded outline with a hole per cell — the same thing
+`buildPanelGeometry` does for the wall itself, for the same reason — and a claimed cell is marked
+by a RING round the hole rather than a plug in it.
+
+**Second cause, same symptom: the camera was inside the wall.** The view opened on a fixed front
+angle and the face buttons looked straight AT the mounting face. That was survivable while the plate
+stood half a part's width away; with the plate flush against the mating face (D41) it means looking
+at the back of the wall with the part behind it. The dialog now opens — and every face button now
+looks — from the ROOM side, which is the end the mating face is not on.
+
+**Third: the patch was drawn at lattice coordinates while the mesh was centred.** Cell (0,0) is not
+the middle of a four-cell diamond, so the part was drawn 20 mm from its own holes. The patch is now
+centred on the block, which is what `meshLibrary.orient` does to the mesh.
+
+**Choosing the fastener: tiles with rendered pictures, not a list of ids.** `insert-hollow-tre` and
+`insert-hollow-for` differ by three letters and by one cell; `insert-with-m3` and `insert-m4` differ
+by a bore nobody can see in a name. The thumbnails are the same renders the catalogue tiles use,
+cached per part id, so this costs nothing new. The chosen fastener and a count go into
+`PartOverride.requires`, which `applyOverrides` already applied and the BOM already consumed — the
+gap was only that no one could say it without editing JSON.
+
+**The count is the number of PEGS, not of cells**, and the panel says so where it is entered. That
+is the rule the catalogue keeps getting wrong on its own (a 7-cell shelf with two pegs ordering
+seven inserts), and the place to state it is next to the number.
+
+**And `loadUserOverrides` had to learn to read it back.** It re-validates every field on the way in,
+which is right — a stored document is user input by the time it returns — but a field nobody reads
+is a correction that applies for one session and vanishes on reload. The validation is now the
+exported, browser-free `readUserOverrides`, tested field by field, precisely so the next field
+somebody adds is not silently dropped.
+
+**Pushing the setup, not just the diff.** Asked for straight after: "I want to save it locally yes,
+but I want to be able to push the setup for all of the parts." Local storage was never the
+sticking point — the export was, because `toOverrideFile` emits only what THIS browser changed
+(D34, so the diff stays readable). That is the right file for a small pull request and the wrong one
+for "here is how every part is set up". `toSetupFile` merges the shipped decisions with the local
+ones, sorts by id, carries the file's own preamble through, and is what the top bar's **Setup (n)**
+now downloads: drop it over `src/catalog/overrides.json`, commit, and both the app and
+`tools/scan.py` read it. **Mine (n)** still gives the narrow diff, and only appears when there is
+one.
+
+---
+
+## D45 — The tool's honeycomb IS the wall's honeycomb, and up the wall is up
+
+**Reported: "the size of the honeycomb in the tool is not the same size as the real honeycomb, so
+please fix that, and make the up orientation be up."**
+
+**The cell was drawn as one straight 22 mm bore.** A real wall cell is stepped: a 22.0 mm mouth
+2.0 mm deep, then the 20.0 mm throat that actually retains an insert (HSW-SPEC §3, `CELL`). The
+inspector's plate went straight through at the mouth, so every hole in the tool read wider — and
+shallower — than the same hole on the wall, which is exactly the comparison a person is making when
+they hold the dialog up against their own honeycomb. It is now the two layers `buildPanelGeometry`
+already builds for the wall, from the same constants, with the mouth on the side the part is on.
+Same numbers, same profile, one honeycomb.
+
+The cell marker went with it: a ring 1.0 mm proud each side ate most of the 1.6 mm web, which made
+the webs look fatter than they are. 0.6 mm now, so the web is drawn at its real width.
+
+**Up the wall is up on screen.** The part is modelled in the FILE's frame on purpose (D34) — the
+question is which axis of the STL faces the wall, so a click has to land on an axis of the STL. But
+nobody hangs a shelf in the file's frame. While "up the wall" was whichever way the modeller drew,
+the one judgement the dialog exists for — will this hang right — could not be made by looking, only
+by reading a green arrow.
+
+**Decision: turn the STAGE, not the part.** `fileToScene` maps the file's axes into a scene where
+the wall's across is +X, its up is +Z (which is also the orbit's pole, so dragging behaves) and its
+outward normal is −Y, toward the default camera. The geometry inside keeps its file coordinates, so
+`face.normal` still names a file axis and the raycast is untouched. Determinant +1 on all six faces,
+held by test — a mirrored stage would be a left-hand hook drawn on a right-hand wall.
+
+That collapsed the per-face camera rules: with the stage turned, every mounting face points the
+same way, so the view is simply "from the room, three-quarter". Dead-on was rejected for the reason
+it always was — along the normal a part is just its own silhouette.

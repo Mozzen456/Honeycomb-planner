@@ -11,7 +11,7 @@
  * what was selected, or undoing a group drag leaves you holding nothing.
  */
 
-import { computeBom, itemCells, validate } from './bom';
+import { computeBom, itemCells, itemSocketCells, validate } from './bom';
 import { hexKey, hexRotate, panelCells, placedPanelCells, placeFootprint } from './hex';
 import { obstructedCells } from './obstacles';
 import { crossesSeam } from './tiling';
@@ -190,19 +190,41 @@ export class Store {
     items: LayoutDoc['items'];
     catalog: Catalog;
     map: Map<string, string>;
+    /**
+     * cell -> every item IN that hole, in placement order.
+     *
+     * A second index, and it has to be one. `map` keeps a single id per cell, so
+     * the last item placed wins — and an accessory hung over an insert therefore
+     * HID it from the one-insert-per-hole check: drop a hook on a cell and the
+     * cell would take a second insert as if it were empty. A list, and only of
+     * the things that go into the hole, is what the rule was always describing.
+     */
+    plugs: Map<string, string[]>;
   } | null = null;
 
   private occupancyIndex(): ReadonlyMap<string, string> {
+    return this.indices().map;
+  }
+
+  /** cell -> the items plugged into it, innermost first. */
+  private plugIndex(): ReadonlyMap<string, string[]> {
+    return this.indices().plugs;
+  }
+
+  private indices(): { map: Map<string, string>; plugs: Map<string, string[]> } {
     const items = this.current.doc.items;
     const cache = this.occupancyCache;
-    if (cache && cache.items === items && cache.catalog === this.catalogRef) return cache.map;
+    if (cache && cache.items === items && cache.catalog === this.catalogRef) return cache;
 
     const map = new Map<string, string>();
+    const plugs = new Map<string, string[]>();
     for (const item of items) {
       for (const c of itemCells(item, this.catalogRef)) map.set(hexKey(c), item.id);
+      addPlugs(plugs, item, this.catalogRef);
     }
-    this.occupancyCache = { items, catalog: this.catalogRef, map };
-    return map;
+    const built = { items, catalog: this.catalogRef, map, plugs };
+    this.occupancyCache = built;
+    return built;
   }
 
   /**
@@ -220,6 +242,7 @@ export class Store {
     if (!cache || cache.catalog !== this.catalogRef) return;
     for (const item of added) {
       for (const c of itemCells(item, this.catalogRef)) cache.map.set(hexKey(c), item.id);
+      addPlugs(cache.plugs, item, this.catalogRef);
     }
     cache.items = items;
   }
@@ -290,31 +313,57 @@ export class Store {
     const clashing: Hex[] = [];
     let overlapName = '';
     let clashName = '';
+    let clashReason = 'one insert per hole';
 
+    const plugs = this.plugIndex();
     for (const c of cells) {
       const key = hexKey(c);
       const other = occupied.get(key);
+
+      /*
+       * Two things that plug INTO a cell cannot share it — there is one hole.
+       * Anything else is mounted ON the wall and simply stands in front of what
+       * is behind it, which is how the system is meant to be used.
+       *
+       * Unless the thing already there OFFERS the hole. `insert-for-countersunk-
+       * hole-3` spans four cells, ties four plates together and takes one wall
+       * screw; three of those cells are open 13.2 mm sockets, measured. Refusing
+       * everything in them treated a mounting position as solid material. So a
+       * lone occupant with a free socket at this cell is not a clash, it is what
+       * you install INTO — and once something is in it, the socket is full and
+       * the next one is refused as before.
+       */
+      if (exclusiveCells.has(key)) {
+        const inHole = (plugs.get(key) ?? []).filter((id) => !ignoreIds.has(id));
+        if (inHole.length > 0) {
+          const host = this.current.doc.items.find((i) => i.id === inHole[0]);
+          const hostPart = host ? this.part(host.partId) : undefined;
+          const socket = host !== undefined
+            && itemSocketCells(host, this.catalogRef).some((s) => hexKey(s) === key);
+          if (socket && inHole.length === 1) continue;   // an install, not a clash
+          clashing.push(c);
+          if (!clashName) {
+            const blockerId = socket ? inHole[inHole.length - 1] : inHole[0];
+            const blocker = this.current.doc.items.find((i) => i.id === blockerId);
+            clashName = (blocker ? this.part(blocker.partId)?.name : hostPart?.name)
+              ?? 'another item';
+            if (socket) clashReason = 'that socket is already taken';
+          }
+          continue;
+        }
+      }
+
       if (other === undefined) continue;
       const it = this.current.doc.items.find((i) => i.id === other);
       const p = it ? this.part(it.partId) : undefined;
-      const name = p?.name ?? 'another item';
-
-      // Two things that plug INTO a cell cannot share it — there is one hole.
-      // Anything else is mounted ON the wall and simply stands in front of what
-      // is behind it, which is how the system is meant to be used.
-      if (exclusiveCells.has(key) && p !== undefined && isExclusive(p)) {
-        clashing.push(c);
-        if (!clashName) clashName = name;
-      } else {
-        overlapping.push(c);
-        if (!overlapName) overlapName = name;
-      }
+      overlapping.push(c);
+      if (!overlapName) overlapName = p?.name ?? 'another item';
     }
 
     if (clashing.length > 0) {
       return {
         ok: false,
-        reason: `${clashName} already fills ${clashing.length === 1 ? 'that cell' : `${clashing.length} of those cells`} — one insert per hole`,
+        reason: `${clashName} already fills ${clashing.length === 1 ? 'that cell' : `${clashing.length} of those cells`} — ${clashReason}`,
         blockedCells: clashing,
       };
     }
@@ -750,6 +799,28 @@ export function cutAroundObstacles(
 /** Cells of a placement that need a hole to themselves. */
 export function exclusiveCellsOf(part: CatalogPart, cells: readonly Hex[]): Set<string> {
   return isExclusive(part) ? new Set(cells.map(hexKey)) : new Set<string>();
+}
+
+/**
+ * Record an item in the cell -> things-in-the-hole index.
+ *
+ * Only parts that go INTO a cell are recorded, which is the whole point: an
+ * accessory stands in front of a hole and does not fill it, and treating it as
+ * an occupant is what let a second insert into an occupied cell.
+ */
+function addPlugs(
+  plugs: Map<string, string[]>,
+  item: PlacedItem,
+  catalog: Catalog,
+): void {
+  const part = catalog.parts.find((p) => p.id === item.partId);
+  if (part === undefined || !isExclusive(part)) return;
+  for (const c of itemCells(item, catalog)) {
+    const key = hexKey(c);
+    const list = plugs.get(key);
+    if (list === undefined) plugs.set(key, [item.id]);
+    else list.push(item.id);
+  }
 }
 
 /**

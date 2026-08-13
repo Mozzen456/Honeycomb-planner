@@ -25,6 +25,7 @@ import { mountingOf } from '../core/overrides';
 import { parseStl, type MeshData } from '../core/stl';
 import type { CatalogPart } from '../core/types';
 import { getModelBytes, isImported } from '../core/userCatalog';
+import { mountingMatrix } from './mountingTransform';
 
 export interface PartMesh {
   geometry: THREE.BufferGeometry;
@@ -100,13 +101,18 @@ async function build(part: CatalogPart): Promise<PartMesh | null> {
     geometry.rotateZ(Math.PI / 2);
   }
 
-  // The spin is the one part that is not a detection: it is the turn about the
-  // wall normal that makes the part LOOK right, which is the open frame
-  // question (DECISIONS D31) expressed per part until it is settled globally.
-  if (mounting?.spinSteps) geometry.rotateZ((Math.PI / 6) * mounting.spinSteps);
-  // Depth, after the spin: a translation along the wall normal does not commute
-  // with a rotation about any other axis, and +Z is the normal by now.
-  if (mounting?.offsetMm) geometry.translate(0, 0, mounting.offsetMm);
+  /*
+   * The seating correction, which is the one part that is not a detection: six
+   * numbers a person set by eye in the inspector to put the part exactly where
+   * it goes. Applied as ONE matrix from `mountingTransform`, which is also what
+   * the inspector previews with — two copies of the order would mean lining a
+   * part up in the dialog and finding it somewhere else on the wall.
+   *
+   * `depthMm` stays the DETECTED projection. It measures the part along the
+   * wall normal for the layout, and that is a property of the part under the
+   * chosen face, not of how far someone nudged it afterwards.
+   */
+  if (mounting) geometry.applyMatrix4(mountingMatrix(mounting));
   return { geometry, depthMm: detection.projectionMm };
 }
 

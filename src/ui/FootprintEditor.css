@@ -1,0 +1,50 @@
+/* The clickable patch of wall. Shared by the import dialog and the inspector,
+   which is why it lives here rather than in either one's stylesheet. */
+
+.footprint {
+  inline-size: 100%;
+  max-block-size: 20rem;
+  background: var(--canvas-wall);
+  border: var(--border-width-hair) solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.footprint__cell {
+  fill: var(--canvas-panel-tint);
+  stroke: var(--canvas-wall);
+  stroke-width: 1.2;
+  cursor: pointer;
+  transition: fill var(--duration-fast) var(--ease-standard);
+}
+
+.footprint__cell:hover { fill: var(--accent-bg); }
+
+.footprint__cell--on { fill: var(--accent); }
+
+/* A cell of the part that something can be installed INTO: drawn OPEN, because
+   that is what it is — a hole through the part rather than material. Filled
+   would say "this cell is used up", which is the opposite of what it means. */
+.footprint__cell--socket {
+  fill: var(--canvas-wall);
+  stroke: var(--accent);
+  stroke-width: 2.5;
+}
+
+.footprint__cell--socket:hover { fill: var(--accent-bg); }
+
+/* The anchor is the cell that sits under the cursor while dragging, so it is
+   worth being able to see which one it is. */
+.footprint__cell--anchor { stroke: var(--accent); stroke-width: 2; }
+
+.footprint__cell:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+}
+
+/* The insert's flange, seated over the mouth it is too wide to enter. Drawn as
+   an outline so the cell it clips into stays visible through it. */
+.footprint__insert {
+  fill: none;
+  stroke: var(--canvas-wall);
+  stroke-width: 1.6;
+  opacity: 0.85;
+}

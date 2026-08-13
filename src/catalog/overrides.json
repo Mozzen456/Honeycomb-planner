@@ -178,6 +178,91 @@
     }
    ],
    "_note": "the mounting pegs could not be counted, and the catalogue ordered NONE - which cannot be right: a second-tier part hangs on the wall through an insert. Floored at one, and flagged: count the pegs on the model"
+  },
+  "insert-for-countersunk-hole-3": {
+   "socketCells": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 1,
+     "r": 0
+    },
+    {
+     "q": 2,
+     "r": -1
+    }
+   ],
+   "_note": "three of its four cells are open hexagonal sockets, 13.2 mm across flats and 15.2 across corners - the standard 13.4 mm insert socket an accessory peg plugs into. The fourth cell (1,-1) carries the 3.2 mm wall-screw bore. Measured by rastering the mating face and matching each enclosed hole's centroid to a cell of the footprint"
+  },
+  "insert-countersunk-with-m3x3": {
+   "socketCells": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 1,
+     "r": 0
+    },
+    {
+     "q": 2,
+     "r": -1
+    }
+   ],
+   "_note": "three of its four cells carry a 3.0 mm M3 bore to bolt an accessory to; the fourth (1,-1) carries the 3.2 mm wall-screw bore. Same measurement as insert-for-countersunk-hole-3, and the same three cells"
+  },
+  "insert-hollow-dual": {
+   "socketCells": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 1,
+     "r": -1
+    }
+   ],
+   "_note": "both cells are 13.2 mm across-flats hexagonal sockets, measured from the enclosed holes on the mating face"
+  },
+  "insert-hollow-tre": {
+   "socketCells": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 0,
+     "r": 1
+    },
+    {
+     "q": 1,
+     "r": 0
+    }
+   ],
+   "_note": "all three cells are 13.2 mm across-flats hexagonal sockets, measured from the enclosed holes on the mating face"
+  },
+  "insert-hollow-for": {
+   "socketCells": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 0,
+     "r": 1
+    },
+    {
+     "q": 1,
+     "r": -1
+    },
+    {
+     "q": 1,
+     "r": 0
+    }
+   ],
+   "_note": "all four cells are 13.2 mm across-flats hexagonal sockets, measured from the enclosed holes on the mating face"
   }
  }
 }

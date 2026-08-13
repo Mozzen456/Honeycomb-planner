@@ -18,7 +18,7 @@ import { applyOverrides, mountingOf, type MountingOverride } from '../core/overr
 import { decodeShareUrl, encodeShareUrl, deserialize, serialize } from '../core/persist';
 import { emptyDoc, Store, type EditorState, type DropResult } from '../core/store';
 import { solveTiling, type PanelSize } from '../core/tiling';
-import type { Catalog, Hex, Rotation } from '../core/types';
+import type { Catalog, Hex, InsertRequirement, Rotation } from '../core/types';
 import {
   deleteModelBytes, loadUserParts, mergeCatalog, putModelBytes, saveUserParts,
 } from '../core/userCatalog';
@@ -27,7 +27,8 @@ import { CatalogPanel } from './CatalogPanel';
 import { ObstaclePanel } from './ObstaclePanel';
 import { ImportDialog } from './ImportDialog';
 import {
-  clearMounting, loadUserOverrides, mergeOverrideFiles, setMounting, toOverrideFile,
+  clearMounting, loadUserOverrides, mergeOverrideFiles, setFootprint, setMounting,
+  setRequires, toOverrideFile, toSetupFile,
   type UserOverrides,
 } from '../core/userOverrides';
 import { AlignPanel } from './AlignPanel';
@@ -65,6 +66,11 @@ export function App() {
 
   const baseCatalog = useMemo(
     () => applyOverrides(shippedCatalog, mergeOverrideFiles(overridesJson, userOverrides)),
+    [userOverrides],
+  );
+  /** How many parts the pushable setup covers — shipped decisions and local ones. */
+  const setupParts = useMemo(
+    () => Object.keys(mergeOverrideFiles(overridesJson, userOverrides).parts ?? {}).length,
     [userOverrides],
   );
   const catalog = useMemo(() => mergeCatalog(baseCatalog, userParts), [baseCatalog, userParts]);
@@ -238,14 +244,35 @@ export function App() {
     [],
   );
 
+  /**
+   * Both answers the inspector gives, saved together.
+   *
+   * The mounting says which way round the part goes and where it sits; the
+   * footprint says how much wall it takes. They are separate facts about the
+   * same part, written into the same entry — which is why `setMounting` and
+   * `setFootprint` merge rather than replace, or saving one would drop the
+   * other.
+   */
   const saveMounting = useCallback(
-    (partId: string, mounting: MountingOverride) => {
-      setUserOverrides((prev) => setMounting(prev, partId, mounting, 'mounting face picked by hand'));
+    (
+      partId: string,
+      mounting: MountingOverride,
+      footprint: readonly Hex[],
+      sockets: readonly Hex[],
+      requires: readonly InsertRequirement[],
+    ) => {
+      setUserOverrides((prev) => {
+        const withFace = setMounting(prev, partId, mounting, 'mounting picked by hand');
+        const withCells = setFootprint(
+          withFace, partId, footprint, sockets, 'mounting picked by hand',
+        );
+        return setRequires(withCells, partId, requires);
+      });
       forgetPartMesh(partId);
       // The catalogue preview draws the ORIENTED mesh, so it is now stale too.
       forgetThumbnail(partId);
       setInspecting(null);
-      say('Mounting face saved — Download overrides to keep it in the repo', 'ok');
+      say('Mounting saved — Download overrides to keep it in the repo', 'ok');
     },
     [say],
   );
@@ -261,19 +288,25 @@ export function App() {
     [say],
   );
 
+  /**
+   * The whole setup, for pushing: every part that carries a correction, shipped
+   * or made here, in the file's own shape. This is what goes over
+   * `src/catalog/overrides.json` and gets committed — the app and `tools/scan.py`
+   * both read that file, so a pushed setup reaches everyone and every rescan.
+   */
+  const downloadSetup = useCallback(() => {
+    download('overrides.json', toSetupFile(overridesJson, userOverrides), 'application/json');
+    say('Setup downloaded — replace src/catalog/overrides.json with it and commit', 'ok');
+  }, [userOverrides, say]);
+
+  /** ...and just what was decided in this browser, when a small diff is wanted. */
   const downloadOverrides = useCallback(() => {
     const text = toOverrideFile(userOverrides);
-    if (JSON.parse(text).parts && Object.keys(JSON.parse(text).parts).length === 0) {
-      say('No corrections to export yet', 'warn');
+    if (Object.keys(JSON.parse(text).parts ?? {}).length === 0) {
+      say('No corrections made in this browser yet', 'warn');
       return;
     }
-    const blob = new Blob([text], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'overrides.json';
-    a.click();
-    URL.revokeObjectURL(url);
+    download('overrides.mine.json', text, 'application/json');
   }, [userOverrides, say]);
 
   const cancelDrag = useCallback(() => {
@@ -658,13 +691,20 @@ export function App() {
           {/* Only once there is something to export. A browser cannot write into
               the repo, so this is how a hand-picked mounting face reaches
               `src/catalog/overrides.json` and, through it, the scanner. */}
+          <button
+            type="button"
+            onClick={downloadSetup}
+            title="Download the setup for every part — mounting, cells, sockets and fasteners — to replace src/catalog/overrides.json and commit"
+          >
+            Setup ({setupParts})
+          </button>
           {Object.keys(userOverrides.parts).length > 0 && (
             <button
               type="button"
               onClick={downloadOverrides}
-              title="Download the mounting corrections made here, to commit into src/catalog/overrides.json"
+              title="Download only what was corrected in this browser, as a small diff"
             >
-              Overrides ({Object.keys(userOverrides.parts).length})
+              Mine ({Object.keys(userOverrides.parts).length})
             </button>
           )}
           <label className="app__import" title="Add an STL model, or open a saved layout">
@@ -819,8 +859,10 @@ export function App() {
         return (
           <PartInspector
             part={part}
+            catalog={catalog}
             current={mountingOf(part)}
-            onSave={(m) => saveMounting(part.id, m)}
+            onSave={(m, footprint, sockets, requires) =>
+              saveMounting(part.id, m, footprint, sockets, requires)}
             onClear={() => dropMounting(part.id)}
             onClose={() => setInspecting(null)}
           />

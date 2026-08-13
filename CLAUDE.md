@@ -113,8 +113,10 @@ POINTY-top cell. That lives in one helper, `cellPrism` in `WallView3D.tsx`; do n
 mistake in the repo's history. Three separate copies of the inverse survived the frame turn because
 none of them named the function they duplicated: `cellAt` in `WallView3D` (every 3D hit test, drop
 included, landed several cells from the pointer), `visibleCells` in `WallCanvas` (an eighth of an
-empty wall had no grid drawn), and a private `hexRound3`. All three passed a 557-test suite. After
-any change to the frame, grep for `/ ROW_STEP` and `/ PITCH` outside `hex.ts` and read every hit.
+empty wall had no grid drawn), and a private `hexRound3`. All three passed a 557-test suite. A
+FOURTH turned up later in the footprint editor — `x = PITCH·(q + r/2)`, the *transpose* of
+`hexToMm`, so the cells you drew came out mirrored from the cells that landed (D42). After any
+change to the frame, grep for `/ ROW_STEP` and `/ PITCH` outside `hex.ts` and read every hit.
 
 **`meshLibrary` must NOT apply the 90° spin that `toAxial` applies.** `toAxial` spins a
 POINTY-drawn part's CELLS so its footprint lands on the flat-top lattice; applying the same turn to
@@ -135,6 +137,14 @@ wall needing about 80. Same class of error as the original 370.
 **Overlap is allowed.** The wall exists to mount things *on*, so accessories may share cells freely
 and silently — no warning, no issue. The only impossibility is two parts that plug *into* a cell
 (`type` `insert` or `fastener`) sharing one. See `isExclusive` in `src/core/store.ts`.
+
+**...except where a cell is a SOCKET, and that rule lives in two places that must agree** (D43).
+`insert-for-countersunk-hole-3` spans four cells and three of them are open 13.2 mm sockets
+(measured; the fourth takes the wall screw), so one thing may be installed into each — and the next
+one is refused. `store.checkPlacement` and `bom.validate` both consult `itemSocketCells`; teaching
+only the store made the app accept a drop that the parts list then called an error, within a minute.
+Occupancy for this rule is a SEPARATE index of what is *in* each hole: the cell→item map keeps one
+id per cell, so an accessory hung over an insert used to hide it and the cell took a second insert.
 
 **There are now two footprint detectors and they must agree.** `tools/footprint.py` uses trimesh
 and shapely; `src/core/detect.ts` uses a raster, because a browser has neither. `tests/detect.test.ts`
@@ -215,14 +225,65 @@ The UI is a thin shell.
 wall interface at all — so there is a human channel, and it is one channel with two front doors:
 
 - **`PartInspector`** (⌖ on any catalogue tile) — the part in 3D against a patch of wall. Pick a
-  face by clicking it or by one of six buttons; arrows spin it and move it in/out of the wall.
+  face by clicking it or by one of six buttons, then seat it: three slides and three turns, each
+  typeable, each also on the arrows (bare = spin and depth, `shift` = slide, `alt` = tilt). Below
+  that, the questions geometry cannot answer (D42/D43/D44): which CELLS the part takes and which of
+  them are SOCKETS — one click cycles empty → covered → socket — whether it sits on the wall face or
+  on the flanges of its inserts, and WHICH fastener holds it on, chosen from tiles with rendered
+  pictures because the names do not distinguish them.
+
+  **Its wall patch is a plate with HOLES, and the camera sits in the room.** A cell drawn as a solid
+  prism hides anything that goes into it — every insert vanished (D44) — and with the plate flush
+  against the mating face, looking AT that face means looking at the back of the wall.
+
+  **Its cell is the wall's cell: a 22.0 mouth 2.0 deep over a 20.0 throat**, built as the same two
+  layers `buildPanelGeometry` builds, from the same constants (D45). One straight bore at the mouth
+  read wider than the real thing, and the tool disagreeing with the wall about the size of the
+  honeycomb is the one comparison a person makes by eye.
+
+  **The stage is turned so UP THE WALL IS UP** — `fileToScene` in `mountingTransform.ts`, tested to
+  determinant +1 on all six faces. The part keeps its FILE coordinates inside that turn, which is
+  what lets the raycast still name a file axis.
 - **`AlignPanel`** ("Align" in the top bar) — every part at once, the catalogue's axis beside
   `detectPeg`'s, disagreements sorted to the top, one button to accept the confident ones.
 
-Both write the same `MountingOverride` (`wallFaceAxis`, `matingEnd`, `spinSteps`, `offsetMm`) into
-`userOverrides`, which `applyOverrides` folds into the catalogue. The face is fed to `detect()` as a
-**constraint**, never stapled onto its result, so the footprint and projection are re-derived from
-it — otherwise a part's cells are measured off one face and its mesh hung off another.
+Both write the same `MountingOverride` into `userOverrides`, which `applyOverrides` folds into the
+catalogue. The face is fed to `detect()` as a **constraint**, never stapled onto its result, so the
+footprint and projection are re-derived from it — otherwise a part's cells are measured off one face
+and its mesh hung off another.
+
+**Two exports, and they answer different questions** (D44). **Setup (n)** in the top bar is
+`toSetupFile` — every part carrying a decision, shipped or local, in `overrides.json`'s own shape
+with its preamble: that is the file you drop over `src/catalog/overrides.json` and push. **Mine (n)**
+is `toOverrideFile` — only what this browser changed, for a readable diff. Neither is a substitute
+for the other: a person who corrected four parts still needs the other forty-seven to travel.
+
+**Every field of a stored correction must be read back explicitly.** `readUserOverrides` re-validates
+what comes out of localStorage field by field — right, because a stored document is user input by
+then — so a field nobody reads is a correction that applies for one session and disappears on
+reload. That is exactly what happened to the chosen fastener (D44). It is exported and browser-free
+so each field is tested.
+
+**A hand-drawn footprint replaces the detected cells and clears `needsReview`; re-stating the same
+cells does neither** (D42). It is the same line `withFootprint` draws for an imported part: the flag
+means "this is a bounding box", and only an actual edit turns a bound into a decision. It never
+touches `requires` — cells are how much wall a part covers, pegs are what holds it up, and deriving
+one from the other is the seven-inserts-for-two-pegs bug.
+
+**`seat: 'insert'` stands a part off by the insert's flange** (`INSERT.flangeThickness`, 2.5 mm) —
+the datum a fastened part actually rests on, since the 22.5 mm flange cannot enter the 22.0 mm mouth.
+Stored as a datum, not as 2.5 typed into the depth, so it stays true if the flange is re-measured
+and reads as a reason rather than a nudge. Default `wall`: making `insert` the default would move
+every part in every saved layout.
+
+**The six seating numbers are ONE transform, and it lives in `src/ui/mountingTransform.ts`** (D41).
+`wallFaceAxis`/`matingEnd` choose the face; `offsetXMm`/`offsetYMm`/`offsetMm` slide the part across
+the wall, up it and out of it; `spinSteps` (30° lattice steps) + `spinDeg`, `tiltXDeg` and
+`tiltYDeg` turn it. Order: spin, tilt X, tilt Y, translate — rotation first, pivoting on the MATING
+FACE. `meshLibrary` bakes that matrix into the wall's geometry and `PartInspector` conjugates the
+same matrix into the file's frame to preview it; do not reimplement it in either place, or a part
+lines up in the dialog and sits somewhere else on the wall. None of the six touch the detection: a
+seating correction says where the mesh sits, not which cells it covers.
 
 Picking a face does NOT clear `needsReview`. Knowing the face removes the detector's main ambiguity;
 a tier-3 part's CELLS are still the bound PARKED P1 describes.

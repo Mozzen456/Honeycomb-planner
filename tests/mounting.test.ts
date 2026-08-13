@@ -14,15 +14,22 @@ import { describe, expect, it } from 'vitest';
 
 import catalogJson from '../src/catalog/catalog.json';
 import { detect } from '../src/core/detect';
-import { applyOverrides, mountingOf, readMounting } from '../src/core/overrides';
+import { hexKey } from '../src/core/hex';
 import {
-  clearMounting, mergeOverrideFiles, setMounting, toOverrideFile, type UserOverrides,
+  applyOverrides, mountingOf, readFootprint, readMounting,
+} from '../src/core/overrides';
+import { partCells } from '../src/core/store';
+import {
+  clearMounting, mergeOverrideFiles, readUserOverrides, setFootprint, setMounting,
+  setRequires, toOverrideFile, toSetupFile, type UserOverrides,
 } from '../src/core/userOverrides';
 import type { Catalog } from '../src/core/types';
 import { loadModel } from './stl.test';
 
 const catalog = catalogJson as unknown as Catalog;
 const none = (): UserOverrides => ({ parts: {} });
+/** What comes back out of storage — the same JSON round trip the browser does. */
+const loadFrom = (json: string): UserOverrides => readUserOverrides(JSON.parse(json));
 
 describe('reading a mounting correction', () => {
   it('accepts a complete one', () => {
@@ -62,6 +69,53 @@ describe('reading a mounting correction', () => {
       .toBeUndefined();
     expect(readMounting({ wallFaceAxis: 'z', matingEnd: 'low', offsetMm: NaN })?.offsetMm)
       .toBeUndefined();
+  });
+
+  /*
+   * The other four. Naming a face fixes two degrees of freedom and the spin and
+   * the depth fix one and a half more; a part drawn a few degrees off, or whose
+   * peg is not centred in its own bounding box, needs the rest — so a correction
+   * is a full rigid transform, and every one of its numbers reads back the same
+   * way as the depth already did.
+   */
+  it('keeps the other four, to a tenth, rounded away from zero', () => {
+    const m = readMounting({
+      wallFaceAxis: 'z', matingEnd: 'low',
+      offsetXMm: 3.25, offsetYMm: -3.25, tiltXDeg: 7.5, tiltYDeg: -0.44, spinDeg: 4,
+    });
+    expect(m).toEqual({
+      wallFaceAxis: 'z', matingEnd: 'low',
+      offsetXMm: 3.3, offsetYMm: -3.3, tiltXDeg: 7.5, tiltYDeg: -0.4, spinDeg: 4,
+    });
+  });
+
+  it('clamps a slide like a depth and a tilt to a half turn', () => {
+    const m = readMounting({
+      wallFaceAxis: 'z', matingEnd: 'low',
+      offsetXMm: 400, offsetYMm: -400, tiltXDeg: 900, tiltYDeg: -900,
+    });
+    expect(m?.offsetXMm).toBe(40);
+    expect(m?.offsetYMm).toBe(-40);
+    expect(m?.tiltXDeg).toBe(180);
+    expect(m?.tiltYDeg).toBe(-180);
+  });
+
+  /**
+   * A correction written before a part could be slid sideways carries four
+   * fewer fields, and it must read back as ITSELF — absent, not zeroed. An
+   * absent field and a zero mean the same thing to every consumer, and writing
+   * the zeroes in would put six of them per part into `overrides.json`.
+   */
+  it('leaves the new fields absent rather than zeroing them', () => {
+    expect(readMounting({ wallFaceAxis: 'y', matingEnd: 'high', spinSteps: 2, offsetMm: 1.5 }))
+      .toEqual({ wallFaceAxis: 'y', matingEnd: 'high', spinSteps: 2, offsetMm: 1.5 });
+  });
+
+  /** `−0` compares equal to 0 and fails `Object.is`, which is what a dirty check uses. */
+  it('never reads back a negative zero', () => {
+    const m = readMounting({ wallFaceAxis: 'z', matingEnd: 'low', offsetXMm: -0.01, tiltXDeg: -0 });
+    expect(Object.is(m?.offsetXMm, 0)).toBe(true);
+    expect(Object.is(m?.tiltXDeg, 0)).toBe(true);
   });
 
   /** Half-applying one would orient a part off a face nobody chose. */
@@ -109,6 +163,100 @@ describe('forcing the wall face through detect', () => {
   });
 });
 
+/**
+ * The cells a person draws.
+ *
+ * `detect()` gives every part a footprint, but for one with no wall interface it
+ * is the bounding box laid over the lattice — the bound PARKED P1 describes. Two
+ * rules make replacing it safe: the anchor is always a member (or `partCells`
+ * has no cell to drag by), and only an actual EDIT clears `needsReview`.
+ */
+describe('reading a hand-drawn footprint', () => {
+  it('keeps the anchor, whatever the file says', () => {
+    expect(readFootprint([{ q: 1, r: 0 }])).toEqual([{ q: 0, r: 0 }, { q: 1, r: 0 }]);
+    expect(readFootprint([])).toEqual([{ q: 0, r: 0 }]);
+  });
+
+  it('deduplicates, so a repeat cannot inflate a cell count', () => {
+    expect(readFootprint([{ q: 1, r: 0 }, { q: 1, r: 0 }, { q: 0, r: 0 }]))
+      .toEqual([{ q: 0, r: 0 }, { q: 1, r: 0 }]);
+  });
+
+  it('drops entries that are not cells', () => {
+    expect(readFootprint([{ q: 'a', r: 0 }, null, { q: 2, r: NaN }, { q: 1, r: 1 }]))
+      .toEqual([{ q: 0, r: 0 }, { q: 1, r: 1 }]);
+    expect(readFootprint('everywhere')).toBeUndefined();
+  });
+
+  it('refuses a cell on the other side of the wall', () => {
+    expect(readFootprint([{ q: 900, r: 0 }, { q: 1, r: 0 }]))
+      .toEqual([{ q: 0, r: 0 }, { q: 1, r: 0 }]);
+  });
+});
+
+describe('applying a hand-drawn footprint to the catalogue', () => {
+  const id = 'shelf-1';
+  const cells = [{ q: 0, r: 0 }, { q: 1, r: 0 }];
+
+  it('replaces the cells and re-anchors on the origin', () => {
+    const applied = applyOverrides(catalog, { parts: { [id]: { footprint: cells } } });
+    const part = applied.parts.find((p) => p.id === id)!;
+    expect(part.footprint).toEqual(cells);
+    expect(part.anchor).toEqual({ q: 0, r: 0 });
+  });
+
+  /**
+   * The rule `withFootprint` already keeps for an imported part: drawing the
+   * cells is a measurement by hand, so the bound is gone. Anything else would
+   * leave the parts list saying "this is a guess" about a decision.
+   */
+  it('clears needsReview, because drawing the cells IS the review', () => {
+    const flagged = catalog.parts.find(
+      (p) => (p as unknown as { needsReview?: boolean }).needsReview === true,
+    )!;
+    const applied = applyOverrides(catalog, {
+      parts: { [flagged.id]: { footprint: [{ q: 0, r: 0 }, { q: 3, r: -1 }] } },
+    });
+    const part = applied.parts.find((p) => p.id === flagged.id)!;
+    expect((part as unknown as { needsReview?: boolean }).needsReview).toBe(false);
+    expect(part.provenance.notes.join(' ')).toMatch(/footprint set by hand to 2 cell/);
+  });
+
+  /** Re-stating the same cells is not an edit, and must not promote the bound. */
+  it('leaves needsReview alone when the cells come back unchanged', () => {
+    const flagged = catalog.parts.find(
+      (p) => (p as unknown as { needsReview?: boolean }).needsReview === true,
+    )!;
+    const applied = applyOverrides(catalog, {
+      parts: { [flagged.id]: { footprint: [...flagged.footprint].reverse() } },
+    });
+    const part = applied.parts.find((p) => p.id === flagged.id)!;
+    expect((part as unknown as { needsReview?: boolean }).needsReview).toBe(true);
+    expect(part.provenance.notes.join(' ')).not.toMatch(/set by hand/);
+  });
+
+  /**
+   * Cells are how much wall a part covers; pegs are what holds it up. Deriving
+   * one from the other is what had a 7-cell shelf with two pegs ordering seven
+   * inserts (HSW-SPEC §5).
+   */
+  it('does not touch what the part requires', () => {
+    const before = catalog.parts.find((p) => p.id === id)!;
+    const applied = applyOverrides(catalog, {
+      parts: { [id]: { footprint: [{ q: 0, r: 0 }, { q: 1, r: 0 }, { q: 2, r: 0 }] } },
+    });
+    expect(applied.parts.find((p) => p.id === id)!.requires).toEqual(before.requires);
+  });
+
+  /** What the editor draws is what a drop covers. */
+  it('is the footprint the store then places', () => {
+    const applied = applyOverrides(catalog, { parts: { [id]: { footprint: cells } } });
+    const part = applied.parts.find((p) => p.id === id)!;
+    const covered = partCells(part, { q: 4, r: 2 }, 0).map(hexKey).sort();
+    expect(covered).toEqual(['4,2', '5,2'].sort());
+  });
+});
+
 describe('applying a mounting correction to the catalogue', () => {
   it('lands on the part, where meshLibrary and the inspector both read it', () => {
     const file = { parts: { 'shelf-1': { mounting: { wallFaceAxis: 'x', matingEnd: 'high' } } } };
@@ -145,6 +293,95 @@ describe('local corrections and the file they become', () => {
     expect(merged.parts?.['shelf-1']?.mounting?.wallFaceAxis).toBe('y');
   });
 
+  /**
+   * The mounting and the footprint are two answers about one part, and the
+   * inspector saves both. Writing the entry rather than merging into it meant
+   * the second call silently discarded the first — you would draw the cells,
+   * save, and find the mounting face gone.
+   */
+  it('keeps the mounting when the footprint is saved, and the other way round', () => {
+    const withFace = setMounting(none(), 'shelf-1', { wallFaceAxis: 'y', matingEnd: 'low' });
+    const both = setFootprint(withFace, 'shelf-1', [{ q: 0, r: 0 }, { q: 1, r: 0 }]);
+    expect(both.parts['shelf-1']?.mounting?.wallFaceAxis).toBe('y');
+    expect(both.parts['shelf-1']?.footprint).toHaveLength(2);
+
+    const reseated = setMounting(both, 'shelf-1', { wallFaceAxis: 'x', matingEnd: 'high' });
+    expect(reseated.parts['shelf-1']?.footprint).toHaveLength(2);
+    expect(reseated.parts['shelf-1']?.mounting?.wallFaceAxis).toBe('x');
+  });
+
+  /**
+   * Which fastener a part hangs on is the third answer the inspector gives, and
+   * it has to come BACK. It applied for one session and vanished on reload,
+   * because `loadUserOverrides` re-validates every field it reads and simply did
+   * not read this one — a correction that does not survive a reload is not saved.
+   */
+  it('round-trips the chosen fastener through the browser store', () => {
+    const chosen = [{ partId: 'insert-with-m3', count: 2 }];
+    const set = setRequires(none(), 'shelf-1', chosen);
+    expect(set.parts['shelf-1']?.requires).toEqual(chosen);
+
+    const reread = loadFrom(JSON.stringify(set));
+    expect(reread.parts['shelf-1']?.requires).toEqual(chosen);
+  });
+
+  /** "It needs nothing" is an answer, and it must not read back as "no answer". */
+  it('keeps an empty fastener list, which means the part needs none', () => {
+    const set = setRequires(none(), 'shelf-1', []);
+    expect(loadFrom(JSON.stringify(set)).parts['shelf-1']?.requires).toEqual([]);
+    const applied = applyOverrides(catalog, { parts: { 'shelf-1': { requires: [] } } });
+    expect(applied.parts.find((p) => p.id === 'shelf-1')!.requires).toEqual([]);
+  });
+
+  it('keeps the mounting and the cells when the fastener is chosen', () => {
+    let user = setMounting(none(), 'shelf-1', { wallFaceAxis: 'y', matingEnd: 'low' });
+    user = setFootprint(user, 'shelf-1', [{ q: 0, r: 0 }, { q: 1, r: 0 }], [{ q: 1, r: 0 }]);
+    user = setRequires(user, 'shelf-1', [{ partId: 'insert-empty', count: 3 }]);
+    expect(user.parts['shelf-1']?.mounting?.wallFaceAxis).toBe('y');
+    expect(user.parts['shelf-1']?.footprint).toHaveLength(2);
+    expect(user.parts['shelf-1']?.socketCells).toHaveLength(1);
+    expect(user.parts['shelf-1']?.requires?.[0]?.count).toBe(3);
+  });
+
+  /**
+   * The pushable file: every part that carries a decision, shipped or local.
+   *
+   * The narrow export answers "what did I change"; this answers "what is this
+   * project's setup", which is the thing that gets committed. A person who has
+   * corrected four parts here still needs the other forty-seven to travel.
+   */
+  it('exports the whole setup, shipped decisions included', () => {
+    const shipped = {
+      _why: 'because',
+      parts: {
+        box: { fastenersNeedReview: true },
+        'shelf-1': { requires: [{ partId: 'insert-empty', count: 2 }] },
+      },
+    };
+    const user = setRequires(none(), 'shelf-1', [{ partId: 'insert-with-m3', count: 3 }]);
+    const file = JSON.parse(toSetupFile(shipped, user));
+
+    // The local decision wins where they disagree...
+    expect(file.parts['shelf-1'].requires).toEqual([{ partId: 'insert-with-m3', count: 3 }]);
+    // ...every untouched part still travels...
+    expect(file.parts['box']).toEqual({ fastenersNeedReview: true });
+    // ...and the preamble that explains the file survives.
+    expect(file._why).toBe('because');
+  });
+
+  /** Applying what was exported has to reproduce what was on screen. */
+  it('round-trips the whole setup through applyOverrides', () => {
+    const user = setRequires(
+      setMounting(none(), 'shelf-1', { wallFaceAxis: 'x', matingEnd: 'high' }),
+      'shelf-1',
+      [{ partId: 'insert-m4', count: 4 }],
+    );
+    const applied = applyOverrides(catalog, JSON.parse(toSetupFile({ parts: {} }, user)));
+    const part = applied.parts.find((p) => p.id === 'shelf-1')!;
+    expect(mountingOf(part)).toEqual({ wallFaceAxis: 'x', matingEnd: 'high' });
+    expect(part.requires).toEqual([{ partId: 'insert-m4', count: 4 }]);
+  });
+
   it('keeps shipped corrections for parts nobody touched locally', () => {
     const shipped = { parts: { box: { fastenersNeedReview: true } } };
     const merged = mergeOverrideFiles(shipped, setMounting(none(), 'shelf-1', {
@@ -161,13 +398,25 @@ describe('local corrections and the file they become', () => {
     });
   });
 
-  /** What is exported must be what `applyOverrides` reads back. */
+  /** What is exported must be what `applyOverrides` reads back — all six of it. */
   it('exports in the shape the app and the scanner already consume', () => {
-    const user = setMounting(none(), 'shelf-1', {
-      wallFaceAxis: 'x', matingEnd: 'high', spinSteps: 2, offsetMm: 1.5,
-    });
+    const seated = {
+      wallFaceAxis: 'x' as const, matingEnd: 'high' as const,
+      spinSteps: 2, spinDeg: 7.5, tiltXDeg: -3.2, tiltYDeg: 0.5,
+      offsetMm: 1.5, offsetXMm: -2.4, offsetYMm: 11.1,
+    };
+    const user = setMounting(none(), 'shelf-1', seated);
     const applied = applyOverrides(catalog, JSON.parse(toOverrideFile(user)));
-    expect(mountingOf(applied.parts.find((p) => p.id === 'shelf-1')!))
-      .toEqual({ wallFaceAxis: 'x', matingEnd: 'high', spinSteps: 2, offsetMm: 1.5 });
+    expect(mountingOf(applied.parts.find((p) => p.id === 'shelf-1')!)).toEqual(seated);
+  });
+
+  /** The same six have to survive the localStorage round trip, which re-reads them. */
+  it('round-trips all six through the browser store', () => {
+    const seated = {
+      wallFaceAxis: 'y' as const, matingEnd: 'low' as const,
+      spinSteps: 5, spinDeg: 12.4, tiltXDeg: 90, tiltYDeg: -45,
+      offsetMm: -6.5, offsetXMm: 8, offsetYMm: -8,
+    };
+    expect(readMounting(JSON.parse(JSON.stringify(seated)))).toEqual(seated);
   });
 });

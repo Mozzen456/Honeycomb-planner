@@ -14,10 +14,11 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { BEDS, PITCH, ROW_STEP } from '../core/constants';
+import { BEDS } from '../core/constants';
 import { hexKey } from '../core/hex';
 import { bedsThatFit, withFootprint, type ImportedPart, type ImportProposal } from '../core/importPart';
 import type { Catalog, Hex, PartType } from '../core/types';
+import { FootprintEditor } from './FootprintEditor';
 import './ImportDialog.css';
 
 export interface ImportDialogProps {
@@ -215,91 +216,5 @@ export function ImportDialog({ proposal, catalog, onCancel, onConfirm }: ImportD
         </footer>
       </div>
     </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-
-const RADIUS = 4;
-
-/**
- * A patch of wall you can click cells on.
- *
- * Drawn from the same `hexToMm` geometry the wall itself uses, so the shape you
- * draw here is the shape that lands — the editor cannot develop its own idea of
- * where a cell is.
- */
-function FootprintEditor({
-  cells, onToggle,
-}: {
-  cells: readonly Hex[];
-  onToggle: (cell: Hex) => void;
-}) {
-  const chosen = new Set(cells.map(hexKey));
-  // Always show a couple of rings beyond whatever is selected, so there is
-  // somewhere to grow into.
-  const reach = cells.reduce(
-    (max, c) => Math.max(max, Math.abs(c.q), Math.abs(c.r), Math.abs(c.q + c.r)),
-    1,
-  ) + 2;
-
-  const grid: Hex[] = [];
-  for (let r = -reach; r <= reach; r++) {
-    for (let q = -reach - 1; q <= reach + 1; q++) {
-      if (Math.abs(q + r / 2) > reach + 1) continue;
-      grid.push({ q, r });
-    }
-  }
-
-  const pts = grid.map((c) => ({ cell: c, x: PITCH * (c.q + c.r / 2), y: ROW_STEP * c.r }));
-  const minX = Math.min(...pts.map((p) => p.x)) - PITCH;
-  const maxX = Math.max(...pts.map((p) => p.x)) + PITCH;
-  const minY = Math.min(...pts.map((p) => p.y)) - PITCH;
-  const maxY = Math.max(...pts.map((p) => p.y)) + PITCH;
-
-  const hexPath = (cx: number, cy: number): string => {
-    const R = PITCH / Math.sqrt(3) - 0.6;
-    const points: string[] = [];
-    for (let k = 0; k < 6; k++) {
-      const a = ((60 * k - 90) * Math.PI) / 180;
-      points.push(`${(cx + R * Math.cos(a)).toFixed(2)},${(cy + R * Math.sin(a)).toFixed(2)}`);
-    }
-    return points.join(' ');
-  };
-
-  return (
-    <svg
-      className="footprint"
-      viewBox={`${minX} ${minY} ${maxX - minX} ${maxY - minY}`}
-      role="group"
-      aria-label="Footprint editor"
-    >
-      {pts.map(({ cell, x, y }) => {
-        const key = hexKey(cell);
-        const on = chosen.has(key);
-        const origin = cell.q === 0 && cell.r === 0;
-        return (
-          <polygon
-            key={key}
-            points={hexPath(x, y)}
-            className={`footprint__cell${on ? ' footprint__cell--on' : ''}${
-              origin ? ' footprint__cell--anchor' : ''
-            }`}
-            rx={RADIUS}
-            onClick={() => onToggle(cell)}
-            role="checkbox"
-            aria-checked={on}
-            aria-label={`cell ${cell.q}, ${cell.r}`}
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                onToggle(cell);
-              }
-            }}
-          />
-        );
-      })}
-    </svg>
   );
 }

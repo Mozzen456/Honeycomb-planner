@@ -21,7 +21,11 @@
  * would mean a correction disappearing when a part was removed.
  */
 
-import { readMounting, type MountingOverride, type OverrideFile, type PartOverride } from './overrides';
+import {
+  readFootprint, readMounting, readRequires, readSockets,
+  type MountingOverride, type OverrideFile, type PartOverride,
+} from './overrides';
+import type { Hex, InsertRequirement } from './types';
 
 const KEY = 'hsw.overrides.v1';
 
@@ -45,14 +49,24 @@ function storage(): Storage | null {
 export function loadUserOverrides(): UserOverrides {
   const store = storage();
   if (store === null) return empty();
-  let raw: unknown;
   try {
     const text = store.getItem(KEY);
     if (text === null) return empty();
-    raw = JSON.parse(text);
+    return readUserOverrides(JSON.parse(text));
   } catch {
     return empty();
   }
+}
+
+/**
+ * A stored document, re-validated field by field.
+ *
+ * Split from `loadUserOverrides` so it can be tested without a browser, which
+ * is where the rule that matters lives: every field is read back explicitly, and
+ * one that nobody reads is a correction that applies for a session and vanishes
+ * on reload. That is precisely what happened to the chosen fastener.
+ */
+export function readUserOverrides(raw: unknown): UserOverrides {
   if (typeof raw !== 'object' || raw === null) return empty();
   const parts = (raw as Record<string, unknown>)['parts'];
   if (typeof parts !== 'object' || parts === null) return empty();
@@ -64,9 +78,21 @@ export function loadUserOverrides(): UserOverrides {
   for (const [id, value] of Object.entries(parts as Record<string, unknown>)) {
     if (typeof value !== 'object' || value === null) continue;
     const mounting = readMounting((value as Record<string, unknown>)['mounting']);
+    const footprint = readFootprint((value as Record<string, unknown>)['footprint']);
+    // Validated against the footprint stored alongside it — a socket in a cell
+    // the part does not cover is a hole in solid material.
+    const sockets = readSockets(
+      (value as Record<string, unknown>)['socketCells'], footprint ?? [],
+    );
+    // Read back too, or a fastener chosen by hand would apply for one session
+    // and vanish on reload — which is exactly what "saved" must not mean.
+    const requires = readRequires((value as Record<string, unknown>)['requires']);
     const note = (value as Record<string, unknown>)['_note'];
     const entry: PartOverride = {};
     if (mounting !== undefined) entry.mounting = mounting;
+    if (footprint !== undefined) entry.footprint = footprint;
+    if (sockets !== undefined && sockets.length > 0) entry.socketCells = sockets;
+    if (requires !== undefined) entry.requires = requires;
     if (typeof note === 'string' && note.length > 0) entry._note = note;
     if (Object.keys(entry).length > 0) out[id] = entry;
   }
@@ -83,14 +109,71 @@ function save(value: UserOverrides): void {
   }
 }
 
-/** Record which face of `partId` mounts against the wall. Returns the new set. */
+/**
+ * Record which face of `partId` mounts against the wall, and where it sits.
+ *
+ * MERGED onto whatever is already recorded for that part, not written over it.
+ * The mounting and the footprint are two different answers about the same part
+ * — "which way round" and "how much wall" — and replacing the entry meant
+ * saving one silently discarded the other.
+ */
 export function setMounting(
   current: UserOverrides,
   partId: string,
   mounting: MountingOverride,
   note?: string,
 ): UserOverrides {
-  const entry: PartOverride = { mounting };
+  const entry: PartOverride = { ...current.parts[partId], mounting };
+  if (note !== undefined && note.length > 0) entry._note = note;
+  const next: UserOverrides = { parts: { ...current.parts, [partId]: entry } };
+  save(next);
+  return next;
+}
+
+/**
+ * Record the cells `partId` covers, and which of them are sockets. Merged, for
+ * the same reason.
+ *
+ * The two travel together because a socket is a property OF a cell: saving the
+ * footprint without the sockets would leave holes marked in cells the part no
+ * longer covers, which `readSockets` would then quietly drop.
+ */
+export function setFootprint(
+  current: UserOverrides,
+  partId: string,
+  footprint: readonly Hex[],
+  sockets: readonly Hex[] = [],
+  note?: string,
+): UserOverrides {
+  const entry: PartOverride = {
+    ...current.parts[partId],
+    footprint: footprint.map((c) => ({ q: c.q, r: c.r })),
+    socketCells: sockets.map((c) => ({ q: c.q, r: c.r })),
+  };
+  if (note !== undefined && note.length > 0) entry._note = note;
+  const next: UserOverrides = { parts: { ...current.parts, [partId]: entry } };
+  save(next);
+  return next;
+}
+
+/**
+ * Record which fastener holds `partId` on, and how many. Merged, like the rest.
+ *
+ * An empty list is a real answer — "this part needs no insert of its own" — and
+ * is stored as such rather than deleted, because `applyOverrides` reads an empty
+ * array as "replace the catalogue's guess with nothing". Deleting the key would
+ * silently restore the guess.
+ */
+export function setRequires(
+  current: UserOverrides,
+  partId: string,
+  requires: readonly InsertRequirement[],
+  note?: string,
+): UserOverrides {
+  const entry: PartOverride = {
+    ...current.parts[partId],
+    requires: requires.map((r) => ({ partId: r.partId, count: Math.max(0, Math.round(r.count)) })),
+  };
   if (note !== undefined && note.length > 0) entry._note = note;
   const next: UserOverrides = { parts: { ...current.parts, [partId]: entry } };
   save(next);
@@ -138,6 +221,35 @@ export function toOverrideFile(user: UserOverrides): string {
   const parts: Record<string, PartOverride> = {};
   for (const id of Object.keys(user.parts).sort()) parts[id] = user.parts[id]!;
   return `${JSON.stringify({ parts }, null, 1)}\n`;
+}
+
+/**
+ * The WHOLE setup: every part that carries a correction, shipped or local, as
+ * one file to drop over `src/catalog/overrides.json` and commit.
+ *
+ * The narrow export above answers "what did I change"; this one answers "what
+ * should this project's setup be", which is the thing you push. Both are needed
+ * and they are not the same file: a person who has corrected four parts in this
+ * browser still wants the other forty-seven decisions to travel with them.
+ *
+ * Written to diff cleanly against the file it replaces. Parts are sorted by id
+ * and an untouched entry is the shipped object itself, so it serialises byte for
+ * byte as it already reads; the preamble (`_why`, `_rule`, `_applied_by`,
+ * `_regenerate`) is carried through in place, because it is the explanation of
+ * why the file exists and dropping it would leave the next reader guessing.
+ */
+export function toSetupFile(shipped: unknown, user: UserOverrides): string {
+  const merged = mergeOverrideFiles(shipped, user).parts ?? {};
+  const parts: Record<string, PartOverride> = {};
+  for (const id of Object.keys(merged).sort()) parts[id] = merged[id]!;
+
+  const preamble: Record<string, unknown> = {};
+  if (typeof shipped === 'object' && shipped !== null) {
+    for (const [key, value] of Object.entries(shipped as Record<string, unknown>)) {
+      if (key !== 'parts') preamble[key] = value;
+    }
+  }
+  return `${JSON.stringify({ ...preamble, parts }, null, 1)}\n`;
 }
 
 export const OVERRIDES_STORAGE_KEY = KEY;

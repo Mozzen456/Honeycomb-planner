@@ -36,7 +36,7 @@
 
 import { customPanelGroups, isCustomPanel } from './customiser';
 import { fixingsFor, JUNCTION_FIXING_ID } from './fixings';
-import { fastenersNeedReview } from './overrides';
+import { fastenersNeedReview, socketsOf } from './overrides';
 import { hexKey, hexSub, keyToHex, placedPanelCells, placeFootprint } from './hex';
 import { crossesSeam } from './tiling';
 import type {
@@ -230,6 +230,29 @@ export function itemCells(item: PlacedItem, catalog: Catalog): Hex[] {
   return dedupeCells(placeFootprint(local, item.at ?? ORIGIN, item.rotation));
 }
 
+/**
+ * The cells of a placed item that something can be installed INTO — its
+ * mounting positions, on the wall rather than in the part's own frame.
+ *
+ * Exactly `itemCells`'s transform applied to a different list, and deliberately
+ * written as the same three steps: the anchor shift, the placement, the dedupe.
+ * A socket that landed one cell from the part it belongs to would let an insert
+ * be installed into solid material, and the two lists disagreeing is precisely
+ * how `partCells` and `itemCells` once came apart.
+ */
+export function itemSocketCells(item: PlacedItem, catalog: Catalog): Hex[] {
+  const part = partIndex(catalog).get(item.partId);
+  if (part === undefined) return [];
+  const sockets = socketsOf(part);
+  if (sockets.length === 0) return [];
+
+  const anchor = part.anchor ?? ORIGIN;
+  const local =
+    anchor.q === 0 && anchor.r === 0 ? sockets : sockets.map((c) => hexSub(c, anchor));
+
+  return dedupeCells(placeFootprint(local, item.at ?? ORIGIN, item.rotation));
+}
+
 /** The cells a placed panel covers. The document's own columns/rows are authoritative. */
 function panelCellsOf(panel: PlacedPanel): Hex[] {
   return placedPanelCells({
@@ -369,11 +392,31 @@ export function validate(doc: LayoutDoc, catalog: Catalog): Issue[] {
     return p !== undefined && (p.type === 'insert' || p.type === 'fastener');
   };
 
+  /**
+   * Cells one item OFFERS to another: its sockets, on the wall.
+   *
+   * The store lets a part be installed into one of these, so the validator has
+   * to know about them too — otherwise the app accepts a drop and the parts list
+   * immediately calls it an error, which is the exact split `partCells` and
+   * `itemCells` were unified to prevent. It surfaced within a minute of the
+   * store learning the rule: a junction insert, an insert dropped into one of
+   * its three sockets, and a red panel saying only one part can occupy a cell.
+   */
+  const socketsById = new Map(items.map((i) => [i.id, itemSocketCells(i, catalog).map(hexKey)]));
+  const hosts = (itemId: string, cells: readonly Hex[]): boolean => {
+    const offered = socketsById.get(itemId);
+    if (offered === undefined || offered.length === 0) return false;
+    return cells.every((c) => offered.includes(hexKey(c)));
+  };
+
   for (const clash of collisions(occupancyOf(itemFootprints))) {
     // Only the impossible case is reported. Two accessories sharing cells is
     // ordinary — they bolt on at different depths — and reporting it would put
     // a warning on the parts list for a layout that is perfectly fine.
     if (!plugsIn(clash.a) || !plugsIn(clash.b)) continue;
+    // ...and neither is one thing installed INTO another's socket, which is a
+    // mounting position doing its job.
+    if (hosts(clash.a, clash.cells) || hosts(clash.b, clash.cells)) continue;
     const n = clash.cells.length;
     issues.push({
       level: 'error',

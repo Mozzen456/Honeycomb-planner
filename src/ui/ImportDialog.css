@@ -128,36 +128,6 @@
   border-block-start: var(--border-width-hair) solid var(--border-subtle);
 }
 
-/* ---------- the footprint editor ---------- */
-
-.footprint {
-  inline-size: 100%;
-  max-block-size: 20rem;
-  background: var(--canvas-wall);
-  border: var(--border-width-hair) solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-}
-
-.footprint__cell {
-  fill: var(--canvas-panel-tint);
-  stroke: var(--canvas-wall);
-  stroke-width: 1.2;
-  cursor: pointer;
-  transition: fill var(--duration-fast) var(--ease-standard);
-}
-
-.footprint__cell:hover { fill: var(--accent-bg); }
-
-.footprint__cell--on { fill: var(--accent); }
-
-/* The anchor is the cell that sits under the cursor while dragging, so it is
-   worth being able to see which one it is. */
-.footprint__cell--anchor { stroke: var(--accent); stroke-width: 2; }
-
-.footprint__cell:focus-visible {
-  outline: var(--focus-ring-width) solid var(--focus-ring-color);
-}
-
 @media (max-width: 52rem) {
   .import__body { grid-template-columns: minmax(0, 1fr); }
 }
