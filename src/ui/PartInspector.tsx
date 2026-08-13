@@ -193,19 +193,56 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
   const [view, setView] = useState<{ axis: Axis; end: End }>({ axis: 'y', end: 'low' });
   const [zoom, setZoom] = useState(1);
 
+  /*
+   * The camera orbit, in the scene's OWN frame.
+   *
+   * This used `THREE.Spherical`, and that was the bug behind "up and down is
+   * side to side, and I cannot rotate 360". `Spherical` is defined with **Y**
+   * as the pole; this scene is **Z-up**, because the wall's normal is +Z and the
+   * part is shown in wall coordinates. Reading a Z-up camera position into a
+   * Y-up spherical and writing it back turned a vertical drag into a rotation
+   * about the wrong pole — it came out sideways — and `phi`, clamped to keep it
+   * off the Y poles, blocked the drag before it had gone anywhere.
+   *
+   * So the angles are held here, in the frame the scene actually uses, and the
+   * position is built from them rather than round-tripped through a library
+   * convention that does not match:
+   *
+   *     x = d·cos(el)·cos(az)   y = d·cos(el)·sin(az)   z = d·sin(el)
+   *
+   * Azimuth is unbounded, so it wraps and turns all the way round for as long
+   * as you keep dragging. Elevation stops just short of ±90°, because at the
+   * pole the view direction and the up vector are parallel and the camera's
+   * roll is undefined — that is the flip, not a limit anyone wants.
+   */
+  const orbit = useRef({ az: -Math.PI / 2, el: 0.45, dist: 120 });
+
+  const applyCamera = useCallback(() => {
+    const s = scene.current;
+    if (s === null) return;
+    const { az, el, dist } = orbit.current;
+    const ce = Math.cos(el);
+    s.camera.position.set(dist * ce * Math.cos(az), dist * ce * Math.sin(az), dist * Math.sin(el));
+    s.camera.up.set(0, 0, 1);
+    s.camera.lookAt(0, 0, 0);
+  }, []);
+
   useEffect(() => {
     const s = scene.current;
     if (s === null || s.part === null) return;
-    const dist = s.size * 2.4 * zoom;
     const sign = view.end === 'high' ? 1 : -1;
+    // Slightly off-axis: exactly along an axis a part collapses to a flat
+    // outline and you cannot tell which end you are looking at.
     const v = new THREE.Vector3();
     if (view.axis === 'x') v.set(sign, -0.35, 0.3);
     else if (view.axis === 'y') v.set(0.35, sign, 0.3);
     else v.set(0.35, -0.35, sign);
-    s.camera.position.copy(v.normalize().multiplyScalar(dist));
-    s.camera.up.set(0, 0, 1);
-    s.camera.lookAt(0, 0, 0);
-  }, [view, zoom, status]);
+    v.normalize();
+    orbit.current.az = Math.atan2(v.y, v.x);
+    orbit.current.el = Math.asin(v.z);
+    orbit.current.dist = s.size * 2.4 * zoom;
+    applyCamera();
+  }, [view, zoom, status, applyCamera]);
 
   // --- the wall plate, against the chosen face ------------------------------
 
@@ -290,15 +327,10 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
     d.x = event.clientX;
     d.y = event.clientY;
 
-    const offset = s.camera.position.clone();
-    const spherical = new THREE.Spherical().setFromVector3(offset);
-    spherical.theta -= dx * 0.01;
-    // Clamped off the poles: at exactly 0 or π the up vector and the view
-    // direction are parallel and the camera's orientation is undefined, which
-    // shows up as the model flipping over.
-    spherical.phi = Math.min(Math.PI - 0.05, Math.max(0.05, spherical.phi - dy * 0.01));
-    s.camera.position.setFromSpherical(spherical);
-    s.camera.lookAt(0, 0, 0);
+    // Drag right turns the model right; drag down brings its top toward you.
+    orbit.current.az -= dx * 0.01;
+    orbit.current.el = Math.max(-1.5, Math.min(1.5, orbit.current.el + dy * 0.01));
+    applyCamera();
   }, []);
 
   /**
@@ -311,21 +343,22 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
   const onStageKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
     const s = scene.current;
     if (s === null) return;
-    const spherical = new THREE.Spherical().setFromVector3(s.camera.position.clone());
     const STEP = Math.PI / 18; // 10°
+    const o = orbit.current;
     switch (event.key) {
-      case 'ArrowLeft': spherical.theta += STEP; break;
-      case 'ArrowRight': spherical.theta -= STEP; break;
-      case 'ArrowUp': spherical.phi = Math.max(0.05, spherical.phi - STEP); break;
-      case 'ArrowDown': spherical.phi = Math.min(Math.PI - 0.05, spherical.phi + STEP); break;
+      case 'ArrowLeft': o.az += STEP; break;
+      case 'ArrowRight': o.az -= STEP; break;
+      // Up tips the model away from you, down brings its top toward you — the
+      // same sense as the drag, so the two do not contradict each other.
+      case 'ArrowUp': o.el = Math.max(-1.5, o.el - STEP); break;
+      case 'ArrowDown': o.el = Math.min(1.5, o.el + STEP); break;
       case '+': case '=': event.preventDefault(); setZoom((z) => Math.max(0.4, z / 1.15)); return;
       case '-': case '_': event.preventDefault(); setZoom((z) => Math.min(3, z * 1.15)); return;
       default: return;
     }
     event.preventDefault();
-    s.camera.position.setFromSpherical(spherical);
-    s.camera.lookAt(0, 0, 0);
-  }, []);
+    applyCamera();
+  }, [applyCamera]);
 
   const onPointerUp = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     const d = drag.current;
