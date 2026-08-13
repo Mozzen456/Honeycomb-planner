@@ -94,6 +94,21 @@
 
 .align__row[data-state='set'] { opacity: 0.65; }
 
+/* The keyboard cursor. Drawn as a ring rather than a fill so it reads on top of
+   the warning tint a disagreeing row already carries — a second background
+   colour would fight with it and the row would stop looking disputed. */
+.align__row[data-cursor='true'] {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: calc(var(--focus-ring-offset) * -1);
+}
+
+.align:focus-visible { outline: none; }
+
+.align__keys {
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
 .align__thumb {
   inline-size: var(--space-7);
   block-size: var(--space-7);

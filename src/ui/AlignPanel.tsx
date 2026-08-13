@@ -34,7 +34,7 @@
  * channel.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { detectPeg, type PegDetection } from '../core/peg';
 import { mountingOf, type MountingOverride } from '../core/overrides';
@@ -146,6 +146,78 @@ export function AlignPanel(props: AlignPanelProps): JSX.Element {
       rank(a) - rank(b) || (a.peg?.confidence ?? 0) - (b.peg?.confidence ?? 0));
   }, [parts, pegs, thumbs]);
 
+  /*
+   * Keyboard: up and down the list, in to a part, out again.
+   *
+   * This is a review queue — fifty rows a person works through in one sitting —
+   * and reaching for the mouse for every one of them is what makes a queue feel
+   * long. Up/Down move, Enter opens the part in the inspector, Escape comes back
+   * out, and Space takes the peg for the row under the cursor without leaving
+   * the list at all.
+   *
+   * Handled on the dialog rather than per row so the keys work wherever focus
+   * happens to be inside it — including on a row's own buttons, which would
+   * otherwise swallow the arrows.
+   */
+  const [cursor, setCursor] = useState(0);
+  const listRef = useRef<HTMLUListElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => { panelRef.current?.focus(); }, []);
+
+  // Keep the cursor in range as rows arrive and re-sort underneath it.
+  useEffect(() => {
+    setCursor((c) => Math.max(0, Math.min(c, rows.length - 1)));
+  }, [rows.length]);
+
+  useEffect(() => {
+    const el = listRef.current?.children[cursor];
+    if (el instanceof HTMLElement) el.scrollIntoView({ block: 'nearest' });
+  }, [cursor]);
+
+  const onKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    const row = rows[cursor];
+    switch (event.key) {
+      case 'ArrowDown':
+        event.preventDefault();
+        setCursor((c) => Math.min(rows.length - 1, c + 1));
+        return;
+      case 'ArrowUp':
+        event.preventDefault();
+        setCursor((c) => Math.max(0, c - 1));
+        return;
+      case 'Home':
+        event.preventDefault();
+        setCursor(0);
+        return;
+      case 'End':
+        event.preventDefault();
+        setCursor(rows.length - 1);
+        return;
+      case 'Enter':
+      case 'ArrowRight':
+        // In: look at this one properly.
+        if (row) { event.preventDefault(); onInspect(row.part.id); }
+        return;
+      case 'Escape':
+      case 'ArrowLeft':
+        // Out.
+        event.preventDefault();
+        onClose();
+        return;
+      case ' ':
+        // Take the peg, stay in the list. The common case is a run of rows you
+        // agree with, and leaving the list for each of them defeats the queue.
+        if (row?.peg && !row.saved) {
+          event.preventDefault();
+          onApply(row.part.id, { wallFaceAxis: row.peg.axis as Axis, matingEnd: row.peg.end });
+          setCursor((c) => Math.min(rows.length - 1, c + 1));
+        }
+        return;
+      default:
+    }
+  }, [rows, cursor, onApply, onInspect, onClose]);
+
   const disputed = rows.filter(
     (r) => !r.saved && r.peg && r.detected && r.detected !== r.peg.axis,
   );
@@ -153,7 +225,7 @@ export function AlignPanel(props: AlignPanelProps): JSX.Element {
 
   return (
     <div className="align__scrim" role="dialog" aria-modal="true" aria-label="Align parts">
-      <div className="align">
+      <div className="align" ref={panelRef} tabIndex={-1} onKeyDown={onKeyDown}>
         <header className="align__head">
           <div>
             <h2 className="align__title">Align parts</h2>
@@ -161,6 +233,10 @@ export function AlignPanel(props: AlignPanelProps): JSX.Element {
               The catalogue&apos;s mounting face next to the one measured from the part&apos;s own
               peg. {disputed.length} disagree
               {done < parts.length ? ` · measuring ${done}/${parts.length}` : ''}
+              {' · '}
+              <span className="align__keys">
+                ↑↓ move · Space take the peg · Enter open · Esc back
+              </span>
             </p>
           </div>
           <button type="button" className="align__close" onClick={onClose} aria-label="Close">
@@ -186,12 +262,18 @@ export function AlignPanel(props: AlignPanelProps): JSX.Element {
           </span>
         </div>
 
-        <ul className="align__rows">
-          {rows.map((r) => {
+        <ul className="align__rows" ref={listRef}>
+          {rows.map((r, i) => {
             const agrees = r.detected && r.peg && r.detected === r.peg.axis;
             const state = r.saved ? 'set' : !r.peg ? 'none' : agrees ? 'agree' : 'differ';
             return (
-              <li key={r.part.id} className="align__row" data-state={state}>
+              <li
+                key={r.part.id}
+                className="align__row"
+                data-state={state}
+                data-cursor={i === cursor ? 'true' : undefined}
+                onPointerEnter={() => setCursor(i)}
+              >
                 <span className="align__thumb">
                   {r.thumb ? <img src={r.thumb} alt="" draggable={false} /> : null}
                 </span>
