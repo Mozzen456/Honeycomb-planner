@@ -60,6 +60,36 @@
   font-size: var(--font-size-xs);
 }
 
+/*
+  The six face buttons. The point of them is that picking a face needs no
+  orbiting at all — you cannot click a surface you cannot see, and the back and
+  the underside both take a deliberate turn to reach.
+*/
+.inspector__faces {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.inspector__faceslabel {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-2xs);
+  letter-spacing: var(--letter-spacing-caps);
+  text-transform: uppercase;
+}
+
+.inspector__faces button[data-active='true'] {
+  border-color: var(--accent-border);
+  background-color: var(--accent-bg);
+  color: var(--accent);
+}
+
+.inspector__stage:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
 .inspector__facts {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));

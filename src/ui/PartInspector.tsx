@@ -162,10 +162,6 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
       s.root.add(body);
       s.part = body;
       s.size = Math.max(size.x, size.y, size.z);
-      const d = s.size * 2.4;
-      s.camera.position.set(d, -d * 0.8, d * 0.7);
-      s.camera.lookAt(0, 0, 0);
-      s.camera.up.set(0, 0, 1);
 
       const detection = detect(mesh);
       setDetected({ wallFaceAxis: detection.wallFaceAxis, matingEnd: detection.matingEnd });
@@ -179,6 +175,37 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
     });
     return () => { live = false; };
   }, [part, current]);
+
+  /*
+   * The camera looks from wherever `view` says, and every face has a button.
+   *
+   * Orbiting by hand to find a face was the whole difficulty: you cannot pick a
+   * surface you cannot see, the back and underside need a deliberate turn to
+   * reach, and a drag that overshoots leaves you re-orienting rather than
+   * choosing. So the six faces are buttons — press one and the camera goes
+   * there — and the drag is kept for looking around rather than being the only
+   * way to work.
+   *
+   * Offset slightly off-axis so the view is never dead-on. Exactly along an axis
+   * a part collapses to a flat outline and you cannot tell which end you are
+   * looking at, which is the same reason the catalogue previews are three-quarter.
+   */
+  const [view, setView] = useState<{ axis: Axis; end: End }>({ axis: 'y', end: 'low' });
+  const [zoom, setZoom] = useState(1);
+
+  useEffect(() => {
+    const s = scene.current;
+    if (s === null || s.part === null) return;
+    const dist = s.size * 2.4 * zoom;
+    const sign = view.end === 'high' ? 1 : -1;
+    const v = new THREE.Vector3();
+    if (view.axis === 'x') v.set(sign, -0.35, 0.3);
+    else if (view.axis === 'y') v.set(0.35, sign, 0.3);
+    else v.set(0.35, -0.35, sign);
+    s.camera.position.copy(v.normalize().multiplyScalar(dist));
+    s.camera.up.set(0, 0, 1);
+    s.camera.lookAt(0, 0, 0);
+  }, [view, zoom, status]);
 
   // --- the wall plate, against the chosen face ------------------------------
 
@@ -198,7 +225,11 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
 
     const slab = new THREE.Mesh(
       new THREE.BoxGeometry(plateSize, plateSize, PANEL_DEPTH),
-      new THREE.MeshLambertMaterial({ color: 0x9aa4b2, transparent: true, opacity: 0.55 }),
+      // Faint. Pressing a face button looks straight at that face, which puts
+      // the plate between the camera and the part — so it has to be something
+      // you can see THROUGH, or choosing a face hides the thing you are
+      // choosing it for.
+      new THREE.MeshLambertMaterial({ color: 0x9aa4b2, transparent: true, opacity: 0.3 }),
     );
     group.add(slab);
 
@@ -270,6 +301,32 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
     s.camera.lookAt(0, 0, 0);
   }, []);
 
+  /**
+   * Keyboard on the stage: arrows turn, +/− zoom.
+   *
+   * A pointer drag is fine for a coarse look and hopeless for a small
+   * adjustment. Arrows move in fixed steps, so nudging a view a little is
+   * actually possible and repeatable.
+   */
+  const onStageKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    const s = scene.current;
+    if (s === null) return;
+    const spherical = new THREE.Spherical().setFromVector3(s.camera.position.clone());
+    const STEP = Math.PI / 18; // 10°
+    switch (event.key) {
+      case 'ArrowLeft': spherical.theta += STEP; break;
+      case 'ArrowRight': spherical.theta -= STEP; break;
+      case 'ArrowUp': spherical.phi = Math.max(0.05, spherical.phi - STEP); break;
+      case 'ArrowDown': spherical.phi = Math.min(Math.PI - 0.05, spherical.phi + STEP); break;
+      case '+': case '=': event.preventDefault(); setZoom((z) => Math.max(0.4, z / 1.15)); return;
+      case '-': case '_': event.preventDefault(); setZoom((z) => Math.min(3, z * 1.15)); return;
+      default: return;
+    }
+    event.preventDefault();
+    s.camera.position.setFromSpherical(spherical);
+    s.camera.lookAt(0, 0, 0);
+  }, []);
+
   const onPointerUp = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     const d = drag.current;
     drag.current = null;
@@ -310,8 +367,9 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
         </header>
 
         <p className="inspector__hint">
-          Click the face of the model that goes <strong>against the wall</strong> — the plate moves
-          to the face you pick. Drag to turn the model round and reach the faces at the back.
+          Click the face of the model that goes <strong>against the wall</strong>, or press one of
+          the buttons below. The plate moves to the face you pick. Drag or use the arrow keys to
+          turn the model; <kbd>+</kbd> and <kbd>−</kbd> zoom.
         </p>
 
         <div
@@ -320,9 +378,28 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
-          role="presentation"
+          onKeyDown={onStageKeyDown}
+          tabIndex={0}
+          role="group"
+          aria-label="Model — arrow keys turn it, plus and minus zoom"
         />
         {status ? <p className="inspector__status">{status}</p> : null}
+
+        <div className="inspector__faces">
+          <span className="inspector__faceslabel">Mounting face</span>
+          {(['x', 'y', 'z'] as Axis[]).flatMap((a) =>
+            (['low', 'high'] as End[]).map((e) => (
+              <button
+                key={`${a}:${e}`}
+                type="button"
+                data-active={axis === a && end === e ? 'true' : undefined}
+                onClick={() => { setAxis(a); setEnd(e); setView({ axis: a, end: e }); }}
+                title={`Mount on the ${FACE_LABEL[`${a}:${e}`]} face, and look at it`}
+              >
+                {FACE_LABEL[`${a}:${e}`]}
+              </button>
+            )))}
+        </div>
 
         <dl className="inspector__facts">
           <div>

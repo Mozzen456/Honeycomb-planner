@@ -27,7 +27,7 @@
 import { describe, expect, it } from 'vitest';
 
 import catalogJson from '../src/catalog/catalog.json';
-import { MARGIN_X, MARGIN_Y, PITCH, ROW_STEP } from '../src/core/constants';
+import { MARGIN_X, PITCH, ROW_STEP } from '../src/core/constants';
 import type { Catalog } from '../src/core/types';
 
 const catalog = catalogJson as unknown as Catalog;
