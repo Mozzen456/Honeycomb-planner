@@ -293,10 +293,16 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
     group.add(cell);
 
     // Stand the plate off the chosen face, normal pointing back at the part.
+    //
+    // `standOff`, NOT `offset`. It was called `offset` and shadowed the depth
+    // state of the same name, so the part was positioned at the plate's fixed
+    // stand-off distance and never moved when the depth changed — the number on
+    // screen went up and down and nothing happened, which is the one thing this
+    // preview exists to show.
     const i = AXIS_INDEX[axis];
-    const offset = half + PANEL_DEPTH / 2 + s.size * 0.04;
+    const standOff = half + PANEL_DEPTH / 2 + s.size * 0.04;
     const pos = new THREE.Vector3();
-    pos.setComponent(i, end === 'high' ? offset : -offset);
+    pos.setComponent(i, end === 'high' ? standOff : -standOff);
     group.position.copy(pos);
     if (axis === 'x') group.rotation.y = Math.PI / 2;
     if (axis === 'y') group.rotation.x = Math.PI / 2;
@@ -313,7 +319,6 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
     // out" visibly INTO the plate, which is the one thing the preview exists to
     // show you.
     if (s.part) {
-      const i = AXIS_INDEX[axis];
       const out = end === 'high' ? -1 : 1;
       s.part.position.set(0, 0, 0);
       s.part.position.setComponent(i, out * offset);
