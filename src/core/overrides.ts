@@ -23,7 +23,32 @@
 
 import type { Catalog, CatalogPart, InsertRequirement } from './types';
 
+/**
+ * Which face of a part goes against the wall, decided by a person looking at
+ * the model rather than by the detector guessing.
+ *
+ * The detector picks the wall face from whichever candidate scores best, and
+ * for 27 of the 51 shipped parts it declines to answer at all (PARKED P1). This
+ * is the channel for answering it by hand: pick the face in the 3D inspector
+ * and the whole detection is re-derived from that constraint, so the footprint,
+ * the projection and the mesh all follow from the same decision.
+ *
+ * `spinSteps` is the third degree of freedom, in 30° steps about the wall
+ * normal. 30° and not 60° on purpose: a hexagon repeats every 60°, so 60° steps
+ * could never express the half-face offset between the app's pointy-top wall
+ * and the flat-top frame every photograph shows (DECISIONS D31). Until that
+ * frame question is settled this is how a part is made to look right.
+ */
+export interface MountingOverride {
+  wallFaceAxis: 'x' | 'y' | 'z';
+  matingEnd: 'low' | 'high';
+  /** Turn about the wall normal, in 30° steps. Normalised to 0–11. */
+  spinSteps?: number;
+}
+
 export interface PartOverride {
+  /** Human answer to "which face mounts against the wall". */
+  mounting?: MountingOverride;
   /** Replaces the part's requirements outright. An empty array means "nothing". */
   requires?: InsertRequirement[];
   hardware?: { item: string; count: number }[];
@@ -61,6 +86,34 @@ function readRequires(value: unknown): InsertRequirement[] | undefined {
     out.push({ partId, count: Math.round(count) });
   }
   return out;
+}
+
+/**
+ * A mounting correction is only usable if it names a real axis and end. A
+ * half-written one is discarded rather than half-applied: orienting a part off
+ * a face nobody chose is the failure this whole channel exists to remove.
+ */
+export function readMounting(value: unknown): MountingOverride | undefined {
+  if (!isObject(value)) return undefined;
+  const axis = value['wallFaceAxis'];
+  const end = value['matingEnd'];
+  if (axis !== 'x' && axis !== 'y' && axis !== 'z') return undefined;
+  if (end !== 'low' && end !== 'high') return undefined;
+  const out: MountingOverride = { wallFaceAxis: axis, matingEnd: end };
+  const spin = value['spinSteps'];
+  if (typeof spin === 'number' && Number.isFinite(spin)) {
+    // Normalised, so a caller cannot store 13 steps and get a different answer
+    // from a caller who stored 1. Twelve 30° steps make a full turn.
+    out.spinSteps = ((Math.round(spin) % 12) + 12) % 12;
+  }
+  return out;
+}
+
+/** The hand-picked mounting for a part, if one has been applied to it. */
+export function mountingOf(part: CatalogPart): MountingOverride | undefined {
+  return (part as unknown as Record<string, unknown>)['mounting'] as
+    | MountingOverride
+    | undefined;
 }
 
 /**
@@ -106,6 +159,12 @@ export function applyOverrides(base: Catalog, file: unknown): Catalog {
       flagged['needsReview'] = raw['needsReview'];
     }
     if (raw['fastenersNeedReview'] === true) flagged['fastenersNeedReview'] = true;
+
+    // The hand-picked wall face. Carried on the part so `meshLibrary` and the
+    // inspector read it from the same place the BOM does, rather than each
+    // reaching back into the override file on its own.
+    const mounting = readMounting(raw['mounting']);
+    if (mounting !== undefined) flagged['mounting'] = mounting;
 
     const note = raw['_note'];
     if (typeof note === 'string' && note.length > 0) {

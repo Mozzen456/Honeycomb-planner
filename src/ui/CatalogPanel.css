@@ -344,3 +344,42 @@
     min-block-size: var(--icon-size-md);
   }
 }
+
+/*
+  The mounting-face control. Same treatment as the remove control, and for the
+  same reason it sits over the tile rather than inside it — the tile is a drag
+  handle and a button within it would start a drag on press.
+
+  Offered on every tile, so it is placed at the START of the inline axis; the
+  remove control keeps the end, and an imported part shows both without them
+  landing on top of each other.
+*/
+.catalog-tile__inspect {
+  position: absolute;
+  inset-block-start: var(--space-1);
+  inset-inline-start: var(--space-1);
+  inline-size: var(--space-4);
+  block-size: var(--space-4);
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-none);
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-standard);
+}
+
+.catalog-tile__slot:hover .catalog-tile__inspect,
+.catalog-tile__inspect:focus-visible {
+  opacity: 1;
+}
+
+.catalog-tile__inspect:hover {
+  background-color: var(--accent-bg);
+  color: var(--accent);
+}
+
+@media (pointer: coarse) {
+  .catalog-tile__inspect { opacity: 1; }
+}

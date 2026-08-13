@@ -14,7 +14,7 @@ import overridesJson from '../catalog/overrides.json';
 import { BEDS } from '../core/constants';
 import { toCsv, toMarkdownChecklist, toPrintableHtml, downloadName } from '../core/exporters';
 import { proposePart, type ImportedPart, type ImportProposal } from '../core/importPart';
-import { applyOverrides } from '../core/overrides';
+import { applyOverrides, mountingOf, type MountingOverride } from '../core/overrides';
 import { decodeShareUrl, encodeShareUrl, deserialize, serialize } from '../core/persist';
 import { emptyDoc, Store, type EditorState, type DropResult } from '../core/store';
 import { solveTiling, type PanelSize } from '../core/tiling';
@@ -26,6 +26,12 @@ import { BomPanel } from './BomPanel';
 import { CatalogPanel } from './CatalogPanel';
 import { ObstaclePanel } from './ObstaclePanel';
 import { ImportDialog } from './ImportDialog';
+import {
+  clearMounting, loadUserOverrides, mergeOverrideFiles, setMounting, toOverrideFile,
+  type UserOverrides,
+} from '../core/userOverrides';
+import { PartInspector } from './PartInspector';
+import { forgetPartMesh } from './meshLibrary';
 import { WallCanvas, ghostCells, type DragPayload } from './WallCanvas';
 import { WallView3D } from './WallView3D';
 import './App.css';
@@ -34,7 +40,7 @@ import './App.css';
  * The generated catalogue with the human corrections in `overrides.json`
  * applied. The scanner applies the same file, so a rescan and the app agree.
  */
-const baseCatalog = applyOverrides(catalogJson as unknown as Catalog, overridesJson);
+const shippedCatalog = catalogJson as unknown as Catalog;
 
 type Theme = 'system' | 'light' | 'dark';
 
@@ -46,7 +52,19 @@ export function App() {
    * rebuild that index per render.
    */
   const [userParts, setUserParts] = useState<ImportedPart[]>(() => loadUserParts().parts);
-  const catalog = useMemo(() => mergeCatalog(baseCatalog, userParts), [userParts]);
+  /**
+   * Corrections made in this browser, layered over the ones that ship. Both are
+   * applied through the same `applyOverrides`, so a correction behaves
+   * identically whether it has been committed to `overrides.json` yet or not.
+   */
+  const [userOverrides, setUserOverrides] = useState<UserOverrides>(() => loadUserOverrides());
+  const [inspecting, setInspecting] = useState<string | null>(null);
+
+  const baseCatalog = useMemo(
+    () => applyOverrides(shippedCatalog, mergeOverrideFiles(overridesJson, userOverrides)),
+    [userOverrides],
+  );
+  const catalog = useMemo(() => mergeCatalog(baseCatalog, userParts), [baseCatalog, userParts]);
 
   const storeRef = useRef<Store | null>(null);
   if (storeRef.current === null) {
@@ -195,6 +213,53 @@ export function App() {
     },
     [store, say],
   );
+
+
+  // --- mounting corrections -------------------------------------------------
+
+  /**
+   * A hand-picked mounting face. Saved locally so it applies at once and
+   * survives a reload, and exportable into `src/catalog/overrides.json` so the
+   * scanner honours it too — a browser cannot write into the repo.
+   *
+   * `forgetPartMesh` is the load-bearing half: the oriented geometry is cached
+   * per part id, so without dropping it the correction would change the
+   * catalogue and leave the old mesh on the wall.
+   */
+  const saveMounting = useCallback(
+    (partId: string, mounting: MountingOverride) => {
+      setUserOverrides((prev) => setMounting(prev, partId, mounting, 'mounting face picked by hand'));
+      forgetPartMesh(partId);
+      setInspecting(null);
+      say('Mounting face saved — Download overrides to keep it in the repo', 'ok');
+    },
+    [say],
+  );
+
+  const dropMounting = useCallback(
+    (partId: string) => {
+      setUserOverrides((prev) => clearMounting(prev, partId));
+      forgetPartMesh(partId);
+      setInspecting(null);
+      say('Correction cleared — back to the detector\u2019s own answer', 'ok');
+    },
+    [say],
+  );
+
+  const downloadOverrides = useCallback(() => {
+    const text = toOverrideFile(userOverrides);
+    if (JSON.parse(text).parts && Object.keys(JSON.parse(text).parts).length === 0) {
+      say('No corrections to export yet', 'warn');
+      return;
+    }
+    const blob = new Blob([text], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'overrides.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [userOverrides, say]);
 
   const cancelDrag = useCallback(() => {
     dragRef.current = null;
@@ -563,6 +628,18 @@ export function App() {
           <button type="button" onClick={() => store.undo()} disabled={!state.canUndo} title="Undo (Ctrl+Z)">Undo</button>
           <button type="button" onClick={() => store.redo()} disabled={!state.canRedo} title="Redo (Ctrl+Shift+Z)">Redo</button>
           <button type="button" onClick={share}>Share</button>
+          {/* Only once there is something to export. A browser cannot write into
+              the repo, so this is how a hand-picked mounting face reaches
+              `src/catalog/overrides.json` and, through it, the scanner. */}
+          {Object.keys(userOverrides.parts).length > 0 && (
+            <button
+              type="button"
+              onClick={downloadOverrides}
+              title="Download the mounting corrections made here, to commit into src/catalog/overrides.json"
+            >
+              Overrides ({Object.keys(userOverrides.parts).length})
+            </button>
+          )}
           <label className="app__import" title="Add an STL model, or open a saved layout">
             Import
             <input
@@ -597,6 +674,7 @@ export function App() {
             onDragStart={(partId) => beginPartDrag(partId)}
             onActivate={placePartFromKeyboard}
             onRemovePart={removeImportedPart}
+            onInspect={setInspecting}
           />
         </aside>
 
@@ -697,6 +775,20 @@ export function App() {
           />
         </aside>
       </div>
+
+      {inspecting !== null && (() => {
+        const part = catalog.parts.find((p) => p.id === inspecting);
+        if (!part) return null;
+        return (
+          <PartInspector
+            part={part}
+            current={mountingOf(part)}
+            onSave={(m) => saveMounting(part.id, m)}
+            onClear={() => dropMounting(part.id)}
+            onClose={() => setInspecting(null)}
+          />
+        );
+      })()}
 
       {importing !== null && (
         <ImportDialog

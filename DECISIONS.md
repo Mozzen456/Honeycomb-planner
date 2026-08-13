@@ -735,3 +735,55 @@ fixing and junction paths had not, and the collar needed no guard because it was
 Pinned in `tests/fitting-seat.test.ts` as arithmetic, not as a screenshot. A hexagon looks like a
 hexagon at any angle; this is only wrong *relative to the cell under it*, which is why it survived
 in plain sight and why the eye is the wrong instrument for it.
+
+---
+
+## D34 — The mounting face is a question a person can answer, in the 3D inspector
+
+**Asked for directly: "look at a part in 3D, click what face is the mounting face, and save it."**
+
+The detector picks a part's wall face from whichever candidate scores best, and for 27 of the 51
+shipped parts it declines to pick at all (`drawnOrientation: "n/a"`, PARKED P1). Until now there was
+no way to answer it except by editing a file by hand and re-running a Python scanner.
+
+**Decision: the correction goes through `overrides.json` — the channel that already exists** — and
+carries three things: `wallFaceAxis`, `matingEnd`, and `spinSteps`.
+
+The third one is why this is not only a detector fix. Picking a face fixes two degrees of freedom;
+the turn *about* that face is the third, and it is the open pointy-top/flat-top frame question
+(D31). `spinSteps` is in 30° units and not 60° on purpose: a hexagon repeats every 60°, so 60° steps
+could never express the half-face offset between the app's wall and the frame the photographs show.
+Per-part, it is how a part is made to look right before that question is settled globally; when it
+IS settled, these become redundant rather than wrong.
+
+**The face is fed to `detect()` as a CONSTRAINT, not stapled onto its result.** The footprint, the
+projection and the tier all follow from which face is against the wall, so forcing the face and
+re-deriving is what keeps "where it sits" agreeing with "which way it faces". Stapling would leave a
+part whose cells were measured off one face and whose mesh hangs off another — the exact split that
+unifying the footprint and the mesh was meant to prevent.
+
+**The model is shown in the STL's own frame, not oriented.** The question is which axis of the FILE
+faces the wall, so the click has to land on an axis of the file; raycasting an already-turned mesh
+would mean inverting the permutation and the flip to get back, which is a second transform to keep
+true against the first.
+
+**Drag orbits, click picks, told apart by distance.** Not a nicety: the camera only ever shows three
+of the six faces, and without orbit the back, the underside and one side cannot be chosen at all —
+which is precisely where a mounting plug tends to be.
+
+**Saved locally AND exportable.** A browser cannot write into the repository, so a correction would
+otherwise either apply and never persist, or persist and never apply. It goes to localStorage so it
+takes effect on the next render, and `Overrides (n)` downloads it in `overrides.json`'s own shape so
+it can be committed — at which point `tools/scan.py` honours it too and a rescan agrees. Merged per
+part rather than per file, so a local mounting decision does not discard the shipped fastener count
+for the same part: different facts, different people, different days.
+
+**What this does NOT do: it does not clear `needsReview`.** Knowing which face mounts removes the
+detector's main ambiguity, but for a tier-3 part the CELLS are still the bounding-box bound PARKED P1
+says is not a measurement. Promoting a bound to a measurement by clicking is the dishonesty that
+`withFootprint` already refuses to commit, and this refuses it too.
+
+**It found its own first case immediately.** `shelf-1` is detected as mounting on `Bottom (−Z)` —
+`insertFed` choosing the face with the most material under the surface, which for a shelf is the
+tray. The pegs are on another face entirely. The dialog shows the detector's answer next to the
+picked one for exactly this reason: so you can see what you are overruling.

@@ -838,13 +838,42 @@ function resolutionFor(mesh: MeshData): number {
  * Tries every axis as the candidate wall normal, because parts are drawn lying
  * on whichever face suited the print bed.
  */
-export function detect(mesh: MeshData): Detection {
+/**
+ * A human's answer to the question the detector is guessing at.
+ *
+ * `forceAxis` narrows the search to one candidate face instead of picking the
+ * best of three; `forceEnd` says which end of it mates. Both are corrections a
+ * person made by looking at the model — see `mounting` in `overrides.json`.
+ *
+ * Deliberately a constraint on the search rather than a value stapled onto the
+ * result: the footprint, projection and tier all follow from which face is
+ * against the wall, so forcing the face and then re-deriving is what makes
+ * "where it sits" agree with "which way it faces". Stapling would leave a part
+ * whose cells were measured off one face and whose mesh is hung off another.
+ */
+export interface DetectOptions {
+  forceAxis?: Axis;
+  forceEnd?: 'low' | 'high';
+}
+
+export function detect(mesh: MeshData, opts: DetectOptions = {}): Detection {
   const cellMm = resolutionFor(mesh);
-  const axes: Axis[] = ['z', 'x', 'y'];
+  const axes: Axis[] = opts.forceAxis ? [opts.forceAxis] : ['z', 'x', 'y'];
+
+  const finish = (d: Detection): Detection => {
+    if (opts.forceEnd !== undefined && d.matingEnd !== opts.forceEnd) {
+      d.matingEnd = opts.forceEnd;
+      d.notes = [...d.notes, `mating end set to ${opts.forceEnd} by hand`];
+    }
+    if (opts.forceAxis !== undefined) {
+      d.notes = [...d.notes, `wall face set to ${opts.forceAxis} by hand`];
+    }
+    return d;
+  };
 
   for (const axis of axes) {
     const panel = detectPanel(mesh, axis, Math.min(0.5, Math.max(cellMm, 0.3)));
-    if (panel !== null) return panel;
+    if (panel !== null) return finish(panel);
   }
 
   const clips: Detection[] = [];
@@ -855,10 +884,12 @@ export function detect(mesh: MeshData): Detection {
   if (clips.length > 0) {
     const best = clips.reduce((a, b) => (b.cells.length > a.cells.length ? b : a));
     best.bores = detectBores(mesh, best.matingAxis as Axis, cellMm);
-    return best;
+    return finish(best);
   }
 
-  return insertFed(mesh, cellMm);
+  // Tier 3 picks its own face by material-under-the-surface, which is exactly
+  // the guess a human is overruling here, so the forced face has to reach it.
+  return finish(insertFed(mesh, cellMm, opts.forceAxis));
 }
 
 /**
@@ -869,7 +900,7 @@ export function detect(mesh: MeshData): Detection {
  * choice. Guessing produces a confident wrong footprint, which is worse than a
  * flagged one — see PARKED.md P1.
  */
-function insertFed(mesh: MeshData, cellMm: number): Detection {
+function insertFed(mesh: MeshData, cellMm: number, forceAxis?: Axis): Detection {
   const size = spanOf(mesh, 'z');
   const sorted = [...size].sort((a, b) => b - a);
   const longest = sorted[0]!;
@@ -884,7 +915,7 @@ function insertFed(mesh: MeshData, cellMm: number): Detection {
   let bestArea = -1;
   let bestExtent = sorted[sorted.length - 1]!;
   let bestEnd: 'low' | 'high' = 'low';
-  for (const axis of ['z', 'x', 'y'] as Axis[]) {
+  for (const axis of (forceAxis ? [forceAxis] : (['z', 'x', 'y'] as Axis[]))) {
     const { lo, hi } = boundsAlong(mesh, axis);
     const ext = hi - lo;
     if (ext <= 1e-6) continue;

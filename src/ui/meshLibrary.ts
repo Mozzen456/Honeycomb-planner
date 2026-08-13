@@ -21,6 +21,7 @@
 import * as THREE from 'three';
 
 import { AXES, detect, type Detection } from '../core/detect';
+import { mountingOf } from '../core/overrides';
 import { parseStl, type MeshData } from '../core/stl';
 import type { CatalogPart } from '../core/types';
 import { getModelBytes, isImported } from '../core/userCatalog';
@@ -63,8 +64,43 @@ async function build(part: CatalogPart): Promise<PartMesh | null> {
   // function that decided which cells this part covers decides which way up it
   // is drawn. The alternative — a second orientation rule here — is a second
   // thing to keep true. It costs a few hundred milliseconds once per part id.
-  const detection = detect(mesh);
-  return { geometry: orient(mesh, detection), depthMm: detection.projectionMm };
+  //
+  // A hand-picked wall face is fed in as a CONSTRAINT on that same detection,
+  // not applied afterwards, so the cells and the mesh still come from one
+  // decision. See `MountingOverride`.
+  const mounting = mountingOf(part);
+  const detection = detect(
+    mesh,
+    mounting ? { forceAxis: mounting.wallFaceAxis, forceEnd: mounting.matingEnd } : {},
+  );
+  const geometry = orient(mesh, detection);
+  // The spin is the one part that is not a detection: it is the turn about the
+  // wall normal that makes the part LOOK right, which is the open frame
+  // question (DECISIONS D31) expressed per part until it is settled globally.
+  if (mounting?.spinSteps) geometry.rotateZ((Math.PI / 6) * mounting.spinSteps);
+  return { geometry, depthMm: detection.projectionMm };
+}
+
+/**
+ * The part's mesh in the STL's OWN coordinates, unoriented.
+ *
+ * The inspector needs this rather than the oriented geometry: picking a
+ * mounting face means naming an axis of the FILE, and mapping a click on an
+ * already-turned mesh back through the permutation and the flip is a second
+ * inverse to keep true. Cached separately from the oriented mesh because the
+ * two have different lifetimes — the oriented one is dropped whenever a
+ * correction changes it, this one never changes.
+ */
+const rawCache = new Map<string, Promise<MeshData | null>>();
+
+export function loadRawMesh(part: CatalogPart): Promise<MeshData | null> {
+  const existing = rawCache.get(part.id);
+  if (existing !== undefined) return existing;
+  const pending = bytesFor(part)
+    .then((bytes) => (bytes === null ? null : parseStl(bytes)))
+    .catch(() => null);
+  rawCache.set(part.id, pending);
+  return pending;
 }
 
 async function bytesFor(part: CatalogPart): Promise<ArrayBuffer | null> {

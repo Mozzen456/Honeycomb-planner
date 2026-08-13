@@ -1,0 +1,91 @@
+/* The mounting-face inspector. Tokens only — no colour, size or duration literals. */
+
+.inspector__scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  background: var(--scrim);
+}
+
+.inspector {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  inline-size: min(46rem, 100%);
+  max-block-size: 100%;
+  padding: var(--space-4) var(--space-5);
+  overflow-y: auto;
+  /* Same reason as .import: a scrolling box inside a fixed overlay must contain
+     its overflow or the viewport inherits it. `layout paint`, not `strict` —
+     strict implies size and would collapse the stage. */
+  contain: layout paint;
+  border: var(--border-width-hair) solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-lg);
+}
+
+.inspector__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.inspector__title {
+  font-size: var(--font-size-lg);
+  overflow-wrap: anywhere;
+}
+
+.inspector__hint {
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.inspector__stage {
+  min-block-size: 20rem;
+  aspect-ratio: 4 / 3;
+  /* The pick is a click on a face, so the cursor should say "aim", not "grab". */
+  cursor: crosshair;
+  border: var(--border-width-hair) solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.inspector__status {
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.inspector__facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: var(--space-3);
+}
+
+.inspector__facts dt {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-2xs);
+  letter-spacing: var(--letter-spacing-caps);
+  text-transform: uppercase;
+}
+
+.inspector__facts dd {
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+}
+
+.inspector__spin,
+.inspector__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.inspector__actions {
+  padding-block-start: var(--space-3);
+  border-block-start: var(--border-width-hair) solid var(--border-subtle);
+}

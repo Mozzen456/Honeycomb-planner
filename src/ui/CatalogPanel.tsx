@@ -34,6 +34,13 @@ export interface CatalogPanelProps {
   onFilterChange?: (value: string) => void;
   /** Offered on imported parts only — a generated part is the scanner's to remove. */
   onRemovePart?: (partId: string) => void;
+  /**
+   * Open the mounting-face inspector for a part. Offered on EVERY part, not
+   * just the flagged ones: the detector's answer can be wrong as well as
+   * absent, and a part that looks wrong on the wall is the reason someone comes
+   * looking for this.
+   */
+  onInspect?: (partId: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -123,9 +130,12 @@ interface TileProps {
   onDragStart: CatalogPanelProps['onDragStart'];
   onActivate: CatalogPanelProps['onActivate'];
   onRemove?: (partId: string) => void;
+  onInspect?: (partId: string) => void;
 }
 
-function CatalogTile({ part, selected, onDragStart, onActivate, onRemove }: TileProps): JSX.Element {
+function CatalogTile(
+  { part, selected, onDragStart, onActivate, onRemove, onInspect }: TileProps,
+): JSX.Element {
   const cells = cellCount(part);
   const name = part.name.length > 0 ? part.name : part.id;
   const imported = isImported(part);
@@ -175,6 +185,19 @@ function CatalogTile({ part, selected, onDragStart, onActivate, onRemove }: Tile
           {formatGrams(part.print?.grams)}
         </span>
       </div>
+      {onInspect !== undefined ? (
+        <button
+          type="button"
+          className="catalog-tile__inspect hit-area"
+          /* Not inside the tile div: that one owns pointerdown for the drag
+             gesture, and a button nested in it would have its click swallowed. */
+          title={`Set which face of ${part.name} mounts against the wall`}
+          aria-label={`Set the mounting face for ${part.name}`}
+          onClick={() => onInspect(part.id)}
+        >
+          ⌖
+        </button>
+      ) : null}
       {imported && onRemove !== undefined ? (
         <button
           type="button"
@@ -195,8 +218,10 @@ function CatalogTile({ part, selected, onDragStart, onActivate, onRemove }: Tile
 // ---------------------------------------------------------------------------
 
 export function CatalogPanel(props: CatalogPanelProps): JSX.Element {
-  const { catalog, onDragStart, onActivate, selectedPartId, filter, onFilterChange, onRemovePart } =
-    props;
+  const {
+    catalog, onDragStart, onActivate, selectedPartId, filter, onFilterChange, onRemovePart,
+    onInspect,
+  } = props;
 
   const [collapsed, setCollapsed] = useState<ReadonlySet<PartType>>(() => new Set<PartType>());
 
@@ -321,6 +346,7 @@ export function CatalogPanel(props: CatalogPanelProps): JSX.Element {
                       selected={part.id === selectedPartId}
                       onDragStart={onDragStart}
                       onActivate={onActivate}
+                      onInspect={onInspect}
                       onRemove={onRemovePart}
                     />
                   ))}
