@@ -157,28 +157,46 @@ export function planFixings(
   }
   const junctions: JunctionFixing[] = [];
   const usedByJunction = new Set<string>();
-  for (const { cells } of byPanel) {
-    for (const anchor of cells) {
-      for (let rot = 0; rot < 6; rot++) {
-        const placed = placeFootprint(JUNCTION_FOOTPRINT, anchor, rot as Rotation);
-        const keys = placed.map(hexKey);
-        // Every cell must be on a panel, free, and not already spoken for.
-        if (keys.some((k) => !owner.has(k) || avoid.has(k) || usedByJunction.has(k))) continue;
-        const panels = new Set(keys.map((k) => owner.get(k)!));
-        // Three or more plates is a junction; two is an ordinary seam, which
-        // the interlocking edge already handles.
-        if (panels.size < 3) continue;
-        junctions.push({
-          cells: placed,
-          panelIds: [...panels].sort(),
-          anchor,
-          rotation: rot as Rotation,
-        });
-        for (const k of keys) {
-          usedByJunction.add(k);
-          chosen.set(k, owner.get(k)!);
+
+  /*
+   * FOUR plates first, then three.
+   *
+   * This used to take the first placement covering three or more and stop, which
+   * meant it settled for a three-plate tie whenever one turned up first — even
+   * with a four-plate placement a single cell away. At a corner where four
+   * plates meet that is the wrong insert in the wrong hole: the fourth plate is
+   * left held only by the grid, and the one joint that most needs tying is the
+   * one that gets least.
+   *
+   * So it runs twice, taking every four-plate junction before considering any
+   * three-plate one. Still greedy within a pass — an exact cover is a set-packing
+   * problem and not worth it here — but greedy on the right thing.
+   */
+  for (const want of [4, 3]) {
+    for (const { cells } of byPanel) {
+      for (const anchor of cells) {
+        let taken = false;
+        for (let rot = 0; rot < 6 && !taken; rot++) {
+          const placed = placeFootprint(JUNCTION_FOOTPRINT, anchor, rot as Rotation);
+          const keys = placed.map(hexKey);
+          // Every cell must be on a panel, free, and not already spoken for.
+          if (keys.some((k) => !owner.has(k) || avoid.has(k) || usedByJunction.has(k))) continue;
+          const panels = new Set(keys.map((k) => owner.get(k)!));
+          // Two plates is an ordinary seam, which the interlocking edge already
+          // handles; this pass wants exactly `want`.
+          if (panels.size !== want) continue;
+          junctions.push({
+            cells: placed,
+            panelIds: [...panels].sort(),
+            anchor,
+            rotation: rot as Rotation,
+          });
+          for (const k of keys) {
+            usedByJunction.add(k);
+            chosen.set(k, owner.get(k)!);
+          }
+          taken = true;
         }
-        break;
       }
     }
   }
