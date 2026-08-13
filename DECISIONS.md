@@ -924,3 +924,38 @@ and a hook still fits. The tile is 64 px, which is where the shapes became legib
 face (D34) invalidates it exactly as it invalidates the geometry — and removing an imported part
 clears both, since an imported id can be reused by a later import and would otherwise show the old
 part's shape under the new one's name.
+
+---
+
+## D40 — "Align parts": measure the peg, compare it with the catalogue, decide in one screen
+
+**Asked for: "a new tool to align all these parts so they fit like they should — really important if
+people are going to use this."** They are right that it is. 27 of 51 parts have no measured mounting
+face, the inspector (D34) fixes one at a time, and at one dialog per part nobody finishes.
+
+Two pieces.
+
+**`src/core/peg.ts` — measure the peg.** `detect.ts` cannot answer for these parts: they have no
+wall interface on any axis, so `insertFed` falls back to "the face with the most material just under
+the surface", which for a shelf is the underside of the tray. But the part mates through a
+*hexagonal prism*, and a hexagonal prism has a signature nothing else in these models has — every
+side face parallel to the axis, their normals on six directions 60° apart. One pass over the
+triangles; no raster, no shapely, so it runs in the browser.
+
+Held to the one independently measured fact available: D31 established BY HAND that all four shelves
+and both `hook-to-empty` variants mount along **Y**, where `detect.ts` says Z for every one of them.
+`detectPeg` reproduces that from geometry alone at confidence > 0.9, and `tests/peg.test.ts` pins it.
+
+**`AlignPanel` — a contact sheet, not a wizard.** Every part on one screen, the catalogue's axis
+beside the peg's face, the ones that DISAGREE sorted to the top and least-confident first. Most rows
+need no attention; the few that do are visible without a click. One button accepts every confident
+disagreement at once, and the threshold is stated on screen rather than hidden.
+
+**What it deliberately does not claim.** No width is reported (see `peg.ts` — averaging plane
+offsets across a part with 56 identical holes is meaningless, and it produced −0.96 mm before it was
+removed). No footprint is proposed: which cells an installer uses is PARKED P1 and stands. And the
+Catalogue column shows the **axis only**, because `catalog.json` records `wallFaceAxis` and no mating
+end — naming a face there would put an end on screen that nothing measured.
+
+Accepting writes the same `MountingOverride` the inspector writes, so it reaches `overrides.json`
+and exports identically. Not a second channel.

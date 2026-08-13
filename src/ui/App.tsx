@@ -30,6 +30,7 @@ import {
   clearMounting, loadUserOverrides, mergeOverrideFiles, setMounting, toOverrideFile,
   type UserOverrides,
 } from '../core/userOverrides';
+import { AlignPanel } from './AlignPanel';
 import { PartInspector } from './PartInspector';
 import { forgetPartMesh } from './meshLibrary';
 import { forgetThumbnail } from './partThumbnails';
@@ -60,6 +61,7 @@ export function App() {
    */
   const [userOverrides, setUserOverrides] = useState<UserOverrides>(() => loadUserOverrides());
   const [inspecting, setInspecting] = useState<string | null>(null);
+  const [aligning, setAligning] = useState(false);
 
   const baseCatalog = useMemo(
     () => applyOverrides(shippedCatalog, mergeOverrideFiles(overridesJson, userOverrides)),
@@ -227,6 +229,15 @@ export function App() {
    * per part id, so without dropping it the correction would change the
    * catalogue and leave the old mesh on the wall.
    */
+  const applyMounting = useCallback(
+    (partId: string, mounting: MountingOverride, why: string) => {
+      setUserOverrides((prev) => setMounting(prev, partId, mounting, why));
+      forgetPartMesh(partId);
+      forgetThumbnail(partId);
+    },
+    [],
+  );
+
   const saveMounting = useCallback(
     (partId: string, mounting: MountingOverride) => {
       setUserOverrides((prev) => setMounting(prev, partId, mounting, 'mounting face picked by hand'));
@@ -637,6 +648,13 @@ export function App() {
           <button type="button" onClick={() => store.undo()} disabled={!state.canUndo} title="Undo (Ctrl+Z)">Undo</button>
           <button type="button" onClick={() => store.redo()} disabled={!state.canRedo} title="Redo (Ctrl+Shift+Z)">Redo</button>
           <button type="button" onClick={share}>Share</button>
+          <button
+            type="button"
+            onClick={() => setAligning(true)}
+            title="Compare every part's mounting face against the peg measured from its own model"
+          >
+            Align
+          </button>
           {/* Only once there is something to export. A browser cannot write into
               the repo, so this is how a hand-picked mounting face reaches
               `src/catalog/overrides.json` and, through it, the scanner. */}
@@ -784,6 +802,16 @@ export function App() {
           />
         </aside>
       </div>
+
+      {aligning && (
+        <AlignPanel
+          catalog={catalog}
+          onApply={(partId, mounting) =>
+            applyMounting(partId, mounting, 'mounting face taken from the measured peg')}
+          onInspect={(partId) => { setAligning(false); setInspecting(partId); }}
+          onClose={() => setAligning(false)}
+        />
+      )}
 
       {inspecting !== null && (() => {
         const part = catalog.parts.find((p) => p.id === inspecting);
