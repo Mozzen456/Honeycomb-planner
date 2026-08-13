@@ -507,3 +507,30 @@ agrees with both drawings and with the mounted-part photographs noted in PARKED 
 The app draws the wall pointy-top (§2), which is this frame turned 90°. That is a rendering
 question, not a geometry one — no number in this spec changes — but it is why
 `FITTING_SEAT_RADIANS` exists. See DECISIONS D31.
+
+### 10.2 Orientation audit — every part, measured against the catalogue
+
+Run 2026-08-13. Each STL's hexagonal interface was measured independently of the scanner: cluster
+the face normals, find the prism axis, and take the dominant side-normal angle modulo 60° in the
+plane perpendicular to it. That is then compared with the `drawnOrientation` the scanner recorded.
+
+- **24 of 24 agree.** Every part the scanner stands behind — all 7 panels, all 15
+  inserts/fasteners, and 2 others — matches the independent measurement exactly. No orientation
+  error anywhere in the catalogue.
+- **The remaining 27 carry `drawnOrientation: "n/a"`, and that set is *exactly* the 27
+  `needsReview` parts.** Not a disagreement: the scanner declines to state an orientation for the
+  tier-2 parts, the same honesty PARKED P1 describes. Measuring their pegs *does* give an angle,
+  but confidence varies — the dominant angle holds 87–95 % of the perpendicular area on the four
+  shelves and only 40–54 % on `hook-12mm-for-m3`, `hook-25mm-for-m3` and `insert-cable-holder`,
+  and `hook-keyboard-side` / `hook-keyboard-bottom` land on 30.7° and 59.7° rather than clean
+  multiples. So this does not promote any of them; it is a bound, like everything else in P1.
+- **The shipped panels are not all drawn the same way round:** `375x389`, `106x89`, `293x271` and
+  `k1` are drawn flat; `mk3s`, `bambu-211x248` and `wall-honeycomb-part` are drawn pointy. The
+  catalogue records each correctly, which is what lets the scanner canonicalise them and why
+  `allowRotation` can stay `false`.
+
+**The 90° frame difference shows up in the footprints too, and this is the cleanest evidence of
+it.** The designer's insert drawing dimensions its four-cell part `40.88` one way and `23.6` the
+other. The app's `insert-for-countersunk-hole-3` and `insert-countersunk-with-m3x3` — cells
+`(0,0) (−1,1) (0,1) (−1,2)` — span **23.60 × 40.88**: the same two numbers, transposed. Same part,
+same geometry, frame turned 90°. Nothing is wrong with the footprint; it is the frame.
