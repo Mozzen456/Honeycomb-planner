@@ -44,6 +44,21 @@ export interface MountingOverride {
   matingEnd: 'low' | 'high';
   /** Turn about the wall normal, in 30° steps. Normalised to 0–11. */
   spinSteps?: number;
+  /**
+   * How far the part sits along the wall normal, mm. Positive stands it further
+   * OUT of the wall, negative sinks it IN.
+   *
+   * The fourth degree of freedom, and the only one that is not an orientation.
+   * `orient` seats every part with its mating face at z = 0, which is right when
+   * the detector found the real mating face and wrong when it settled for the
+   * flattest surface — the part then floats off the wall or buries itself in it.
+   * Nothing in the geometry can distinguish those two cases, so this is a
+   * person's correction and it is stored as one.
+   *
+   * Clamped to ±40 mm on read: beyond that it is not a seating correction, it is
+   * a part in the wrong place, and silently accepting 400 would hide it.
+   */
+  offsetMm?: number;
 }
 
 export interface PartOverride {
@@ -105,6 +120,16 @@ export function readMounting(value: unknown): MountingOverride | undefined {
     // Normalised, so a caller cannot store 13 steps and get a different answer
     // from a caller who stored 1. Twelve 30° steps make a full turn.
     out.spinSteps = ((Math.round(spin) % 12) + 12) % 12;
+  }
+  const offset = value['offsetMm'];
+  if (typeof offset === 'number' && Number.isFinite(offset)) {
+    // Rounded AWAY from zero, not with `Math.round`, which rounds half toward
+    // +∞ and so turns −3.25 into −3.2 while turning 3.25 into 3.3. A depth is
+    // symmetric about the wall — the same nudge in and out should round the
+    // same amount — and an asymmetry there is the kind of thing that shows up
+    // as a part that will not return to where it was.
+    const tenths = Math.sign(offset) * Math.round(Math.abs(offset) * 10);
+    out.offsetMm = Math.max(-40, Math.min(40, tenths / 10));
   }
   return out;
 }

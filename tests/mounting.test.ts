@@ -35,6 +35,35 @@ describe('reading a mounting correction', () => {
     expect(readMounting({ wallFaceAxis: 'z', matingEnd: 'low', spinSteps: -1 })?.spinSteps).toBe(11);
   });
 
+  /**
+   * Depth is the fourth degree of freedom and the only one that is not an
+   * orientation: `orient` seats every part with its mating face at z = 0, which
+   * is wrong whenever the detector settled for the flattest surface rather than
+   * the real one, and the part then floats off the wall or sinks into it.
+   */
+  it('keeps a depth offset, to a tenth of a millimetre', () => {
+    expect(readMounting({ wallFaceAxis: 'z', matingEnd: 'low', offsetMm: 2.5 })?.offsetMm).toBe(2.5);
+    expect(readMounting({ wallFaceAxis: 'z', matingEnd: 'low', offsetMm: -3.25 })?.offsetMm)
+      .toBe(-3.3);
+  });
+
+  /**
+   * Clamped rather than accepted. Past 40 mm it is not a seating correction, it
+   * is a part in the wrong place, and taking 400 silently would hide that.
+   */
+  it('clamps an absurd depth instead of accepting it', () => {
+    expect(readMounting({ wallFaceAxis: 'z', matingEnd: 'low', offsetMm: 400 })?.offsetMm).toBe(40);
+    expect(readMounting({ wallFaceAxis: 'z', matingEnd: 'low', offsetMm: -400 })?.offsetMm)
+      .toBe(-40);
+  });
+
+  it('leaves depth unset when it is not a number', () => {
+    expect(readMounting({ wallFaceAxis: 'z', matingEnd: 'low', offsetMm: 'deep' })?.offsetMm)
+      .toBeUndefined();
+    expect(readMounting({ wallFaceAxis: 'z', matingEnd: 'low', offsetMm: NaN })?.offsetMm)
+      .toBeUndefined();
+  });
+
   /** Half-applying one would orient a part off a face nobody chose. */
   it('discards a half-written one rather than guessing the rest', () => {
     expect(readMounting({ wallFaceAxis: 'x' })).toBeUndefined();
@@ -134,9 +163,11 @@ describe('local corrections and the file they become', () => {
 
   /** What is exported must be what `applyOverrides` reads back. */
   it('exports in the shape the app and the scanner already consume', () => {
-    const user = setMounting(none(), 'shelf-1', { wallFaceAxis: 'x', matingEnd: 'high', spinSteps: 2 });
+    const user = setMounting(none(), 'shelf-1', {
+      wallFaceAxis: 'x', matingEnd: 'high', spinSteps: 2, offsetMm: 1.5,
+    });
     const applied = applyOverrides(catalog, JSON.parse(toOverrideFile(user)));
     expect(mountingOf(applied.parts.find((p) => p.id === 'shelf-1')!))
-      .toEqual({ wallFaceAxis: 'x', matingEnd: 'high', spinSteps: 2 });
+      .toEqual({ wallFaceAxis: 'x', matingEnd: 'high', spinSteps: 2, offsetMm: 1.5 });
   });
 });

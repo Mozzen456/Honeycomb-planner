@@ -64,6 +64,7 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
   const [axis, setAxis] = useState<Axis>((current?.wallFaceAxis as Axis) ?? 'z');
   const [end, setEnd] = useState<End>(current?.matingEnd ?? 'low');
   const [spin, setSpin] = useState<number>(current?.spinSteps ?? 0);
+  const [offset, setOffset] = useState<number>(current?.offsetMm ?? 0);
   const [status, setStatus] = useState<string>('Loading the model…');
   /**
    * What the detector says, computed here from the same mesh rather than passed
@@ -294,7 +295,22 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
 
     s.root.add(group);
     s.plate = group;
-  }, [axis, end, spin, status]);
+    // The PART carries the depth offset, not the plate: the plate is the wall
+    // and the wall does not move.
+    //
+    // The sign is the whole subtlety. The plate sits on the chosen face, so
+    // moving AWAY from it is the direction that face does NOT point: with the
+    // mounting face at `low`, the wall is below and out is +, and with it at
+    // `high` the wall is above and out is −. Getting this backwards put "+4 mm
+    // out" visibly INTO the plate, which is the one thing the preview exists to
+    // show you.
+    if (s.part) {
+      const i = AXIS_INDEX[axis];
+      const out = end === 'high' ? -1 : 1;
+      s.part.position.set(0, 0, 0);
+      s.part.position.setComponent(i, out * offset);
+    }
+  }, [axis, end, spin, offset, status]);
 
   // --- picking --------------------------------------------------------------
 
@@ -334,31 +350,44 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
   }, []);
 
   /**
-   * Keyboard on the stage: arrows turn, +/− zoom.
+   * Keyboard on the stage: the arrows move the PART, not the camera.
    *
-   * A pointer drag is fine for a coarse look and hopeless for a small
-   * adjustment. Arrows move in fixed steps, so nudging a view a little is
-   * actually possible and repeatable.
+   * The camera is not what anyone is here to adjust. The job is to get the part
+   * sitting right against the plate, and the two things that need nudging are
+   * the turn about the wall normal and how deep it sits. The camera has the drag
+   * and the six face buttons, which is plenty for looking.
+   *
+   *   ← →   spin about the wall normal, 30° a press
+   *   ↑ ↓   OUT of the wall and INTO it, 0.5 mm a press
+   *   + −   zoom
+   *
+   * A drag is fine for a coarse look and hopeless for a small adjustment, so
+   * these are fixed steps: repeatable, and countable when you are matching a
+   * part to a photograph.
    */
   const onStageKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
-    const s = scene.current;
-    if (s === null) return;
-    const STEP = Math.PI / 18; // 10°
-    const o = orbit.current;
     switch (event.key) {
-      case 'ArrowLeft': o.az += STEP; break;
-      case 'ArrowRight': o.az -= STEP; break;
-      // Up tips the model away from you, down brings its top toward you — the
-      // same sense as the drag, so the two do not contradict each other.
-      case 'ArrowUp': o.el = Math.max(-1.5, o.el - STEP); break;
-      case 'ArrowDown': o.el = Math.min(1.5, o.el + STEP); break;
+      case 'ArrowLeft':
+        event.preventDefault();
+        setSpin((v) => (v + 11) % 12);
+        return;
+      case 'ArrowRight':
+        event.preventDefault();
+        setSpin((v) => (v + 1) % 12);
+        return;
+      case 'ArrowUp':
+        event.preventDefault();
+        setOffset((v) => Math.min(40, Math.round((v + 0.5) * 10) / 10));
+        return;
+      case 'ArrowDown':
+        event.preventDefault();
+        setOffset((v) => Math.max(-40, Math.round((v - 0.5) * 10) / 10));
+        return;
       case '+': case '=': event.preventDefault(); setZoom((z) => Math.max(0.4, z / 1.15)); return;
       case '-': case '_': event.preventDefault(); setZoom((z) => Math.min(3, z * 1.15)); return;
-      default: return;
+      default:
     }
-    event.preventDefault();
-    applyCamera();
-  }, [applyCamera]);
+  }, []);
 
   const onPointerUp = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     const d = drag.current;
@@ -387,7 +416,8 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
     current === undefined ||
     current.wallFaceAxis !== axis ||
     current.matingEnd !== end ||
-    (current.spinSteps ?? 0) !== spin;
+    (current.spinSteps ?? 0) !== spin ||
+    (current.offsetMm ?? 0) !== offset;
 
   return (
     <div className="inspector__scrim" role="dialog" aria-modal="true" aria-label={`Mounting face for ${part.name}`}>
@@ -402,7 +432,9 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
         <p className="inspector__hint">
           Click the face of the model that goes <strong>against the wall</strong>, or press one of
           the buttons below. The plate moves to the face you pick. Drag or use the arrow keys to
-          turn the model; <kbd>+</kbd> and <kbd>−</kbd> zoom.
+          turn the view. The arrow keys move the PART: <kbd>←</kbd><kbd>→</kbd> spin it,
+          <kbd>↑</kbd><kbd>↓</kbd> move it out of the wall and into it. <kbd>+</kbd>
+          <kbd>−</kbd> zoom.
         </p>
 
         <div
@@ -451,6 +483,10 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
             <dt>Spin</dt>
             <dd>{spin * 30}°</dd>
           </div>
+          <div>
+            <dt>Depth</dt>
+            <dd>{offset > 0 ? `+${offset.toFixed(1)}` : offset.toFixed(1)} mm</dd>
+          </div>
         </dl>
 
         <div className="inspector__spin">
@@ -463,6 +499,15 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
           <button type="button" onClick={() => setSpin(0)} disabled={spin === 0}>
             Reset spin
           </button>
+          <button type="button" onClick={() => setOffset((v) => Math.min(40, v + 0.5))}>
+            Out 0.5 mm
+          </button>
+          <button type="button" onClick={() => setOffset((v) => Math.max(-40, v - 0.5))}>
+            In 0.5 mm
+          </button>
+          <button type="button" onClick={() => setOffset(0)} disabled={offset === 0}>
+            Reset depth
+          </button>
         </div>
 
         <footer className="inspector__actions">
@@ -470,7 +515,8 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
             type="button"
             className="app__primary"
             disabled={!dirty}
-            onClick={() => onSave({ wallFaceAxis: axis, matingEnd: end, spinSteps: spin })}
+            onClick={() =>
+              onSave({ wallFaceAxis: axis, matingEnd: end, spinSteps: spin, offsetMm: offset })}
           >
             Save mounting face
           </button>

@@ -104,6 +104,9 @@ async function build(part: CatalogPart): Promise<PartMesh | null> {
   // wall normal that makes the part LOOK right, which is the open frame
   // question (DECISIONS D31) expressed per part until it is settled globally.
   if (mounting?.spinSteps) geometry.rotateZ((Math.PI / 6) * mounting.spinSteps);
+  // Depth, after the spin: a translation along the wall normal does not commute
+  // with a rotation about any other axis, and +Z is the normal by now.
+  if (mounting?.offsetMm) geometry.translate(0, 0, mounting.offsetMm);
   return { geometry, depthMm: detection.projectionMm };
 }
 
