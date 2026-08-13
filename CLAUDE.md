@@ -56,10 +56,14 @@ error that stops panels lining up. Never "simplify" `src/core/constants.ts` into
 consequence: hexagons do not tile *exactly*, so two cells compute a shared corner 0.0003 mm apart —
 any code matching vertices by coordinate must snap first.
 
-**`panelCells` staggers by `-ceil(r/2)`, not `-floor(r/2)`.** Both keep the block rectangular; they
+**`panelCells` staggers by `-floor(q/2)`, not `-ceil(q/2)`.** Both keep the block rectangular; they
 pick opposite chiralities, and six of the seven shipped panels are chiral. `tests/panel-parity.test.ts`
-checks the generated cell map against the footprints measured from the meshes — it is the guard, and
-it also pins the one panel (`mk3s`) that must be hung 180° round.
+checks the generated cell map against the footprints measured from the meshes — it is the guard.
+The parity that keeps a block unmirrored depends on the FRAME: it was `-ceil(r/2)` while the wall
+was pointy-top, and turning the wall flipped it (D35). It was not chosen — `floor` is the value
+that reproduces all seven measured footprints and `ceil` reproduces none. Since the turn no panel
+needs to be hung 180° round, `mk3s` included; that was the old frame's parity disagreeing with how
+the panel is drawn, not a property of the plate.
 
 **`allowRotation` must stay `false`.** 90° is not a symmetry of a hex lattice. With it on, a
 3000 × 2000 wall produced 17,294 mm² of real panel-on-panel overlap. It is also unnecessary: the
@@ -94,18 +98,29 @@ shipped file — you would print 50 plates and find four of them do not fit roun
 Every derivation of a panel's cells must go through `placedPanelCells`, never `panelCells` on the
 raw origin/columns/rows.
 
-**The app draws the wall pointy-top; every photograph of a mounted part shows it flat-top.** This
-is unresolved (PARKED) and it leaks into anything that draws a part. 30° is not a multiple of 60°,
-so no legal rotation reconciles the two, and the renderer therefore treats the two kinds of part
-differently *on purpose*: an accessory keeps its own orientation, because it has a meaningful up
-and an SD-card holder tilted 30° spills its cards; a fitting (insert, fastener, junction bridge) is
-turned by `FITTING_SEAT_RADIANS` in `WallView3D.tsx`, because a hexagon reads the same every 60° and
-one lying across a cell wall is obviously wrong. Both compensations delete themselves the day the
-frame question is settled — do not build more on top of them.
+**The wall is FLAT-TOP, and that is settled (D31/D35).** It used to be drawn pointy-top, 90° from
+the designer's own dimensioned drawings — `wall-honeycomb-part` measured 177 × 170.32 where the
+drawing says 170.32 × 177. `FITTING_SEAT_RADIANS` is gone with it: a mesh loaded from a FILE is
+drawn flat-top and now seats in its hole unturned.
 
-**`meshLibrary` must NOT apply the 90° spin that `toAxial` applies.** `toAxial` spins a flat-drawn
-part's CELLS so its footprint lands on the lattice; applying the same turn to the MESH points an
-SD-card holder's slots sideways. A part is drawn in the orientation it is used.
+The correction did not vanish, it INVERTED, and this is the live trap. Geometry the VIEW builds for
+itself — the collar, the placeholder prisms, the drag ghost — needs the half-face turn that real
+meshes no longer do, because `CylinderGeometry(…, 6).rotateX(90°)` lands its corners on a
+POINTY-top cell. That lives in one helper, `cellPrism` in `WallView3D.tsx`; do not inline a bare
+`CylinderGeometry` for anything that has to sit in a cell. `tests/fitting-seat.test.ts` pins it.
+
+**Never re-derive the embedding. Call `hexToMm` / `mmToHex`.** This is the single most expensive
+mistake in the repo's history. Three separate copies of the inverse survived the frame turn because
+none of them named the function they duplicated: `cellAt` in `WallView3D` (every 3D hit test, drop
+included, landed several cells from the pointer), `visibleCells` in `WallCanvas` (an eighth of an
+empty wall had no grid drawn), and a private `hexRound3`. All three passed a 557-test suite. After
+any change to the frame, grep for `/ ROW_STEP` and `/ PITCH` outside `hex.ts` and read every hit.
+
+**`meshLibrary` must NOT apply the 90° spin that `toAxial` applies.** `toAxial` spins a
+POINTY-drawn part's CELLS so its footprint lands on the flat-top lattice; applying the same turn to
+the MESH points an SD-card holder's slots sideways. A part is drawn in the orientation it is used.
+(It was the FLAT-drawn part that needed spinning while the wall was pointy-top — the rule did not
+change, the wall did.)
 
 **Coverage cannot tell a flange from the end of a block** — a rectangle contains the hexagon
 inscribed in it, so both score ~1.0. `detectWallClip` scores `coverage × hexagonality`, where
@@ -147,8 +162,8 @@ Everything load-bearing is a pure function over an immutable document, tested wi
 The UI is a thin shell.
 
 - **`src/core/constants.ts`** — the measured geometry. Nothing else defines it.
-- **`src/core/hex.ts`** — axial hex math (pointy-top), rotation, occupancy. Every other module
-  depends on its exact semantics.
+- **`src/core/hex.ts`** — axial hex math (flat-top), rotation, occupancy. Every other module
+  depends on its exact semantics, and none of them may re-derive it.
 - **`src/core/tiling.ts`** — panel solver and seam detection.
 - **`src/core/bom.ts`** — parts-list aggregation and `validate()`.
 - **`src/core/store.ts`** — commands, placement rules, undo/redo.
@@ -165,9 +180,10 @@ The UI is a thin shell.
 - **`src/ui/meshLibrary.ts`** — loads a part's STL, orients it to the wall, caches per part id.
   Load-bearing logic despite living in `ui/`: it decides which face goes against the wall.
 - **`src/core/customiser.ts`** — a cut panel as OpenSCAD customiser parameters. The customiser is on
-  the same lattice (23.6 / 20.438 / 8), flat-top where the wall is pointy-top, so the conversion is
-  a 90° turn plus a stagger parity — pinned by round-trip in `tests/customiser.test.ts` for the same
-  reason `panel-parity.test.ts` exists.
+  the same lattice (23.6 / 20.438 / 8) and is flat-top, which the wall now is too, so the conversion
+  is a stagger parity and nothing else — the 90° turn it used to carry is gone (D35). Still pinned
+  by round-trip in `tests/customiser.test.ts`, for the same reason `panel-parity.test.ts` exists:
+  a parity error is a mirrored plate, invisible until it is printed.
 
 Two invariants the whole thing rests on:
 
