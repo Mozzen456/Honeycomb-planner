@@ -74,6 +74,32 @@ async function build(part: CatalogPart): Promise<PartMesh | null> {
     mounting ? { forceAxis: mounting.wallFaceAxis, forceEnd: mounting.matingEnd } : {},
   );
   const geometry = orient(mesh, detection);
+
+  /*
+   * A PANEL drawn pointy-top is spun 90°, unlike everything else.
+   *
+   * `orient` refuses the drawn-orientation spin on purpose, and that rule is
+   * right for an accessory: a part is drawn in the orientation it is USED, and
+   * spinning an SD-card holder points its slots sideways so the cards fall out.
+   * The argument turns on the part having a meaningful up.
+   *
+   * A plate has none. It is a rectangle of honeycomb, and what it must match is
+   * its own CELL BLOCK — which `toAxial` derives by spinning a pointy-drawn
+   * part's cells onto the flat-top lattice. Leave the mesh unspun and the two
+   * disagree by 90°: `wall-honeycomb-part` draws 177 × 170.32 where its block
+   * needs 170.32 × 177.
+   *
+   * It hid because it is invisible on a wall built from ONE pointy panel — every
+   * plate is wrong the same way, the boundaries fall inside a continuous
+   * honeycomb, and it reads as fine. Mix a pointy plate with a flat one, as the
+   * 256 bed does with mk3s and 106x89, and correct plates sit beside turned ones.
+   * Prusa Mini looked right for exactly that reason: it uses one panel type.
+   */
+  if (part.type === 'panel' && detection.drawnOrientation === 'pointy') {
+    // The same +90° `toAxial` applies to the cells: (u, v) -> (−v, u).
+    geometry.rotateZ(Math.PI / 2);
+  }
+
   // The spin is the one part that is not a detection: it is the turn about the
   // wall normal that makes the part LOOK right, which is the open frame
   // question (DECISIONS D31) expressed per part until it is settled globally.
