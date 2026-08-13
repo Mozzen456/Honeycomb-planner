@@ -528,9 +528,12 @@ describe('2 — FULL GARAGE WALL: 1200 x 2400, bed256, 64 panels + 30 accessorie
   });
 
   it('required inserts multiply N x M across 64 panels', () => {
-    expect(qty(bom, 'insert-countersunk')).toBe(24); // single-cell fixings only
+    // 22 and 54 are the fixing PLANNER's output, pinned so a change is visible.
+    // They shifted with the frame turn (D35) because the seams moved, not
+    // because anything about the wall did: same 64 panels, same 5784 cells.
+    expect(qty(bom, 'insert-countersunk')).toBe(22); // single-cell fixings only
     // ...the rest of the wall is held by four-cell inserts bridging the joins.
-    expect(qty(bom, 'insert-for-countersunk-hole-3')).toBe(56);
+    expect(qty(bom, 'insert-for-countersunk-hole-3')).toBe(54);
     expect(qty(bom, 'insert-empty')).toBe(40); // 3x10 + 2x5
     expect(qty(bom, 'insert-m4')).toBe(5); // 1 per box; box used to require none
 
@@ -550,8 +553,8 @@ describe('2 — FULL GARAGE WALL: 1200 x 2400, bed256, 64 panels + 30 accessorie
     // One screw and one plug per fixing, whether it is a single-cell insert or
     // a four-cell one bridging a junction. That is the invariant; the split
     // between the two kinds is the fixing plan's business.
-    expect(shop(bom, WALL_SCREW)).toBe(80);
-    expect(shop(bom, WALL_PLUG)).toBe(80);
+    expect(shop(bom, WALL_SCREW)).toBe(76);
+    expect(shop(bom, WALL_PLUG)).toBe(76);
     expect(shop(bom, WALL_SCREW)).toBe(
       qty(bom, 'insert-countersunk') + qty(bom, 'insert-for-countersunk-hole-3'),
     );
@@ -569,26 +572,26 @@ describe('2 — FULL GARAGE WALL: 1200 x 2400, bed256, 64 panels + 30 accessorie
       // insert's bolt clamps the insert, the box's bolt clamps the box to it.
       { item: 'M4 bolt, 10-16 mm', count: 5 },
       { item: 'M4 nut', count: 5 },
-      { item: WALL_PLUG, count: 80 },
-      { item: WALL_SCREW, count: 80 },
+      { item: WALL_PLUG, count: 76 },
+      { item: WALL_SCREW, count: 76 },
     ]);
     expect(shop(bom, 'M4 nut')).toBe(qty(bom, 'insert-m4'));
   });
 
   it('totals match the hand arithmetic', () => {
-    expect(bom.totals.parts).toBe(219);
+    expect(bom.totals.parts).toBe(215);
     expect(bom.totals.distinctParts).toBe(11);
-    expect(bom.totals.minutes).toBe(38321);
-    expect(bom.totals.grams).toBe(5832.1);
-    expect(bom.totals.metres).toBe(1955.5);
+    expect(bom.totals.minutes).toBe(38154);
+    expect(bom.totals.grams).toBe(5810.8);
+    expect(bom.totals.metres).toBe(1948.35);
   });
 
   it('totals are summed UNROUNDED, not from the rounded lines', () => {
-    // Summing the rounded gram figures on the lines gives 5478.1; the honest
-    // answer is 5477.9. If these are ever equal the accumulator was rounded early.
+    // Summing the rounded gram figures on the lines gives 5811.0; the honest
+    // answer is 5810.8. If these are ever equal the accumulator was rounded early.
     const fromLines = [...bom.printed, ...bom.fasteners].reduce((a, l) => a + l.grams, 0);
-    expect(Number(fromLines.toFixed(1))).toBe(5832.3);
-    expect(bom.totals.grams).toBe(5832.1);
+    expect(Number(fromLines.toFixed(1))).toBe(5811);
+    expect(bom.totals.grams).toBe(5810.8);
 
     const expected = expectedTotals(
       new Map([
@@ -601,16 +604,17 @@ describe('2 — FULL GARAGE WALL: 1200 x 2400, bed256, 64 panels + 30 accessorie
         ['insert-with-m3', 5],
         ['insert-m4', 5],
         ['insert-empty', 40],
-        ['insert-countersunk', 24],
-        ['insert-for-countersunk-hole-3', 56],
+        ['insert-countersunk', 22],
+        ['insert-for-countersunk-hole-3', 54],
       ]),
     );
-    // Exact decimal sums for the fixing-planned wall: 35620.55 min, 5477.93 g,
-    // 1836.9926 m. Recomputed, not adjusted -- the helper re-derives them from
-    // the quantity map above rather than trusting the BOM.
-    expect(expected.rawMinutesHundredths).toBe(3832143);
-    expect(expected.rawGramsHundredths).toBe(583211);
-    expect(expected.rawMetresTenThousandths).toBe(19554980);
+    // Exact decimal sums for the fixing-planned wall: 38154.37 min, 5810.79 g,
+    // 1948.3486 m. Recomputed from src/catalog/catalog.json against the quantity
+    // map above -- NOT read back off the BOM, which is the whole point of this
+    // check. Verified to agree with computeBom to the last digit.
+    expect(expected.rawMinutesHundredths).toBe(3815437);
+    expect(expected.rawGramsHundredths).toBe(581079);
+    expect(expected.rawMetresTenThousandths).toBe(19483486);
     expect(bom.totals.parts).toBe(expected.parts);
     expect(bom.totals.grams).toBe(expected.grams);
     expect(bom.totals.metres).toBe(expected.metres);
@@ -628,23 +632,28 @@ describe('2 — FULL GARAGE WALL: 1200 x 2400, bed256, 64 panels + 30 accessorie
 // 3. DELIBERATELY AWKWARD
 // ===========================================================================
 //
-// Two 4x4 panels (wall-honeycomb-106x89-fixed, 16 cells, requires 4 inserts).
-// panelCells staggers row r by -ceil(r/2), so:
-//   panel A cells: r0 q0..3, r1 q-1..2, r2 q-1..2, r3 q-2..1
-//   panel B cells: r0 q4..7, r1 q3..6,  r2 q3..6,  r3 q2..5
+// Two 4x4 panels (wall-honeycomb-106x89-fixed, 16 cells, requires 4 inserts),
+// STACKED rather than side by side. Every accessory footprint runs down a column
+// on the flat-top wall (D35), so a stacked pair is what a 2-cell accessory can
+// actually straddle -- the old side-by-side pair with horizontal accessories is
+// the same scenario read along the other axis.
 //
-//   x1 hook-to-empty at (3,0)  -> cells (3,0) on A and (4,0) on B  = SEAM CROSS
-//   x2 shelf-1       at (6,0)  -> cells (6,0),(7,0) on B, (8,0) on NOTHING = off-panel
-//   x3 hook-side     at (0,1)  -> (0,1),(1,1)   shares (1,1) with...
-//   x4 box           at (1,1)  -> (1,1),(2,1),(3,1)   ...and that is ALLOWED:
+// panelCells staggers column q by -floor(q/2), so:
+//   panel A cells: q0 r0..3, q1 r0..3, q2 r-1..2, q3 r-1..2
+//   panel B cells: q0 r4..7, q1 r4..7, q2 r3..6,  q3 r3..6
+//
+//   x1 hook-to-empty at (0,3)  -> cells (0,3) on A and (0,4) on B  = SEAM CROSS
+//   x2 shelf-1       at (0,6)  -> cells (0,6),(0,7) on B, (0,8) on NOTHING = off-panel
+//   x3 hook-side     at (1,0)  -> (1,0),(1,1)   shares (1,1) with...
+//   x4 box           at (1,1)  -> (1,1),(1,2),(1,3)   ...and that is ALLOWED:
 //        both are accessories, which bolt on in front of the wall. Two of them
 //        on one cell is what the wall is for, so it raises no issue at all.
 //   x5 ghost-shelf-9000 x2     -> partId not in the catalogue
-//   x6 insert-countersunk-with-m3x3 rotated 1 step at (2,2)
-//        footprint (0,0)(-1,1)(0,1)(-1,2) rotates to (0,0)(-1,0)(-1,1)(-2,1)
-//        -> cells (2,2),(1,2),(1,3),(0,3), all on panel A
-//   x7 insert-hollow-dual at (4,2) -> (4,2),(4,3) on panel B, shares (4,3)...
-//   x8 insert-empty       at (4,3) -> ...which IS an error: both are inserts,
+//   x6 insert-countersunk-with-m3x3 rotated 1 step at (2,0)
+//        footprint (0,0)(1,-1)(1,0)(2,-1) rotates to (0,0)(1,0)(0,1)(1,1)
+//        -> cells (2,0),(3,0),(2,1),(3,1), all on panel A
+//   x7 insert-hollow-dual at (1,3) -> (1,3),(2,2) on panel A, shares (2,2)...
+//   x8 insert-empty       at (2,2) -> ...which IS an error: both are inserts,
 //        and there is only one hexagonal hole. One insert per hole.
 //
 // HAND ARITHMETIC (per-unit figures read from src/catalog/catalog.json)
@@ -664,21 +673,21 @@ describe('2 — FULL GARAGE WALL: 1200 x 2400, bed256, 64 panels + 30 accessorie
 
 const L3_PANELS: PlacedPanel[] = [
   { id: 'pA', partId: 'wall-honeycomb-106x89-fixed', origin: { q: 0, r: 0 }, columns: 4, rows: 4 },
-  { id: 'pB', partId: 'wall-honeycomb-106x89-fixed', origin: { q: 4, r: 0 }, columns: 4, rows: 4 },
+  { id: 'pB', partId: 'wall-honeycomb-106x89-fixed', origin: { q: 0, r: 4 }, columns: 4, rows: 4 },
 ];
 
 const L3_ITEMS: PlacedItem[] = [
-  item('seam', 'hook-to-empty', { q: 3, r: 0 }),
-  item('hangs', 'shelf-1', { q: 6, r: 0 }),
-  item('over1', 'hook-side', { q: 0, r: 1 }),
+  item('seam', 'hook-to-empty', { q: 0, r: 3 }),
+  item('hangs', 'shelf-1', { q: 0, r: 6 }),
+  item('over1', 'hook-side', { q: 1, r: 0 }),
   item('over2', 'box', { q: 1, r: 1 }),
-  item('ghost1', 'ghost-shelf-9000', { q: 0, r: 3 }),
-  item('ghost2', 'ghost-shelf-9000', { q: 1, r: 3 }),
-  item('spun', 'insert-countersunk-with-m3x3', { q: 2, r: 2 }, 1),
+  item('ghost1', 'ghost-shelf-9000', { q: 3, r: -1 }),
+  item('ghost2', 'ghost-shelf-9000', { q: 2, r: -1 }),
+  item('spun', 'insert-countersunk-with-m3x3', { q: 2, r: 0 }, 1),
   // Index 6 above is load-bearing for the rotation test below; the exclusive
   // pair is appended so it stays there.
-  item('plug1', 'insert-hollow-dual', { q: 4, r: 2 }),
-  item('plug2', 'insert-empty', { q: 4, r: 3 }),
+  item('plug1', 'insert-hollow-dual', { q: 1, r: 3 }),
+  item('plug2', 'insert-empty', { q: 2, r: 2 }),
 ];
 
 const L3 = doc({
@@ -697,8 +706,11 @@ describe('3 — AWKWARD: seams, edges, overlaps, a missing part and a rotation',
   });
 
   it('the rotated 4-cell fastener lands on the cells the hex maths says it does', () => {
+    // Footprint (0,0)(1,-1)(1,0)(2,-1), turned one 60° step by hexRotate's
+    // (q,r) -> (-r, q+r), gives (0,0)(1,0)(0,1)(1,1); anchored at (2,0) that is
+    // the square below. Worked from the rotation rule, not read off the code.
     const cells = itemCells(L3_ITEMS[6]!, catalog).map(hexKey).sort();
-    expect(cells).toEqual(['0,3', '1,2', '1,3', '2,2'].sort());
+    expect(cells).toEqual(['2,0', '2,1', '3,0', '3,1'].sort());
   });
 
   it('quantities are right despite every one of the awkward cases', () => {
@@ -730,7 +742,7 @@ describe('3 — AWKWARD: seams, edges, overlaps, a missing part and a rotation',
     const off = bom.issues.filter((i) => i.code === 'off-panel');
     expect(off.length).toBe(1);
     expect(off[0]!.itemIds).toEqual(['hangs']);
-    expect(off[0]!.cells!.map(hexKey)).toEqual(['8,0']);
+    expect(off[0]!.cells!.map(hexKey)).toEqual(['0,8']);
   });
 
   it('the two inserts sharing a hole are reported, with the one shared cell', () => {
@@ -740,7 +752,7 @@ describe('3 — AWKWARD: seams, edges, overlaps, a missing part and a rotation',
     expect(clash.length).toBe(1);
     expect(clash[0]!.level).toBe('error');
     expect(clash[0]!.itemIds.sort()).toEqual(['plug1', 'plug2']);
-    expect(clash[0]!.cells!.map(hexKey)).toEqual(['4,3']);
+    expect(clash[0]!.cells!.map(hexKey)).toEqual(['2,2']);
   });
 
   it('the two overlapping ACCESSORIES are not reported AS AN OVERLAP', () => {
@@ -753,24 +765,24 @@ describe('3 — AWKWARD: seams, edges, overlaps, a missing part and a rotation',
     expect(a.filter((k) => b.includes(k))).toEqual(['1,1']);
 
     // Neither is reported for sharing. Whatever else is said about them is
-    // about a different property — one of the two does straddle a panel seam,
-    // which is a separate, legal-but-worth-knowing fact and a warning, not an
-    // error (P8 item 4, now fixed).
+    // about a different property, and is a warning rather than an error
+    // (P8 item 4, now fixed). With the panels stacked, both of these sit wholly
+    // inside panel A, so neither straddles the join — only `seam` does.
     for (const id of ['over1', 'over2']) {
       const mine = bom.issues.filter((i) => i.itemIds.includes(id));
       expect(mine.every((i) => i.code !== 'overlap')).toBe(true);
       expect(mine.every((i) => i.level === 'warning')).toBe(true);
     }
     const seam = bom.issues.filter((i) => i.code === 'crosses-seam');
-    expect(seam.map((i) => i.itemIds[0]).sort()).toEqual(['over2', 'seam']);
+    expect(seam.map((i) => i.itemIds[0]).sort()).toEqual(['seam']);
   });
 
   it('the two panels do not overlap and no spurious issues appear', () => {
-    // The two crosses-seam warnings are the box and the hook that genuinely
-    // straddle the join between the fixture's two panels. `panel-overlap` is
-    // absent, which is the point of this case.
+    // One crosses-seam warning: the hook that genuinely straddles the join
+    // between the fixture's two stacked panels. `panel-overlap` is absent,
+    // which is the point of this case.
     expect(codes(bom.issues)).toEqual([
-      'crosses-seam', 'crosses-seam', 'off-panel', 'overlap', 'unknown-part',
+      'crosses-seam', 'off-panel', 'overlap', 'unknown-part',
     ]);
   });
 
@@ -828,8 +840,9 @@ describe('3 — AWKWARD: seams, edges, overlaps, a missing part and a rotation',
 
 describe('4 — seam crossing', () => {
   it('crossesSeam() is TRUE for an accessory spanning two panels, FALSE for one that does not', () => {
-    const spanning = itemCells(item('x', 'hook-to-empty', { q: 3, r: 0 }), catalog);
-    expect(spanning.map(hexKey)).toEqual(['3,0', '4,0']);
+    // L3's panels are stacked, so the join runs between r=3 and r=4 in column 0.
+    const spanning = itemCells(item('x', 'hook-to-empty', { q: 0, r: 3 }), catalog);
+    expect(spanning.map(hexKey)).toEqual(['0,3', '0,4']);
     expect(crossesSeam(spanning, L3_PANELS)).toBe(true);
 
     const inside = itemCells(item('y', 'hook-to-empty', { q: 0, r: 0 }), catalog);
@@ -838,7 +851,7 @@ describe('4 — seam crossing', () => {
 
   it('the store warns — not refuses — when a drop spans a seam', () => {
     const store = new Store(doc({ panels: L3_PANELS, items: [] }), catalog);
-    const cells = placeFootprint(part('hook-to-empty').footprint, { q: 3, r: 0 }, 0);
+    const cells = placeFootprint(part('hook-to-empty').footprint, { q: 0, r: 3 }, 0);
     const res = store.checkPlacement(cells);
     expect(res.ok).toBe(true);
     expect(res.warnings ?? []).toEqual([
@@ -852,29 +865,29 @@ describe('4 — seam crossing', () => {
     expect(store.checkPlacement(cells).warnings ?? []).toEqual([]);
   });
 
-  it('fires on the real 64-panel garage wall, across a vertical seam', () => {
+  it('fires on the real 64-panel garage wall, across a HORIZONTAL seam', () => {
     const tiled = garageTiling().panels;
-    // Band 0 starts at q=1 (bandBump), so the bottom band's panels hold columns
-    // 1..10, 11..20, and so on. shelf-1 at q=9 covers 9,10,11: the first two on
-    // the first panel, the third on the second.
-    const cells = itemCells(item('s', 'shelf-1', { q: 9, r: 0 }), catalog);
-    expect(cells.map(hexKey)).toEqual(['9,0', '10,0', '11,0']);
+    // Bands run vertically now (D35). Band 0 starts at r=1 (bandBump), so its
+    // panels hold rows 1..10, 11..20, and so on up column 0. shelf-1 at r=9
+    // covers 9,10,11: the first two on the first panel, the third on the second.
+    const cells = itemCells(item('s', 'shelf-1', { q: 0, r: 9 }), catalog);
+    expect(cells.map(hexKey)).toEqual(['0,9', '0,10', '0,11']);
     expect(crossesSeam(cells, tiled)).toBe(true);
     // ...and one that stops short of the seam does not fire.
-    expect(crossesSeam(itemCells(item('s', 'shelf-1', { q: 5, r: 0 }), catalog), tiled)).toBe(false);
+    expect(crossesSeam(itemCells(item('s', 'shelf-1', { q: 0, r: 5 }), catalog), tiled)).toBe(false);
   });
 
-  it('fires across a horizontal BAND seam, where the half-pitch stagger matters', () => {
+  it('fires across a VERTICAL band seam, where the half-pitch stagger matters', () => {
     const tiled = garageTiling().panels;
-    // Band 0 is rows 0..9 with its panels' origins at q=1, 11, 21...; band 1
-    // starts at row 10 and its origins are at q=-4, 6, 16... A part spanning
-    // rows 9 and 10 therefore straddles two panels whose q origins do not line
-    // up — the case a pixel-rectangle comparison would get wrong.
-    const cells = itemCells(item('d', 'insert-hollow-dual', { q: 0, r: 9 }), catalog);
-    expect(cells.map(hexKey)).toEqual(['0,9', '0,10']);
+    // Band 0 is columns 0..9 with its panels' origins at r=1, 11, 21...; band 1
+    // starts at column 10 and its origins are at r=-4, 6, 16... A part spanning
+    // columns 9 and 10 therefore straddles two panels whose r origins do not
+    // line up — the case a pixel-rectangle comparison would get wrong.
+    const cells = itemCells(item('d', 'insert-hollow-dual', { q: 9, r: 0 }), catalog);
+    expect(cells.map(hexKey)).toEqual(['9,0', '10,-1']);
     expect(crossesSeam(cells, tiled)).toBe(true);
 
-    const inside = itemCells(item('d', 'insert-hollow-dual', { q: 0, r: 5 }), catalog);
+    const inside = itemCells(item('d', 'insert-hollow-dual', { q: 1, r: 5 }), catalog);
     expect(crossesSeam(inside, tiled)).toBe(false);
   });
 
@@ -1220,15 +1233,15 @@ describe('7 — findings (documented as tests so they cannot regress silently)',
     // cells were free. Fill every cell and the BOM cheerfully asked for 4
     // inserts with nowhere to go, and raised nothing.
     //
-    // The cell list is panel A's real footprint under the -ceil(r/2) stagger:
-    // rows 1 and 3 lean half a pitch LEFT of the row below. Using the old
-    // -floor(r/2) parity here put two of the sixteen off the panel and produced
-    // off-panel errors that had nothing to do with the finding.
+    // The cell list is panel A's real footprint under the -floor(q/2) stagger
+    // of the flat-top frame (D35): columns 2 and 3 lean half a pitch UP from the
+    // pair beside them. Getting the parity wrong here puts cells off the panel
+    // and produces off-panel errors that have nothing to do with the finding.
     const panelCellList: Hex[] = [
-      { q: 0, r: 0 }, { q: 1, r: 0 }, { q: 2, r: 0 }, { q: 3, r: 0 },
-      { q: -1, r: 1 }, { q: 0, r: 1 }, { q: 1, r: 1 }, { q: 2, r: 1 },
-      { q: -1, r: 2 }, { q: 0, r: 2 }, { q: 1, r: 2 }, { q: 2, r: 2 },
-      { q: -2, r: 3 }, { q: -1, r: 3 }, { q: 0, r: 3 }, { q: 1, r: 3 },
+      { q: 0, r: 0 }, { q: 0, r: 1 }, { q: 0, r: 2 }, { q: 0, r: 3 },
+      { q: 1, r: 0 }, { q: 1, r: 1 }, { q: 1, r: 2 }, { q: 1, r: 3 },
+      { q: 2, r: -1 }, { q: 2, r: 0 }, { q: 2, r: 1 }, { q: 2, r: 2 },
+      { q: 3, r: -1 }, { q: 3, r: 0 }, { q: 3, r: 1 }, { q: 3, r: 2 },
     ];
     const panelA: PlacedPanel = {
       id: 'pA',
