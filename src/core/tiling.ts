@@ -170,89 +170,94 @@ function compareVariants(a: Variant, b: Variant): number {
 }
 
 /**
- * Highest absolute lattice row whose cells still sit inside the wall.
- * Cell (q, r) has its centre at y = ROW_STEP·r + MARGIN_Y in wall millimetres
- * (the lattice is anchored so the bottom-left panel's outline starts at y = 0),
- * so its top corner is at ROW_STEP·r + 2·MARGIN_Y. Negative means "no rows".
+ * Highest absolute lattice COLUMN whose cells still sit inside the wall.
+ *
+ * Cell (q, r) has its centre at x = ROW_STEP·q + MARGIN_X in wall millimetres
+ * (the lattice is anchored so the bottom-left panel's outline starts at x = 0),
+ * so its right corner is at ROW_STEP·q + 2·MARGIN_X. Negative means "no columns".
+ *
+ * A band runs VERTICALLY since the wall turned flat-top (D35): panels stack
+ * along q across the wall, and each band is a full-height strip of columns. Every
+ * name in this section transposed with the frame — the arithmetic is the same
+ * argument, read along the other axis.
  */
-function maxRowIndex(wallHeightMm: number): number {
-  return Math.floor((wallHeightMm - 2 * MARGIN_Y) / ROW_STEP + EPS);
+function maxColumnIndex(wallWidthMm: number): number {
+  return Math.floor((wallWidthMm - 2 * MARGIN_X) / ROW_STEP + EPS);
 }
 
-/** Half-pitch inset of a band that begins at absolute row `r0`: 0 or 0.5 pitches. */
-const bandShift = (r0: number): number => r0 / 2 - Math.floor(r0 / 2);
+/** Half-pitch inset of a band that begins at absolute column `q0`: 0 or 0.5 pitches. */
+const bandShift = (q0: number): number => q0 / 2 - Math.floor(q0 / 2);
 
 /**
- * Half a pitch that odd rows overhang to the LEFT of the even rows.
+ * Half a pitch that odd columns overhang ABOVE the even columns.
  *
- * `panelCells` staggers by −ceil(r/2), which is the parity the meshes actually
+ * `panelCells` staggers by −floor(q/2), which is the parity the meshes actually
  * use (tests/panel-parity.test.ts checks the generated map against the measured
- * footprints). Odd rows therefore sit half a pitch LEFT of even ones, not right.
- * With the opposite assumption a band's leftmost cells ran 11.8 mm off the edge
- * of the wall.
+ * footprints). Odd columns therefore sit half a pitch UP from even ones. With the
+ * opposite assumption a band's topmost cells ran 11.8 mm off the edge of the wall.
  */
-const leftOverhang = (bandRows: number): number => (bandRows >= 2 ? 0.5 : 0);
+const topOverhang = (bandColumns: number): number => (bandColumns >= 2 ? 0.5 : 0);
 
 /**
- * Whole-pitch nudge that keeps a band's leftmost cell on the wall.
+ * Whole-pitch nudge that keeps a band's topmost cell on the wall.
  *
- * `q` is an integer, so the only correction available is a whole pitch. A band
- * whose row parity puts its odd rows outside the wall is pushed one column
- * right; the cost is 11.8 mm of unused wall on that band, which is honest and
- * bounded, whereas the alternative is panels that overhang.
+ * `r` is an integer, so the only correction available is a whole pitch. A band
+ * whose column parity puts its odd columns off the wall is pushed one row down;
+ * the cost is 11.8 mm of unused wall on that band, which is honest and bounded,
+ * whereas the alternative is panels that overhang.
  */
-const bandBump = (r0: number, bandRows: number): number =>
-  (leftOverhang(bandRows) > bandShift(r0) ? 1 : 0);
+const bandBump = (q0: number, bandColumns: number): number =>
+  (topOverhang(bandColumns) > bandShift(q0) ? 1 : 0);
 
 /**
- * How many columns wide a band may be before it overruns the wall.
+ * How many rows tall a band may be before it overruns the wall.
  *
- * The rightmost material now belongs to an EVEN row (odd rows lean left), so the
- * limit is set by the band's own left offset after any bump.
+ * The topmost material belongs to an ODD column (odd columns lean up), so the
+ * limit is set by the band's own offset after any bump.
  */
-function maxColumnsInBand(wallWidthMm: number, r0: number, bandRows: number): number {
-  const shift = bandShift(r0) + bandBump(r0, bandRows);
-  // PITCH·(shift + columns − 1) + 2·MARGIN_X <= wallWidthMm
-  const columns = (wallWidthMm - 2 * MARGIN_X) / PITCH - shift + 1;
-  return Math.max(0, Math.floor(columns + EPS));
+function maxRowsInBand(wallHeightMm: number, q0: number, bandColumns: number): number {
+  const shift = bandShift(q0) + bandBump(q0, bandColumns);
+  // PITCH·(shift + rows − 1) + 2·MARGIN_Y <= wallHeightMm
+  const rows = (wallHeightMm - 2 * MARGIN_Y) / PITCH - shift + 1;
+  return Math.max(0, Math.floor(rows + EPS));
 }
 
 /**
- * Lay one band of uniform height across the wall, left to right, always taking the
- * widest candidate that still fits the space left. Falling back down the list is
+ * Lay one band of uniform width up the wall, bottom to top, always taking the
+ * tallest candidate that still fits the space left. Falling back down the list is
  * what stops us leaving a gap a smaller panel could have filled.
  */
 function fillBand(
-  r0: number,
-  bandRows: number,
-  byRows: ReadonlyMap<number, readonly Variant[]>,
-  wallWidthMm: number,
+  q0: number,
+  bandColumns: number,
+  byColumns: ReadonlyMap<number, readonly Variant[]>,
+  wallHeightMm: number,
 ): TiledPanel[] {
-  const usable = byRows.get(bandRows);
+  const usable = byColumns.get(bandColumns);
   if (usable === undefined) return [];
 
-  const qOrigin = -Math.floor(r0 / 2) + bandBump(r0, bandRows);
-  const maxColumns = maxColumnsInBand(wallWidthMm, r0, bandRows);
+  const rOrigin = -Math.floor(q0 / 2) + bandBump(q0, bandColumns);
+  const maxRows = maxRowsInBand(wallHeightMm, q0, bandColumns);
 
   const out: TiledPanel[] = [];
-  let col = 0;
+  let row = 0;
   for (;;) {
-    const room = maxColumns - col;
-    const pick = usable.find((v) => v.columns <= room);
+    const room = maxRows - row;
+    const pick = usable.find((v) => v.rows <= room);
     if (pick === undefined) break;
     out.push({
       partId: pick.partId,
-      origin: { q: qOrigin + col, r: r0 },
+      origin: { q: q0, r: rOrigin + row },
       columns: pick.columns,
       rows: pick.rows,
     });
-    col += pick.columns;
+    row += pick.rows;
   }
   return out;
 }
 
 interface BandPlan {
-  rows: number;
+  columns: number;
   cells: number;
   panels: TiledPanel[];
 }
@@ -260,8 +265,8 @@ interface BandPlan {
 /**
  * Band plans are compared on cells covered first, then on panel count — given two
  * plans that cover the same wall, the one made of fewer, larger pieces is the one
- * with fewer seams. `rows` breaks the last tie and is unique per plan, so the order
- * is total.
+ * with fewer seams. `columns` breaks the last tie and is unique per plan, so the
+ * order is total.
  */
 function isBetterBand(candidate: BandPlan, incumbent: BandPlan | null): boolean {
   if (incumbent === null) return true;
@@ -269,16 +274,16 @@ function isBetterBand(candidate: BandPlan, incumbent: BandPlan | null): boolean 
   if (candidate.panels.length !== incumbent.panels.length) {
     return candidate.panels.length < incumbent.panels.length;
   }
-  return candidate.rows > incumbent.rows;
+  return candidate.columns > incumbent.columns;
 }
 
 /** Is cell `c` inside `p`? The arithmetic inverse of `panelCells`, allocation-free. */
 function panelContains(p: TiledPanel, c: Hex): boolean {
-  const dr = c.r - p.origin.r;
-  if (dr < 0 || dr >= p.rows) return false;
-  // Mirrors panelCells' -ceil(r/2) stagger; floor here would mis-test odd rows.
-  const dc = c.q - p.origin.q + Math.ceil(dr / 2);
-  return dc >= 0 && dc < p.columns;
+  const dq = c.q - p.origin.q;
+  if (dq < 0 || dq >= p.columns) return false;
+  // Mirrors panelCells' -floor(q/2) stagger; ceil here would mis-test odd columns.
+  const dr = c.r - p.origin.r + Math.floor(dq / 2);
+  return dr >= 0 && dr < p.rows;
 }
 
 function emptyResult(widthMm: number, heightMm: number, warnings: string[]): TilingResult {
@@ -383,37 +388,38 @@ export function solveTiling(req: TilingRequest): TilingResult {
 
   variants.sort(compareVariants);
 
-  const byRows = new Map<number, Variant[]>();
+  const byColumns = new Map<number, Variant[]>();
   for (const v of variants) {
-    const bucket = byRows.get(v.rows);
-    if (bucket === undefined) byRows.set(v.rows, [v]);
+    const bucket = byColumns.get(v.columns);
+    if (bucket === undefined) byColumns.set(v.columns, [v]);
     else bucket.push(v);
   }
-  // Ascending so band-height selection is order-independent; `isBetterBand` decides.
-  const rowCounts = [...byRows.keys()].sort((a, b) => a - b);
+  // Ascending so band-width selection is order-independent; `isBetterBand` decides.
+  const columnCounts = [...byColumns.keys()].sort((a, b) => a - b);
 
-  // --- band-by-band fill, bottom to top ----------------------------------
-  const rMax = maxRowIndex(wallHeightMm);
+  // --- band-by-band fill, left to right -----------------------------------
+  // Bands run vertically since the wall turned flat-top (D35).
+  const qMax = maxColumnIndex(wallWidthMm);
   const panels: TiledPanel[] = [];
-  let r0 = 0;
+  let q0 = 0;
 
-  while (r0 <= rMax) {
-    const remainingRows = rMax - r0 + 1;
+  while (q0 <= qMax) {
+    const remainingColumns = qMax - q0 + 1;
     let best: BandPlan | null = null;
 
-    for (const rows of rowCounts) {
-      if (rows > remainingRows) break; // ascending, so nothing later fits either
-      const band = fillBand(r0, rows, byRows, wallWidthMm);
+    for (const columns of columnCounts) {
+      if (columns > remainingColumns) break; // ascending, so nothing later fits either
+      const band = fillBand(q0, columns, byColumns, wallHeightMm);
       if (band.length === 0) continue;
       let cells = 0;
       for (const p of band) cells += p.columns * p.rows;
-      const plan: BandPlan = { rows, cells, panels: band };
+      const plan: BandPlan = { columns, cells, panels: band };
       if (isBetterBand(plan, best)) best = plan;
     }
 
     if (best === null) break;
     for (const p of best.panels) panels.push(p);
-    r0 += best.rows;
+    q0 += best.columns;
   }
 
   if (panels.length === 0) {

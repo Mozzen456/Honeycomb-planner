@@ -9,17 +9,25 @@
  * left and right, and neighbouring cells in a row are PITCH apart along X.
  */
 
-/** Centre-to-centre distance between horizontally adjacent cells. Exact. */
+/**
+ * Centre-to-centre distance between cells sharing a column — VERTICALLY adjacent
+ * on a flat-top wall. Exact.
+ *
+ * Named for the frame it was measured in, where it was the horizontal pitch. The
+ * wall is drawn flat-top now (DECISIONS D31/D35), so it runs down a column; the
+ * number is a property of the lattice and does not change with the frame.
+ */
 export const PITCH = 23.6;
 
 /**
- * Centre-to-centre distance between rows. A typed constant in the source CAD,
- * NOT PITCH·√3/2 (= 20.43820). The 0.0002 mm difference accumulates to 0.0034 mm
- * across an 18-column panel, which is exactly the drift that stops panels lining up.
+ * Centre-to-centre distance between adjacent COLUMNS. A typed constant in the
+ * source CAD, NOT PITCH·√3/2 (= 20.43820). The 0.0002 mm difference accumulates
+ * to 0.0034 mm across an 18-column panel, which is exactly the drift that stops
+ * panels lining up.
  */
 export const ROW_STEP = 20.438;
 
-/** Horizontal offset of each row relative to the one below. Exactly PITCH/2. */
+/** Vertical offset of each column relative to its neighbour. Exactly PITCH/2. */
 export const STAGGER = 11.8;
 
 /** Panel thickness. Identical across all seven shipped panels. */
@@ -27,11 +35,16 @@ export const PANEL_DEPTH = 8.0;
 
 /**
  * Distance from an edge cell's centre to the panel boundary.
- * Along X the boundary sits at a hexagon flat (PITCH/2); along Y it sits at a
- * hexagon corner (PITCH/√3). Both verified against exact boundary vertices.
+ *
+ * Which axis carries which number is a property of the FRAME, and the frame
+ * turned (D35). On a flat-top wall the left and right boundaries sit at a
+ * hexagon corner (PITCH/√3) and the top and bottom at a flat (PITCH/2) — the
+ * opposite way round from the pointy-top frame these were first measured in.
+ * The two values themselves are unchanged and still verified against exact
+ * boundary vertices; only their axes swapped.
  */
-export const MARGIN_X = 11.8;
-export const MARGIN_Y = 13.6254664;
+export const MARGIN_X = 13.6254664;
+export const MARGIN_Y = 11.8;
 
 /**
  * The two hexagon profiles that matter, as across-flats widths in mm.

@@ -52,8 +52,19 @@ wall 90° from the designer's own drawings.
 
 ## Worklist
 
-- [ ] **P9a — turn the lattice. This is the whole objective; everything else is downstream.**
-      **THE TRANSFORM IS NOW PINNED BY DATA — do not re-derive it, and do not "simplify" it.**
+- [~] **P9a — turn the lattice. IN FLIGHT, tree is RED (509/556). Do not start over.**
+      **THE TRANSFORM IS PINNED BY DATA — do not re-derive it, and do not "simplify" it.**
+
+      DONE: `constants.ts` margins swapped; `hex.ts` `hexToMm`/`mmToHex`/`hexCorners`/`panelCells`
+      turned; `catalog.json` migrated by `tools/turn_frame.py` (clean diff — only q/r, columns/rows
+      and a new `frame: "flat-top-v1"` marker; every `print` estimate untouched);
+      `tiling.ts` transposed to vertical bands; `panel-parity.test.ts` green and IMPROVED — all 7
+      panels now match as drawn, where `mk3s` used to need a 180°.
+
+      LEFT, in dependency order: `src/core/detect.ts` + `tools/footprint.py` must emit new-frame
+      labels together; `customiser.ts` (its 90°+parity conversion changes — round-trip is the
+      chirality guard); both renderers; delete `FITTING_SEAT_RADIANS`; then the ~47 red tests, which
+      are overwhelmingly hard-coded old-frame `(q,r)` literals rather than logic faults.
 
           relabel:   (q, r)  ->  (-r, q + r)
           embedding: x = ROW_STEP * q,  y = PITCH * (r + q/2)
@@ -135,3 +146,18 @@ wall 90° from the designer's own drawings.
   chose: **`(−r, q+r)` with a `floor` stagger matches all 7 panels**, while `(r,−q−r)` matches 6 and
   fails on exactly `mk3s`, the panel CLAUDE.md flags as needing a 180°. Transform recorded in the
   worklist above. No code changed yet; `npm test` 556 and `tsc` still green.
+- 2026-08-13 — Pass 5, the turn itself. Core geometry is turned and the catalogue is migrated;
+  **the tree is deliberately RED at 509/556 and this is a mid-migration checkpoint, not a finished
+  state.** `tools/turn_frame.py` relabels all 51 footprints by the pinned `(q,r)->(-r,q+r)` with no
+  mesh and no slicer, so every committed `print` estimate survives byte-for-byte and this machine's
+  PrusaSlicer hash is never baked in; the diff is only q/r, columns/rows and a `frame` marker.
+  Caught that the committed `catalog.json` is CRLF — writing LF rewrote all 7315 lines and buried
+  the 1902 real changes, so the migration now preserves the file's own endings.
+  **`panel-parity.test.ts` is green and stronger than before: all seven panels match as drawn, where
+  `mk3s` previously needed a 180°.** That panel was never an oddity in the plate — it was the
+  pointy-top stagger parity disagreeing with how the panel is drawn, and the turn removed the cause.
+  `tiling.ts` transposed to vertical bands, 28/29. The one failure is NOT the transposition: with
+  both variants offered the band chooser takes a 10-column band (480 cells) over an 8-column one
+  (400), though 8-column bands tile the height exactly and would cover 5600 cells against 5280. That
+  is a pre-existing greedy limitation in `isBetterBand`, unmasked by the turn rather than caused by
+  it, and `allowRotation` is `false` in the app regardless. Recorded, not tuned away.

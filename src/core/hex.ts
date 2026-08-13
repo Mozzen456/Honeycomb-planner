@@ -140,10 +140,21 @@ export interface Point {
   y: number;
 }
 
-/** Centre of a cell in wall millimetres. */
+/**
+ * Centre of a cell in wall millimetres. FLAT-TOP (DECISIONS D35).
+ *
+ * Columns step `ROW_STEP` across; cells within a column step `PITCH` down, and
+ * each column sits half a `PITCH` below its neighbour. That is the designer's
+ * own frame: `23.6` vertical and `40.88 = 2 × ROW_STEP` horizontal are the two
+ * numbers dimensioned on the insert drawing (HSW-SPEC §10.2).
+ *
+ * The previous embedding was this turned 90°, which is why every panel measured
+ * transposed against its own source — `wall-honeycomb-part` came out 177 × 170.32
+ * where the drawing says 170.32 × 177.
+ */
 export const hexToMm = (h: Hex): Point => ({
-  x: PITCH * (h.q + h.r / 2),
-  y: ROW_STEP * h.r,
+  x: ROW_STEP * h.q,
+  y: PITCH * (h.r + h.q / 2),
 });
 
 /**
@@ -154,8 +165,8 @@ export const hexToMm = (h: Hex): Point => ({
  * corners, which shows up as a drop landing one cell off.
  */
 export function mmToHex(p: Point): Hex {
-  const r = p.y / ROW_STEP;
-  const q = p.x / PITCH - r / 2;
+  const q = p.x / ROW_STEP;
+  const r = p.y / PITCH - q / 2;
   return hexRound(q, r);
 }
 
@@ -181,13 +192,19 @@ export function hexRound(qf: number, rf: number): Hex {
   return { q: x, r: z };
 }
 
-/** The six corners of a cell, in wall millimetres, starting at the top corner. */
+/**
+ * The six corners of a cell, in wall millimetres, starting at the right-hand
+ * corner. FLAT-TOP: a corner at 0° and 180°, a flat edge across the top.
+ *
+ * The `− 90` that used to be here is what made the cell pointy-top. It went with
+ * the frame (D35); every reference photograph shows a flat top.
+ */
 export function hexCorners(h: Hex, acrossFlats: number = PITCH): Point[] {
   const c = hexToMm(h);
   const R = acrossFlats / Math.sqrt(3);
   const pts: Point[] = [];
   for (let i = 0; i < 6; i++) {
-    const a = (Math.PI / 180) * (60 * i - 90);
+    const a = (Math.PI / 180) * (60 * i);
     pts.push({ x: c.x + R * Math.cos(a), y: c.y + R * Math.sin(a) });
   }
   return pts;
@@ -199,11 +216,15 @@ export function hexCorners(h: Hex, acrossFlats: number = PITCH): Point[] {
 
 /**
  * The cells of a rectangular panel: `columns` × `rows`, staggered, with the
- * lowest row starting at `origin`.
+ * left-hand column starting at `origin`.
  *
- * The stagger is the whole point — row r is offset half a pitch from row r-1,
- * and in axial coordinates that offset is already baked into the basis, so a
- * "rectangle" on the wall is a sheared range in (q, r).
+ * The stagger is the whole point — column q is offset half a pitch from column
+ * q−1, and in axial coordinates that offset is already baked into the basis, so
+ * a "rectangle" on the wall is a sheared range in (q, r).
+ *
+ * Built along q, and the shear is undone on r. Both are consequences of the
+ * flat-top frame (D35): a column is now the vertical run, so the block is
+ * generated column by column.
  */
 export function panelCells(origin: Hex, columns: number, rows: number): Hex[] {
   // `c < columns` never terminates for +Infinity, so a corrupted document could
@@ -213,20 +234,23 @@ export function panelCells(origin: Hex, columns: number, rows: number): Hex[] {
   if (cols <= 0 || rowCount <= 0) return [];
 
   const out: Hex[] = [];
-  for (let r = 0; r < rowCount; r++) {
+  for (let c = 0; c < cols; c++) {
     // Undo half the axial shear so the block stays visually rectangular.
     //
-    // CEIL, not floor. Both keep the block rectangular, but they choose
-    // opposite parities: with floor, odd rows sit half a pitch to the RIGHT of
-    // the mesh's own cells, which mirrors the panel. Six of the seven shipped
-    // panels are chiral, so the generated cell map was a mirror image of the
-    // part — and a panel is not symmetric (one face is the 20 mm insert throat,
-    // the other the 22 mm mouth), so every per-cell instruction landed on the
-    // wrong side. Verified against the measured footprints in
-    // tests/panel-parity.test.ts.
-    const qShift = -Math.ceil(r / 2);
-    for (let c = 0; c < cols; c++) {
-      out.push({ q: origin.q + c + qShift, r: origin.r + r });
+    // FLOOR, not ceil — and the flip is not cosmetic. Both keep the block
+    // rectangular but they choose opposite parities, and the wrong one MIRRORS
+    // the panel: a panel is not symmetric (one face is the 20 mm insert throat,
+    // the other the 22 mm mouth), so every per-cell instruction would land on
+    // the wrong side, invisibly until it is printed.
+    //
+    // It was CEIL in the pointy-top frame. The parity that keeps a block
+    // unmirrored depends on the frame, so turning the wall flipped it. Not
+    // chosen: `floor` is the value that reproduces all seven measured panel
+    // footprints under the D35 relabel, and `ceil` reproduces none of them.
+    // tests/panel-parity.test.ts is the guard.
+    const rShift = -Math.floor(c / 2);
+    for (let r = 0; r < rowCount; r++) {
+      out.push({ q: origin.q + c, r: origin.r + r + rShift });
     }
   }
   return out;

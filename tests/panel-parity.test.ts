@@ -42,9 +42,12 @@ describe('panelCells reproduces the measured cell map', () => {
       // A panel is a physical plate: hanging it the other way up is free, and a
       // 180° turn is a symmetry of the hex lattice (three 60° steps). So the
       // generated map is correct if it matches the measured cells EITHER as
-      // drawn OR flipped. Six panels match as drawn; `mk3s` is drawn with the
-      // opposite stagger parity and matches flipped — which is a fitting
-      // instruction, not an error.
+      // drawn OR flipped.
+      //
+      // Since the frame turned flat-top (D35), ALL SEVEN match as drawn. The
+      // allowance is kept because it is a true statement about plates, and
+      // because it is what would absorb a new panel drawn the other way up —
+      // but nothing needs it today.
       const asDrawn = normalise(part.footprint);
       const flipped = normalise(part.footprint.map((c) => ({ q: -c.q, r: -c.r })));
       const got = normalise(generated);
@@ -64,23 +67,40 @@ describe('panelCells reproduces the measured cell map', () => {
       }
     }
     // Pinned so a change in the model set is visible rather than silent.
-    expect(flippedOnes).toEqual(['wall-honeycomb-224x190size-mk3s']);
+    //
+    // EMPTY since the wall turned flat-top (D35), where it was
+    // `['wall-honeycomb-224x190size-mk3s']`. That panel never was an oddity in
+    // the plate — it was the pointy-top frame's stagger parity disagreeing with
+    // the orientation the panel is drawn in, and mk3s was the one panel whose
+    // dimensions made the disagreement visible. Turning the frame removed the
+    // cause, so every shipped panel now hangs as drawn.
+    //
+    // This is the strongest form of the check, not a weakened one: the
+    // generator reproduces all seven measured footprints exactly, with no
+    // flip allowance spent. If a future change reintroduces a flip, this fires.
+    expect(flippedOnes).toEqual([]);
   });
 
-  it('every row has exactly `columns` cells and rows are contiguous', () => {
+  /**
+   * Grouped by COLUMN, because the wall is flat-top (D35): a column is the
+   * vertical run and `panelCells` builds along q. The old frame grouped by `r`.
+   * The property being checked is unchanged — the block is a full rectangle with
+   * no ragged edge — only the axis it is read along.
+   */
+  it('every column has exactly `rows` cells and columns are contiguous', () => {
     for (const part of panels) {
       const cells = panelCells({ q: 3, r: -2 }, part.panel!.columns, part.panel!.rows);
-      const byRow = new Map<number, number[]>();
+      const byColumn = new Map<number, number[]>();
       for (const c of cells) {
-        const row = byRow.get(c.r) ?? [];
-        row.push(c.q);
-        byRow.set(c.r, row);
+        const column = byColumn.get(c.q) ?? [];
+        column.push(c.r);
+        byColumn.set(c.q, column);
       }
-      expect(byRow.size, part.id).toBe(part.panel!.rows);
-      for (const [, qs] of byRow) {
-        qs.sort((a, b) => a - b);
-        expect(qs).toHaveLength(part.panel!.columns);
-        expect(qs[qs.length - 1]! - qs[0]!).toBe(part.panel!.columns - 1);
+      expect(byColumn.size, part.id).toBe(part.panel!.columns);
+      for (const [, rs] of byColumn) {
+        rs.sort((a, b) => a - b);
+        expect(rs).toHaveLength(part.panel!.rows);
+        expect(rs[rs.length - 1]! - rs[0]!).toBe(part.panel!.rows - 1);
       }
     }
   });
