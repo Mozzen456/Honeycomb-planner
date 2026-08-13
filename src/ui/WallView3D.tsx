@@ -938,7 +938,10 @@ export function WallView3D(props: WallView3DProps) {
     if (!s || !ready) return;
     for (const child of [...s.hoverGroup.children]) {
       s.hoverGroup.remove(child);
-      const m = child as THREE.Mesh;
+      const m = child as THREE.Mesh | THREE.LineSegments;
+      // Always ours: the plate overlay, the cell prism and the part outline are
+      // all built here. The part's own geometry is NOT disposed — `EdgesGeometry`
+      // copies what it needs, and the source is meshLibrary's shared cache.
       m.geometry?.dispose();
       (m.material as THREE.Material)?.dispose?.();
     }
@@ -985,15 +988,70 @@ export function WallView3D(props: WallView3DProps) {
       s.hoverGroup.add(plate);
     }
 
-    // ...and the individual cell, brighter, on top of it. Both together answer
-    // the two questions at once: which plate, and which hole in it.
+    /*
+     * A PLACED PART under the pointer is outlined whole.
+     *
+     * A part is the unit you print, order and move — a 4-cell junction insert is
+     * one object, not four cells that happen to be adjacent — so pointing at any
+     * of its cells has to pick up the whole of it. Lighting only the cell under
+     * the pointer said nothing about where the part ends, which for a fastener
+     * spanning a seam is the thing you actually want to see.
+     *
+     * Drawn as edges of the part's OWN geometry, positioned and turned exactly as
+     * the body is, so the outline is the silhouette of the real mesh rather than
+     * a box around it. `EdgesGeometry`'s threshold keeps it to the shape's
+     * creases instead of every triangle.
+     */
+    const hitId = itemIndex.get(hexKey(hover));
+    const item = hitId ? doc.items.find((i) => i.id === hitId) : undefined;
+    const part = item ? partOf(item.partId) : undefined;
+
+    if (item && part) {
+      const cells = itemCells(item, catalog);
+      let cx = 0;
+      let cy = 0;
+      for (const c of cells) {
+        const m = hexToMm(c);
+        cx += m.x;
+        cy += m.y;
+      }
+      cx /= cells.length || 1;
+      cy /= cells.length || 1;
+
+      const loaded = meshes.current.get(item.partId);
+      const { depth, w, h } = partBox(part);
+      const geo = loaded
+        ? loaded.geometry
+        : new THREE.BoxGeometry(w, h, depth);
+      const edges = new THREE.LineSegments(
+        new THREE.EdgesGeometry(geo, 25),
+        new THREE.LineBasicMaterial({
+          color: theme.hover,
+          transparent: true,
+          opacity: 0.95,
+          depthTest: false,
+        }),
+      );
+      edges.position.set(cx, cy, loaded ? PANEL_DEPTH : PANEL_DEPTH + depth / 2);
+      edges.rotation.z = (Math.PI / 3) * item.rotation;
+      // Drawn last and over everything, so an outline round a part standing 40 mm
+      // off the wall is not hidden by the part itself.
+      edges.renderOrder = 999;
+      s.hoverGroup.add(edges);
+      if (!loaded) geo.dispose();
+      return;
+    }
+
+    // ...otherwise the individual cell, brighter, on top of the plate. The two
+    // together answer the two questions at once: which plate, and which hole.
     const p = hexToMm(hover);
     const cell = new THREE.Mesh(cellPrism(PITCH / Math.sqrt(3), 0.6), light(0.5));
     // Just proud of the plate's front face, so it reads as the cell lighting up
     // rather than as an object standing on the wall.
     cell.position.set(p.x, p.y, PANEL_DEPTH + 0.6);
     s.hoverGroup.add(cell);
-  }, [hover, drag, doc.panels, ready, readTheme, themeTick]);
+  }, [hover, drag, doc.panels, doc.items, itemIndex, catalog, partOf, meshTick,
+      ready, readTheme, themeTick]);
 
   // --- render loop --------------------------------------------------------
 
