@@ -127,9 +127,20 @@ function unionOutline(cells: readonly Hex[]): THREE.Vector2[] {
     for (let k = 0; k < 6; k++) {
       const d = DIRS[k]!;
       if (inSet.has(hexKey({ q: c.q + d.q, r: c.r + d.r }))) continue;
-      // Direction k's edge runs from corner k+1 to corner k+2, counter-clockwise.
-      const a = corner(centre, k + 1, PITCH);
-      const b = corner(centre, k + 2, PITCH);
+      // Direction k's edge runs from corner k to corner k+1, counter-clockwise.
+      //
+      // It was k+1 to k+2 in the pointy-top frame, and the shift is forced by
+      // the corner angles, not a preference. DIRS point along the EDGE NORMALS,
+      // which sit at 30°/90°/…/330° here; a cell's corners are at 0°/60°/…/300°
+      // (`corner`, matching `hexCorners`). Edge k therefore lies between the
+      // corners 30° either side of its normal — 60k and 60k+60, i.e. indices k
+      // and k+1. Under the old `60k − 90` corners those same two worked out as
+      // k+1 and k+2.
+      //
+      // Get this wrong and the boundary walk chains edges that do not touch:
+      // the outline comes back as a scatter of open wedges instead of a plate.
+      const a = corner(centre, k, PITCH);
+      const b = corner(centre, k + 1, PITCH);
       const ka = key(a);
       const list = outgoing.get(ka);
       if (list) list.push({ a, b });
