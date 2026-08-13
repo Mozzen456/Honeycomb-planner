@@ -200,3 +200,21 @@ wall 90° from the designer's own drawings.
   With networkx installed, `footprint.py` agrees on 51 of 51, so both detectors agree with the
   catalogue and with each other. HSW-SPEC §2 and §4 rewritten to the flat-top frame (they still
   described the old one and contradicted §10), and §11 added as the rundown.
+- 2026-08-13 — Pass 8, hover highlight. The ask was "highlight the honeycomb at its full size on
+  hover"; delivering it turned up two more stale copies of the embedding, both of the same class as
+  D35 and both invisible to the 564-test suite.
+  **`cellAt` in WallView3D re-derived `mmToHex` inline**, still pointy-top, with a private
+  `hexRound3` beside it whose comment claimed "shared semantics with hex.ts". Every hit test in the
+  3D view landed several cells from the pointer — **including the drop**, so placing a part in 3D
+  put it in the wrong hole. Now calls `mmToHex`; `hexRound3` deleted.
+  **`visibleCells` in WallCanvas re-derived it too**, so on an EMPTY wall about an eighth of the
+  width had no grid drawn at the right-hand edge. It survived because the moment a panel exists the
+  range comes from `panelIndex` instead. Now transposed, exported, and pinned by
+  `tests/visible-cells.test.ts` — which was checked against the old code first and fails it with
+  3366 missing cells on a 2400 × 1200 wall.
+  Also: the drag ghost built a raw prism and sat 30° off a flat-top cell (same class as D33), and
+  `fixings.ts` hard-coded `23.6 * 20.438` instead of the constants. Both fixed.
+  Suite 564/564. **The lesson is now three-for-three: every defect since the turn was found by
+  looking at the running app, none by the suite.** A duplicated geometry rule is the recurring
+  cause, and grepping for `/ ROW_STEP` and `/ PITCH` outside `hex.ts` is how the last two were
+  found — worth doing again after any frame change.

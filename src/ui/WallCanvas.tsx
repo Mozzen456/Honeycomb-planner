@@ -797,7 +797,12 @@ function cellsBounds(cells: readonly Hex[]) {
  * the viewport. With no panels there is nothing to draw but the wall rectangle,
  * which bounds the enumeration by the wall size instead.
  */
-function visibleCells(
+/**
+ * Exported for `tests/visible-cells.test.ts`. It is pure — a mapper, a size and
+ * a document — and it carried a stale copy of the inverse embedding through a
+ * frame turn, so it is worth holding to its contract from outside.
+ */
+export function visibleCells(
   toWall: (x: number, y: number) => Point,
   size: { w: number; h: number },
   doc: LayoutDoc,
@@ -821,20 +826,27 @@ function visibleCells(
     return out;
   }
 
-  // q must be solved per row, because x = PITCH·(q + r/2): the q that reaches a
-  // given x slides by half a step every row. Clamping q to a fixed floor shears
-  // the field into a parallelogram — the lower rows lose their left-hand cells.
-  const rMin = Math.max(0, Math.floor(Math.max(tl.y, 0) / ROW_STEP) - 1);
-  const rMax = Math.min(
-    Math.ceil(doc.wall.heightMm / ROW_STEP),
-    Math.ceil(br.y / ROW_STEP) + 1,
+  // r must be solved per COLUMN, because y = PITCH·(r + q/2): the r that reaches
+  // a given y slides by half a step every column. Clamping r to a fixed floor
+  // shears the field into a parallelogram — the right-hand columns lose their
+  // top cells.
+  //
+  // Transposed with the frame (D35). It read the other way round — r from
+  // y/ROW_STEP and q per row — which is the pointy-top inverse and survived the
+  // turn because this path only runs on an EMPTY wall, before any panel is
+  // solved. With panels the range comes from `panelIndex` above, so the stale
+  // arithmetic never showed once anything was on screen.
+  const qMin = Math.max(0, Math.floor(Math.max(tl.x, 0) / ROW_STEP) - 1);
+  const qMax = Math.min(
+    Math.ceil(doc.wall.widthMm / ROW_STEP),
+    Math.ceil(br.x / ROW_STEP) + 1,
   );
-  for (let r = rMin; r <= rMax; r++) {
-    const xLo = Math.max(tl.x, 0);
-    const xHi = Math.min(br.x, doc.wall.widthMm);
-    const qMin = Math.floor(xLo / PITCH - r / 2) - 1;
-    const qMax = Math.ceil(xHi / PITCH - r / 2) + 1;
-    for (let q = qMin; q <= qMax; q++) {
+  for (let q = qMin; q <= qMax; q++) {
+    const yLo = Math.max(tl.y, 0);
+    const yHi = Math.min(br.y, doc.wall.heightMm);
+    const rMin = Math.floor(yLo / PITCH - q / 2) - 1;
+    const rMax = Math.ceil(yHi / PITCH - q / 2) + 1;
+    for (let r = rMin; r <= rMax; r++) {
       if (out.length > 40000) return out; // last-resort guard
       out.push({ q, r });
     }

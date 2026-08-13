@@ -40,6 +40,7 @@
  * then fills in what is left.
  */
 
+import { PITCH, ROW_STEP } from './constants';
 import { hexKey, hexToMm, placeFootprint, placedPanelCells } from './hex';
 import type { Hex, LayoutDoc, PlacedPanel, Rotation } from './types';
 
@@ -290,11 +291,11 @@ export function planFixings(
 /**
  * Panelled area in m², from the cell count.
  *
- * One cell tiles 23.6 × 20.438 mm of wall — the lattice's fundamental domain,
+ * One cell tiles PITCH × ROW_STEP of wall — the lattice's fundamental domain,
  * not the hexagon's own area, because the cells tessellate.
  */
 export function totalPanelAreaM2(cellCount: number): number {
-  return (cellCount * 23.6 * 20.438) / 1e6;
+  return (cellCount * PITCH * ROW_STEP) / 1e6;
 }
 
 /** Convenience: the fixing plan for a whole document. */
