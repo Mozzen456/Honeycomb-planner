@@ -417,9 +417,15 @@ export function WallCanvas(props: WallCanvasProps) {
     }
 
     // Hover highlight sits on the dynamic layer: it changes every frame.
+    //
+    // Drawn at inset 0 — the WHOLE cell, out to its corners. It used to inset by
+    // 0.8 px, which left a hairline of unlit grid around the hexagon and made the
+    // highlight read as a slightly smaller shape floating inside the cell rather
+    // than as the cell itself lighting up. The point of the highlight is to say
+    // "this is the hexagon you are pointing at, and this is how big it is".
     if (drawGrid && hover && (panelIndex.size === 0 || panelIndex.has(hexKey(hover)))) {
       ctx.fillStyle = C.cellHover;
-      ctx.fill(hexPath(hover, 0.8));
+      ctx.fill(hexPath(hover, 0));
     }
 
     // 3. Placed items.

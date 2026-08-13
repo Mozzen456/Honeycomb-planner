@@ -787,3 +787,40 @@ says is not a measurement. Promoting a bound to a measurement by clicking is the
 `insertFed` choosing the face with the most material under the surface, which for a shelf is the
 tray. The pegs are on another face entirely. The dialog shows the detector's answer next to the
 picked one for exactly this reason: so you can see what you are overruling.
+
+---
+
+## D36 — Hovering lights the whole cell, in both views; and `cellAt` stops re-deriving `mmToHex`
+
+**Asked for: "honeycomb should be highlighted the full size of it when I hold the mouse over."**
+
+Two things were wrong, and the second was much worse than the first.
+
+**The 2D plan drew the highlight inset by 0.8 px.** A hairline of unlit grid stayed around the
+hexagon, so it read as a slightly smaller shape floating inside the cell rather than as the cell
+itself lighting up. Now drawn at inset 0 — out to the corners, the size `hexCorners` gives.
+
+**The 3D view had no hover highlight at all.** It tracked `hover` only while something was being
+dragged, so the wall said nothing about which cell the pointer was over until you were already
+carrying a part. It now lights the cell at `PITCH` across flats — the whole hexagon, not the 22 mm
+mouth. The mouth is the hole; the cell is the hexagon of wall it sits in, and that is what "which
+cell am I pointing at" means. Suppressed while dragging, because the ghost answers the same
+question more precisely.
+
+Drawn in the **accent**, additively. `--canvas-cell-hover` is a dark slate, which highlights on the
+2D canvas because it is lighter than the wall behind it — and in 3D the cell sits on a pale grey
+plate, where the same colour darkens instead. Additive blending brightens whatever is underneath,
+on a plate or over a gap, in either theme.
+
+**The real find: `cellAt` carried its own copy of the inverse embedding**, still in the pointy-top
+form — `r = y/20.438; q = x/PITCH − r/2` — with a private `hexRound3` beside it whose comment
+claimed "shared semantics with hex.ts so both views agree". The frame turn (D35) missed it because
+nothing in the file names `mmToHex`. **Every hit test in the 3D view was landing several cells from
+the pointer, and that includes the DROP.** Placing a part in 3D put it in the wrong hole.
+
+**Decision: `cellAt` calls `mmToHex`, and `hexRound3` is deleted.** Delegating rather than
+re-deriving is the actual fix. A rule with two implementations has two chances to be wrong and one
+place you will look — and this copy survived precisely by not mentioning the function it duplicated.
+
+Found by pointing at the wall and noticing the wrong hexagon lit. No test covers it: the suite
+never asks where a screen coordinate lands, and 557 of them passed throughout.

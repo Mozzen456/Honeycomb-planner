@@ -21,7 +21,7 @@ import * as THREE from 'three';
 import { itemCells } from '../core/bom';
 import { fixingsFor, JUNCTION_FIXING_ID } from '../core/fixings';
 import { CELL, PANEL_DEPTH, PITCH } from '../core/constants';
-import { hexKey, hexToMm, panelCells, placedPanelCells, placeFootprint } from '../core/hex';
+import { hexKey, hexToMm, mmToHex, panelCells, placedPanelCells, placeFootprint } from '../core/hex';
 import type { Catalog, CatalogPart, Hex, LayoutDoc, Rotation } from '../core/types';
 import { loadPartMesh, type PartMesh } from './meshLibrary';
 import './WallView3D.css';
@@ -299,6 +299,7 @@ export function WallView3D(props: WallView3DProps) {
     panelGroup: THREE.Group;
     itemGroup: THREE.Group;
     ghostGroup: THREE.Group;
+    hoverGroup: THREE.Group;
     obstacleGroup: THREE.Group;
     fixingGroup: THREE.Group;
     frame: number;
@@ -379,9 +380,10 @@ export function WallView3D(props: WallView3DProps) {
     const panelGroup = new THREE.Group();
     const itemGroup = new THREE.Group();
     const ghostGroup = new THREE.Group();
+    const hoverGroup = new THREE.Group();
     const obstacleGroup = new THREE.Group();
     const fixingGroup = new THREE.Group();
-    scene.add(panelGroup, itemGroup, ghostGroup, obstacleGroup, fixingGroup);
+    scene.add(panelGroup, itemGroup, ghostGroup, hoverGroup, obstacleGroup, fixingGroup);
 
     stateRef.current = {
       renderer, scene, camera,
@@ -389,7 +391,7 @@ export function WallView3D(props: WallView3DProps) {
       // Picking happens on the panel's FRONT face, which is where the user is
       // pointing — not on z = 0, which would put the cursor behind the plate.
       plane: new THREE.Plane(new THREE.Vector3(0, 0, 1), -PANEL_DEPTH),
-      panelGroup, itemGroup, ghostGroup, obstacleGroup, fixingGroup, frame: 0,
+      panelGroup, itemGroup, ghostGroup, hoverGroup, obstacleGroup, fixingGroup, frame: 0,
     };
     setReady(true);
 
@@ -447,6 +449,12 @@ export function WallView3D(props: WallView3DProps) {
       selected: colour('--canvas-selection', '#57aee8'),
       ok: colour('--success-fg', '#5fc98a'),
       bad: colour('--danger-fg', '#f0867b'),
+      // The ACCENT, not `--canvas-cell-hover`. That token is a dark slate, which
+      // reads as a highlight on the 2D canvas because it is lighter than the
+      // wall behind it — but in 3D the cell sits on a pale grey plate, where the
+      // same colour darkens instead of lights. Drawn additively (below) so it
+      // brightens whatever is under it, on a plate or over a gap, in either theme.
+      hover: colour('--accent', '#57aee8'),
     };
   }, []);
 
@@ -805,18 +813,64 @@ export function WallView3D(props: WallView3DProps) {
     // in is the question, and a solid body would hide the ones underneath it.
     for (const c of cells) {
       const p = hexToMm(c);
-      const geo = new THREE.CylinderGeometry(
-        (CELL.mouthAcrossFlats * 0.96) / Math.sqrt(3),
-        (CELL.mouthAcrossFlats * 0.96) / Math.sqrt(3),
-        depth,
-        6,
-      );
-      geo.rotateX(Math.PI / 2);
+      // `cellPrism`, not a bare CylinderGeometry: the ghost has to seat in the
+      // cell it is aiming at, and a raw prism lands 30° out on a flat-top wall.
+      const geo = cellPrism((CELL.mouthAcrossFlats * 0.96) / Math.sqrt(3), depth);
       const mesh = new THREE.Mesh(geo, mat);
       mesh.position.set(p.x, p.y, PANEL_DEPTH + depth / 2);
       s.ghostGroup.add(mesh);
     }
   }, [drag, hover, catalog, doc, placementValid, partOf, ready, readTheme, themeTick]);
+
+  /**
+   * The cell under the pointer, lit at its FULL size.
+   *
+   * Drawn at `PITCH` across flats — the whole hexagon out to its corners, the
+   * same size `hexCorners` gives the plan view — rather than at the 22 mm mouth.
+   * The mouth is the hole; the cell is the hexagon of wall that hole sits in,
+   * and that is what "which cell am I pointing at" means. A mouth-sized
+   * highlight leaves the webbing between cells dark and reads as a smaller shape
+   * floating inside the cell.
+   *
+   * Suppressed while dragging: the ghost already answers the same question, more
+   * precisely, and two overlapping highlights on one cell just muddle it.
+   */
+  useEffect(() => {
+    const s = stateRef.current;
+    if (!s || !ready) return;
+    for (const child of [...s.hoverGroup.children]) {
+      s.hoverGroup.remove(child);
+      const m = child as THREE.Mesh;
+      m.geometry?.dispose();
+      (m.material as THREE.Material)?.dispose?.();
+    }
+    if (!hover || drag) return;
+    // Only over the wall itself — lighting a cell in empty space would invite a
+    // drop that `checkPlacement` then refuses.
+    const onWall = doc.panels.some((p) =>
+      placedPanelCells(p).some((c) => c.q === hover.q && c.r === hover.r));
+    if (!onWall) return;
+
+    const theme = readTheme();
+    const p = hexToMm(hover);
+    const mesh = new THREE.Mesh(
+      cellPrism(PITCH / Math.sqrt(3), 0.6),
+      new THREE.MeshBasicMaterial({
+        color: theme.hover,
+        transparent: true,
+        opacity: 0.5,
+        blending: THREE.AdditiveBlending,
+        // Never writes depth: the highlight is a light cast on the wall, not an
+        // object, and writing depth would let it occlude a part standing in the
+        // same cell.
+        depthWrite: false,
+      }),
+    );
+    // Just proud of the plate's front face, so it reads as the cell lighting up
+    // rather than as an object standing on the wall.
+    mesh.position.set(p.x, p.y, PANEL_DEPTH + 0.3);
+    s.hoverGroup.add(mesh);
+  }, [hover, drag, doc.panels, ready, readTheme, themeTick]);
 
   // --- render loop --------------------------------------------------------
 
@@ -857,11 +911,18 @@ export function WallView3D(props: WallView3DProps) {
     s.raycaster.setFromCamera(ndc, s.camera);
     const hit = new THREE.Vector3();
     if (!s.raycaster.ray.intersectPlane(s.plane, hit)) return null;
-    // World mm -> nearest cell. Same rounding as the 2D path, so a drop lands
-    // in the same place whichever view you are using.
-    const rr = hit.y / 20.438;
-    const qq = hit.x / PITCH - rr / 2;
-    return hexRound3(qq, rr);
+    // World mm -> nearest cell, through `mmToHex` itself.
+    //
+    // This used to inline its own copy of the inverse embedding —
+    // `r = y/20.438; q = x/PITCH - r/2` — which was the pointy-top form and
+    // silently outlived the frame turn (D35), so every hit in this view landed
+    // on the wrong cell: the hover lit a hexagon a few cells up and to the left
+    // of the pointer, and a DROP went there too.
+    //
+    // Delegating rather than re-deriving is the actual fix. A second copy of a
+    // rule is a second thing to remember to turn, and this one was missed
+    // precisely because it did not mention `mmToHex` anywhere.
+    return mmToHex({ x: hit.x, y: hit.y });
   }, []);
 
   // --- pointer handling ---------------------------------------------------
@@ -917,7 +978,13 @@ export function WallView3D(props: WallView3DProps) {
       }
 
       const press = pressRef.current;
-      if (!press || press.itemId === undefined) return;
+      if (!press || press.itemId === undefined) {
+        // Plain hover, nothing being dragged. The 3D view used to track `hover`
+        // ONLY during a drag, so the wall gave no feedback about which cell the
+        // pointer was over until you were already carrying something.
+        setHover(cellAt(e.clientX, e.clientY));
+        return;
+      }
       if (Math.hypot(e.clientX - press.x, e.clientY - press.y) <= 5) return;
       const anchor = doc.items.find((i) => i.id === press.itemId);
       const grab = anchor
@@ -927,6 +994,8 @@ export function WallView3D(props: WallView3DProps) {
       pressRef.current = null;
       onStartItemDrag(ids, grab);
     };
+
+    const leave = () => setHover(null);
 
     const up = (e: PointerEvent) => {
       if (panRef.current) { panRef.current = null; return; }
@@ -956,12 +1025,18 @@ export function WallView3D(props: WallView3DProps) {
     host.addEventListener('pointerdown', down);
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
+    // On the HOST, not the window: `pointermove` is bound to the window so a
+    // drag survives leaving the canvas, but the highlight must not — a hexagon
+    // left lit while the pointer is over the parts list is a lie about where
+    // the pointer is.
+    host.addEventListener('pointerleave', leave);
     host.addEventListener('wheel', wheel, { passive: false });
     host.addEventListener('contextmenu', ctx);
     return () => {
       host.removeEventListener('pointerdown', down);
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
+      host.removeEventListener('pointerleave', leave);
       host.removeEventListener('wheel', wheel);
       host.removeEventListener('contextmenu', ctx);
     };
@@ -989,22 +1064,16 @@ export function WallView3D(props: WallView3DProps) {
 
 // ---------------------------------------------------------------------------
 
-/** Cube rounding, shared semantics with hex.ts so both views agree. */
-function hexRound3(qf: number, rf: number): Hex {
-  const xf = qf;
-  const zf = rf;
-  const yf = -qf - rf;
-  let x = Math.round(xf);
-  let y = Math.round(yf);
-  let z = Math.round(zf);
-  const dx = Math.abs(x - xf);
-  const dy = Math.abs(y - yf);
-  const dz = Math.abs(z - zf);
-  if (dx > dy && dx > dz) x = -y - z;
-  else if (dy > dz) y = -x - z;
-  else z = -x - y;
-  return { q: x === 0 ? 0 : x, r: z === 0 ? 0 : z };
-}
+/*
+ * `hexRound3` lived here — a third copy of the cube rounding, its own comment
+ * claiming "shared semantics with hex.ts so both views agree". It is gone, and
+ * with it the inlined inverse embedding that used it. `cellAt` calls `mmToHex`.
+ *
+ * The copy is what caused the bug: the pointy-top inverse survived the frame
+ * turn in this file because nothing in it named `mmToHex`, so every hit in the
+ * 3D view landed several cells from the pointer. A rule with two
+ * implementations has two chances to be wrong and one place you will look.
+ */
 
 export function ghost3DCells(
   drag: Drag3D, hover: Hex, catalog: Catalog, doc: LayoutDoc,
