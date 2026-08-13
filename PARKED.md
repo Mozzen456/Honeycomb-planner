@@ -295,3 +295,39 @@ Honest gaps, so nobody assumes coverage that is not there:
   to a worker.
 - **Printing for real.** The print page is verified to be self-contained, to carry `@media print`
   rules and `break-inside` protection, and to be legible — but no paper came out of a printer.
+
+---
+
+## P10. The MESH is flipped for a `high` mating end; the FOOTPRINT is not
+
+**Measured, not suspected.** `meshLibrary.orient` turns a part over when `matingEnd === 'high'` —
+`v = -v; w = -w`, a 180° rotation about u, so the face that mates ends up against the wall.
+`detect.toAxial`, which produces the footprint, works on the RAW raster and applies no such turn. So
+for every part whose mating end is `high`, the mesh the wall draws is MIRRORED in v relative to the
+cells the catalogue records for it.
+
+A symmetric footprint hides it completely, which is why it survived: the mirrored cell SET is the
+same set, so the part still "fits" its own footprint. What moves is which FEATURE is over which
+cell.
+
+Two consequences, both measured on the shipped models by rastering the oriented mesh and putting
+each hole's centroid through `mmToHex`:
+
+- **`insert-for-countersunk-hole-3`** (and its M3 sibling): the wall-screw bore is over cell (1,0)
+  and the three sockets over (0,0), (1,-1), (2,-1). Measuring the raw file instead swaps the middle
+  two. That shipped once (D47) — the app offered the countersunk hole as a socket and refused a real
+  one, which is the exact opposite of the part.
+- **`insert-hollow-for`**: its four holes land on (0,0), (0,-1), (1,-1), (1,0) while its recorded
+  footprint is (0,0), (0,1), (1,-1), (1,0). Three agree and one does not: the mesh and the footprint
+  genuinely disagree about a cell for this part.
+
+**Why it is parked rather than fixed.** The fix is to mirror the cells in `toAxial` for a `high`
+mating end, which changes the footprint of every such part in the generated catalogue.
+`tests/detect.test.ts` compares the detector against the committed `catalog.json` cell for cell and
+is the contract; the catalogue would have to be regenerated with `tools/scan.py` (trimesh +
+PrusaSlicer) and every measured footprint re-checked. That is a catalogue-wide change, and it wants
+doing deliberately rather than as a side effect of a socket correction.
+
+**What holds until then.** Anything that says WHERE ON A PART a feature is must be measured on the
+oriented mesh — the frame the wall draws in — not on the file. `overrides.json` records that for the
+socket cells, with the measurement in the note.

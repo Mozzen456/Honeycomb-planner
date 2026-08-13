@@ -17,10 +17,10 @@ import {
   hexToMm,
   mmToHex,
   panelCells,
-  placeFootprint,
   type Point,
 } from '../core/hex';
 import { itemCells } from '../core/bom';
+import { partCells } from '../core/store';
 import type { Catalog, Hex, LayoutDoc, PlacedItem, Rotation } from '../core/types';
 import './WallCanvas.css';
 
@@ -752,7 +752,12 @@ export function ghostCells(
   if (drag.partId !== undefined) {
     const part = catalog.parts.find((p) => p.id === drag.partId);
     if (!part) return [];
-    return placeFootprint(part.footprint, anchor, drag.rotation);
+    // `partCells`, not `placeFootprint` on the raw footprint: the two differ by
+    // the part's ANCHOR, and the ghost that skipped it drew the landing zone a
+    // cell or two from where the part actually lands. Invisible while every
+    // shipped anchor was the origin, and immediate once a hand-drawn footprint
+    // left the middle cell out (D46) and `anchorOf` moved the anchor.
+    return partCells(part, anchor, drag.rotation);
   }
   const ids = new Set(drag.itemIds ?? []);
   const members = doc.items.filter((i) => ids.has(i.id));
@@ -765,7 +770,7 @@ export function ghostCells(
     const part = catalog.parts.find((p) => p.id === m.partId);
     if (!part) continue;
     out.push(
-      ...placeFootprint(part.footprint, { q: m.at.q + delta.q, r: m.at.r + delta.r }, m.rotation),
+      ...partCells(part, { q: m.at.q + delta.q, r: m.at.r + delta.r }, m.rotation),
     );
   }
   return out;

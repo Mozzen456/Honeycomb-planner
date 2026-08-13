@@ -240,6 +240,14 @@ export interface BomLine {
    * instead.
    */
   fastenersUnknown: boolean;
+  /**
+   * How many of this insert the WALL already provides, and so are not printed.
+   *
+   * The combined wall fastener is one screw hole and three open sockets, and a
+   * socket is an insert: an accessory hung on one does not need another printed
+   * for it. The quantity above is what to print; this is why it is not more.
+   */
+  providedBySockets: number;
 }
 
 export interface WallFixings {

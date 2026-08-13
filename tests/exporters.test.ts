@@ -106,6 +106,7 @@ function line(over: Partial<BomLine> = {}): BomLine {
     needsReview: false,
     estimated: false,
     fastenersUnknown: false,
+    providedBySockets: 0,
     ...over,
   };
 }
@@ -165,6 +166,8 @@ describe('toCsv', () => {
       'footprint_estimated',
       'print_estimated',
       'fastener_count_unknown',
+      // Why a fastener line is not higher: the wall's own sockets do that job.
+      'already_in_the_wall',
       'minutes_each',
       'grams_each',
       'metres_each',
@@ -220,12 +223,12 @@ describe('toCsv', () => {
     const rows = parseCsv(toCsv(makeBom({ printed: [line()], fasteners: [], shopping: [] })));
     const row = rows[1]!;
     expect(row[1]).toBe('4'); // quantity
-    expect(row[10]).toBe('12.5'); // minutes each, from the catalogue
-    expect(row[13]).toBe('50'); // minutes total, straight from the BOM line
-    expect(row[11]).toBe('4.25'); // grams each
-    expect(row[14]).toBe('17');
-    expect(row[12]).toBe('1.4'); // metres each
-    expect(row[15]).toBe('5.6');
+    expect(row[11]).toBe('12.5'); // minutes each, from the catalogue
+    expect(row[14]).toBe('50'); // minutes total, straight from the BOM line
+    expect(row[12]).toBe('4.25'); // grams each
+    expect(row[15]).toBe('17');
+    expect(row[13]).toBe('1.4'); // metres each
+    expect(row[16]).toBe('5.6');
   });
 
   /**
@@ -238,8 +241,8 @@ describe('toCsv', () => {
     const rows = parseCsv(
       toCsv(makeBom({ printed: [line({ quantity: 0 })], fasteners: [], shopping: [] })),
     );
-    expect(rows[1]![10]).toBe('12.5');
-    expect(rows[1]![11]).toBe('4.25');
+    expect(rows[1]![11]).toBe('12.5');
+    expect(rows[1]![12]).toBe('4.25');
   });
 
   it('marks a bounded footprint and a modelled print estimate', () => {

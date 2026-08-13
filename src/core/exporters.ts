@@ -60,6 +60,7 @@ const CSV_HEADER = [
   'footprint_estimated',
   'print_estimated',
   'fastener_count_unknown',
+  'already_in_the_wall',
   'minutes_each',
   'grams_each',
   'metres_each',
@@ -103,6 +104,7 @@ function csvLineFor(section: string, line: BomLine): (string | number)[] {
     line.needsReview ? 'yes' : 'no',
     line.estimated ? 'yes' : 'no',
     line.fastenersUnknown ? 'yes' : 'no',
+    num(line.providedBySockets ?? 0, 0),
     num(line.minutesEach ?? 0),
     num(line.gramsEach ?? 0),
     num(line.metresEach ?? 0),
@@ -129,6 +131,7 @@ export function toCsv(bom: Bom): string {
         '',
         buy.item ?? '',
         'bought',
+        '',
         '',
         '',
         '',
@@ -183,6 +186,11 @@ function checklistLine(line: BomLine): string {
   // The one that stops a build: you get to the wall and find out the parts list
   // never knew how many inserts this thing takes.
   if (line.fastenersUnknown) detail.push('CHECK how many inserts this needs');
+  // Not a warning: it is the reason the number is what it is, and the sheet is
+  // the copy someone counts parts against at the printer.
+  if (line.providedBySockets > 0) {
+    detail.push(`${line.providedBySockets} more already in the wall fasteners`);
+  }
   const tail = detail.length ? ` — ${detail.join(', ')}` : '';
   const file = line.file ? ` \`${mdText(line.file)}\`` : '';
   return `- [ ] **${num(q, 0)} ×** ${mdText(line.name || line.partId)}${tail}${file}`;

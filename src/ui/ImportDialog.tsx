@@ -78,9 +78,10 @@ export function ImportDialog({ proposal, catalog, onCancel, onConfirm }: ImportD
     setCells((prev) => {
       const key = hexKey(cell);
       const without = prev.filter((c) => hexKey(c) !== key);
-      // The anchor cell always belongs to the part: a footprint with nothing at
-      // the origin has no cell under the cursor while dragging.
       if (without.length === prev.length) return [...prev, cell];
+      // The last cell stays: a part that covers nothing cannot be checked
+      // against anything. The middle one is not special — `anchorOf` picks the
+      // drag cell from whatever cells the part has.
       if (without.length === 0) return prev;
       return without;
     });

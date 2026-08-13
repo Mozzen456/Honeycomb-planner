@@ -154,6 +154,21 @@ export interface PartOverride {
    * for a part that IS the hole.
    */
   socketCells?: Hex[];
+  /**
+   * Which insert a socket on this part STANDS IN FOR.
+   *
+   * `insert-for-countersunk-hole-3` carries three 13.2 mm hexagonal sockets —
+   * the same socket `insert-empty` provides — so an accessory hung on one of
+   * them does not also need an `insert-empty` printed for it: the wall fastener
+   * already IS that insert. `insert-countersunk-with-m3x3`'s three cells are M3
+   * bores instead, which is what `insert-with-m3` provides.
+   *
+   * Stated, never inferred. Two sockets being the same size is not proof they
+   * do the same job, and the BOM only substitutes where somebody has said so —
+   * a part with `socketCells` and no `socketProvides` offers a place to install
+   * something and orders nothing away.
+   */
+  socketProvides?: string;
   /** Replaces the part's requirements outright. An empty array means "nothing". */
   requires?: InsertRequirement[];
   hardware?: { item: string; count: number }[];
@@ -265,8 +280,16 @@ export function readMounting(value: unknown): MountingOverride | undefined {
  * BOM says it overlaps:
  *   - whole numbers only, within a wall's worth of reach;
  *   - deduplicated, so a repeated cell cannot inflate a count;
- *   - the anchor is always a member — `partCells` puts the anchor under the
- *     cursor, and a footprint with nothing at the origin has no cell to drag by.
+ *   - at least one cell, because a part that covers nothing cannot be checked
+ *     against anything.
+ *
+ * The centre cell is NOT forced in. It was, on the reasoning that `partCells`
+ * puts the anchor under the cursor and a footprint with nothing at the origin
+ * has no cell to drag by — but the anchor does not have to be the origin. A
+ * two-peg shelf hangs on the cells above and below its middle and uses no cell
+ * in between; forcing one in made it a three-cell part that fouls a neighbour
+ * that is not really there. `anchorOf` picks the drag cell from the cells the
+ * part actually has.
  */
 const MAX_FOOTPRINT_CELLS = 64;
 const MAX_FOOTPRINT_REACH = 32;
@@ -274,8 +297,7 @@ const MAX_FOOTPRINT_REACH = 32;
 export function readFootprint(value: unknown): Hex[] | undefined {
   if (!Array.isArray(value)) return undefined;
   const seen = new Set<string>();
-  const out: Hex[] = [{ q: 0, r: 0 }];
-  seen.add('0,0');
+  const out: Hex[] = [];
   for (const entry of value) {
     if (!isObject(entry)) continue;
     const q = entry['q'];
@@ -290,7 +312,31 @@ export function readFootprint(value: unknown): Hex[] | undefined {
     out.push(cell);
     if (out.length >= MAX_FOOTPRINT_CELLS) break;
   }
-  return out;
+  // Nothing legible in there: fall back to the single cell every other reader
+  // falls back to, rather than a part that covers nothing at all.
+  return out.length > 0 ? out : [{ q: 0, r: 0 }];
+}
+
+/**
+ * The cell of a footprint that sits under the cursor while dragging.
+ *
+ * The one nearest the origin, ties broken on q then r so it is deterministic —
+ * an anchor that wandered between renders would make a drop land somewhere else
+ * each time. Nearest the origin because that is where the part is drawn from:
+ * for the usual footprint, which does include (0, 0), this IS (0, 0).
+ */
+export function anchorOf(cells: readonly Hex[]): Hex {
+  let best: Hex = { q: 0, r: 0 };
+  let bestScore = Infinity;
+  for (const c of cells) {
+    // Hex distance from the origin, in cube terms.
+    const score = (Math.abs(c.q) + Math.abs(c.r) + Math.abs(c.q + c.r)) / 2;
+    if (score < bestScore || (score === bestScore && (c.q < best.q || (c.q === best.q && c.r < best.r)))) {
+      bestScore = score;
+      best = { q: c.q, r: c.r };
+    }
+  }
+  return best;
 }
 
 /** A catalogue footprint, defensively: a hand-edited file may carry anything. */
@@ -351,6 +397,17 @@ export function socketsOf(part: CatalogPart | undefined): Hex[] {
 }
 
 /**
+ * The insert this part's sockets stand in for, if anybody has said.
+ *
+ * Undefined means "no claim": the sockets are somewhere to install a part, and
+ * nothing is deducted from what the parts list orders.
+ */
+export function socketProvidesOf(part: CatalogPart | undefined): string | undefined {
+  const value = (part as unknown as Record<string, unknown> | undefined)?.['socketProvides'];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+/**
  * Apply corrections to a catalogue, returning a new one.
  *
  * Memoised on the identity of both inputs: `bom.ts` caches its part index in a
@@ -398,7 +455,10 @@ export function applyOverrides(base: Catalog, file: unknown): Catalog {
     const edited = footprint !== undefined && !sameCells(footprint, asCells(part.footprint));
     if (footprint !== undefined) {
       next.footprint = footprint;
-      next.anchor = { q: 0, r: 0 };
+      // The drag cell follows the cells rather than being assumed at the origin,
+      // so a part whose cells do not include the middle one still hangs off one
+      // of its own.
+      next.anchor = anchorOf(footprint);
     }
     if (Array.isArray(raw['hardware'])) {
       next.hardware = (raw['hardware'] as { item: string; count: number }[]).filter(
@@ -436,6 +496,10 @@ export function applyOverrides(base: Catalog, file: unknown): Catalog {
     // the cells and marking the sockets in one edit agree with each other.
     const sockets = readSockets(raw['socketCells'], next.footprint);
     if (sockets !== undefined) flagged['sockets'] = sockets;
+    const provides = raw['socketProvides'];
+    if (typeof provides === 'string' && provides.length > 0) {
+      flagged['socketProvides'] = provides;
+    }
 
     const notes = [...(part.provenance?.notes ?? [])];
     if (edited) notes.push(`footprint set by hand to ${next.footprint.length} cell(s)`);

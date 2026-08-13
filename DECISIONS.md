@@ -1210,3 +1210,251 @@ held by test — a mirrored stage would be a left-hand hook drawn on a right-han
 That collapsed the per-face camera rules: with the stage turned, every mounting face points the
 same way, so the view is simply "from the room, three-quarter". Dead-on was rejected for the reason
 it always was — along the normal a part is just its own silhouette.
+
+---
+
+## D46 — The honeycomb in the inspector is a real panel out of `models/`
+
+**Reported: "when I select shelf 2 in the alignment tool it does not align with 2 honeycombs, so I
+think the size of the honeycomb in the alignment tool is wrong. Can you just use an original STL for
+the honeycomb model in there."**
+
+The size was not wrong — D45 had already put the wall's own stepped profile in, and the lattice came
+from `hexToMm` throughout. But that is an argument, and the person holding a printed panel against
+the screen should not have to take an argument on trust. **The wall in the dialog is now the
+smallest shipped panel that covers the patch, loaded through `loadPartMesh`** — the same loader,
+cache and 90° pointy-plate spin the wall view uses. There is nothing left to disbelieve: it is the
+file they are going to print.
+
+Its lattice is aligned to the dialog's by putting the panel's most central cell exactly where the
+part's own cell (0, 0) goes. Both sides are `hexToMm`, so every other cell follows for free, and
+`tests/panel-mesh.test.ts` already holds each plate's mesh to its block — the property the alignment
+rests on. The drawn plate stays as the fallback, because the app is built to run from a `file://`
+URL with no `models/` beside it.
+
+**The plate is built in WALL coordinates now.** `wallBasis` as the group's rotation makes +X across,
++Y up and +Z out of the wall, which deleted a per-axis sign that every position in that effect had
+to carry by hand.
+
+**What shelf-2 was actually showing.** Its catalogue footprint is five cells in a COLUMN — the
+bounding-box bound (PARKED P1) — while the part is 97 mm wide and 51 deep, and the detector puts its
+mounting face on the tray underside rather than on the pegs (D40's first case, still open). So it
+was drawn lying flat across five cells it does not use. Nothing about the honeycomb: the tool was
+faithfully drawing a wrong catalogue entry. Front (−Y) plus a 90° spin lands it flat on the wall,
+and the cell editor is where the two real cells get recorded — which is exactly the workflow D42/D43
+added, now against a wall nobody can argue with.
+
+**And the dialog is keyed on the part.** Every control seeds from the part it opened on, so a part
+swapped under an open dialog would have inherited the previous one's alignment and offered to save
+it. `key={part.id}` makes the swap a remount. No path in the app does that today; the trap is that
+the next one would have.
+
+**The middle cell is not compulsory.** Reported straight after: "where you select where the
+fasteners should be I'm not able to select nothing, which I should, and I want to not have to have
+the middle one." The editor pinned cell (0, 0) — one click cycled it covered → socket → covered and
+never to empty — on the reasoning that `partCells` puts the anchor under the cursor and a footprint
+with nothing at the origin has no cell to drag by. True of the ANCHOR, and the anchor does not have
+to be the origin. A two-peg shelf hangs on the cells above and below its middle and uses nothing in
+between; pinning the middle gave it a third cell it does not have, which then reports overlaps
+against a neighbour that is not really there.
+
+So `anchorOf` picks the drag cell from whatever cells the part has — nearest the origin, ties broken
+deterministically, which for any footprint containing the origin IS the origin — and
+`applyOverrides`, `withFootprint` and the editor all use it instead of assuming. Any cell can now go
+back to empty; the last one cannot, because a part covering nothing cannot be checked against
+anything. The editor outlines whichever cell is currently the anchor rather than always the middle.
+
+Four tests written the day before pinned the old rule and now assert the new one — the case
+`tests/critic-*.test.ts` warns about, checked rather than "corrected": the behaviour changed on
+purpose.
+
+---
+
+## D47 — A socket in the wall IS an insert, so the parts list stops ordering another
+
+**Asked for: "the wall fastener combined is 1 screw hole and 3 empty inserts, so when I align a part
+with an empty insert and put it on one of the spots that's open on the wall mount, I want it to
+remove the one attached to the model and use the existing one."**
+
+D43 made those three cells installable. What it deliberately did not do was change the count, on the
+grounds that knowing WHICH peg lands in which socket is an inference from cells — the mistake that
+had a 7-cell shelf ordering seven inserts. That objection is answered now: the cell editor (D42)
+records the cells a part actually mounts through, so "a cell of this part is a socket of that one"
+is a fact about two placements rather than a guess about a bounding box.
+
+**Decision: a socket may declare which insert it STANDS IN FOR (`socketProvides`), and a part hung
+on one has that insert deducted from what the list orders.** Measured and shipped: the junction
+fastener's three sockets are the same 13.2 mm socket `insert-empty` provides;
+`insert-countersunk-with-m3x3`'s three cells are M3 bores, which is what `insert-with-m3` provides —
+and its own hardware already orders those three bolts and nuts, so nothing is lost by not printing
+another insert.
+
+**Stated, never inferred.** A part with `socketCells` and no `socketProvides` offers somewhere to
+install something and orders nothing away. Two sockets being the same size is not proof they do the
+same job, and this is a shopping list.
+
+**One socket, one claim.** Sockets are allocated in document order and each is consumed once, so two
+accessories over the same hole cannot both save an insert, and a part can never claim its own.
+Sockets come from placed items AND from the junction fixings the plan puts in at the seams — those
+are in the wall whether or not anybody dropped them by hand.
+
+**The line says why it is not higher.** `BomLine.providedBySockets` reads "1 already in the wall" on
+screen, a note in the markdown checklist and a column in the CSV. A quantity that silently drops is
+indistinguishable from a bug at the printer.
+
+Checked in the app, not only in tests: with a junction fastener placed, dropping
+`countersunk-to-holee` on one of its sockets leaves no `insert-empty` line at all; dragging the same
+part one cell off the socket brings it straight back.
+
+---
+
+## D48 — Hanging a part on a wall fastener's open hole must not delete the fastener
+
+**Reported: "if you move something like the hook to empty onto one of the wall fastener's empty
+holes, the wall mount just disappears. I want to use those holes, but only for parts that use an
+empty insert of any kind to mount."**
+
+`planFixings` refuses any cell an accessory covers, and it checks that over all FOUR cells of a
+junction placement — so one hook on one of the three open sockets dropped the whole placement. The
+fixing vanished from the plan, from the parts list and from the 3D view, which is the opposite of
+what putting a part there means: the socket is what the part is pegged INTO.
+
+**Decision: two readings of "occupied", not one.** Anything on a cell still keeps the spacing grid
+out of it — a single-cell countersunk fixing has no socket to peg into and a screwdriver has to
+reach its head. But a part that mounts through a plain socket, sitting on a JUNCTION's socket cell,
+blocks nothing. `SharedCells` carries those cells plus the junction's socket offsets, and the
+junction pass allows a shared cell only where that candidate placement actually has a socket. The
+fourth cell — the wall screw — still blocks, whatever is on it, because a screwdriver has to get
+there.
+
+**"An empty insert of any kind" is derived, not a list of ids.** `isEmptyInsert` is an insert or
+fastener that asks for NO hardware: no bolt, no wall screw, so all it offers is the socket. That is
+`insert-empty` and the whole hollow family, and it excludes every M3/M4/M5 and every countersunk
+insert. A part "uses" one when its `requires` names one.
+
+**One helper, both consumers.** `fixingPlanFor(doc, catalog)` builds both sets and is what `bom.ts`
+and `WallView3D` now call. Two readings of which cells are free would have put a fixing in the
+picture that is not on the list, or the reverse — the same split `partCells`/`itemCells` and
+`store`/`validate` have each been through.
+
+**A broken fixture, found while testing this.** `planFixings` groups cells BY PANEL ID; a test that
+built panels straight from `solveTiling` without assigning ids had every panel reading as the same
+plate, so no junction was ever found and the test would have passed against a planner that did
+nothing. The app assigns `p${i}`; the fixture does now too.
+
+---
+
+## D49 — The socket cells were measured in the wrong frame, and it inverted them
+
+**Reported: "it sort of works — it only works over the countersunk hole, which is the only one it
+should NOT work on."**
+
+Exactly right, and the cause is one frame. D47's socket cells were measured by rastering the RAW
+STL and matching each hole's centroid to a cell. But `meshLibrary.orient` turns a part over when its
+mating end is `high` — `v = -v` — while `detect.toAxial` does not turn the footprint with it. This
+part mates on `high`. So the measurement was of the file, and the app draws the mirror of it: the
+middle two cells swap, and the app ended up calling the wall-screw bore a socket and the socket a
+screw hole. The outer two cells are on the mirror axis and were right either way, which is why it
+"sort of" worked.
+
+**Re-measured in the frame the wall draws in** — the mesh oriented through the mating flip,
+positioned at the mean of its cells, each hole's centroid through `mmToHex`:
+
+| cell | what is there |
+|---|---|
+| (1,0) | the 3.2 mm countersunk wall-screw bore |
+| (0,0), (1,-1), (2,-1) | 13.2 mm hexagonal sockets |
+
+Same three cells on `insert-countersunk-with-m3x3`. Confirmed by eye as well as by arithmetic: in
+the inspector the round cone is the top-middle cell and carries no socket ring, while the other
+three do.
+
+**The general rule this leaves behind: anything that says WHERE ON A PART a feature is must be
+measured on the ORIENTED mesh, never on the file.** The mirror is real for every `high`-mating part
+and it is invisible on a symmetric footprint. `insert-hollow-for` shows the same mismatch between
+its mesh and its own recorded cells; that one is a catalogue-wide question and is PARKED (P10) with
+the measurement rather than patched here.
+
+---
+
+## D50 — The parts list is computed from the document and the catalogue, not through the store
+
+**Reported: "when I place something I have used the tool on, the amount of fasteners does not
+update — and when it is placed on top of these fasteners you of course don't need a fastener for
+that part."**
+
+**The stale list was an ordering hazard, not a missing dependency.** `App` computed the BOM with
+`store.bom()`, memoised on the document. The store's catalogue is set in an EFFECT — `store.setCatalog`
+runs after the render — so on the render where a correction has just rebuilt the catalogue,
+`store.bom()` still reads the old one, and by the next render the memo has nothing new to react to.
+Adding `catalog` to the dependencies does not fix it: the memo then recomputes on exactly the render
+where the store is still behind. You could set a part to insert-M5, place it, and be told to print
+insert-empty.
+
+**The BOM is a pure function of two immutable inputs, so it is now computed from them:**
+`computeBom(state.doc, catalog)`. No ordering to get right, and it is what `bom.ts` was written to
+be. `store.bom()` stays for callers that own both — the tests, and anything outside React.
+
+**And an empty insert of ANY kind now answers a part that wants an empty insert.** The substitution
+matched on part id, which was right while the only such part was `insert-empty` and wrong the moment
+the inspector let a person choose `insert-hollow-dual` instead: the same hexagonal socket, a
+different id, and the saving silently disappeared. `isEmptyInsert` on both sides decides it. Bolted
+inserts stay exclusive — an M3 bore answers only a part that wants an M3 insert, because a plain
+socket has no thread.
+
+---
+
+## D51 — The drag ghost is `partCells`, like everything else that answers "which cells"
+
+**Reported: "when I move the part around, the green honeycomb does not line up with where the part
+lands."**
+
+Both ghosts — `ghostCells` in the plan view and `ghost3DCells` in the wall view — called
+`placeFootprint` on the RAW footprint. `store.partCells` subtracts the part's ANCHOR first. The two
+differ by exactly that anchor, so the green cells sat a cell or two from where the part actually
+dropped: with a two-cell footprint anchored at (0,-1), the ghost drew 4,1 and 4,3 while the part
+landed on 4,2 and 4,4.
+
+It hid because every anchor in the shipped catalogue is the origin, where the subtraction is a
+no-op. It appeared the moment a hand-drawn footprint left the middle cell out (D46) and `anchorOf`
+moved the anchor onto a real cell.
+
+**Both now call `partCells`.** That is the third copy of "which cells does this part cover" this
+repo has had to collapse — `partCells` and `itemCells` were unified for the same reason, and
+`ghost3DCells` carries a comment about exactly this hazard directly above the line that had it.
+
+`tests/ghost.test.ts` holds all three to each other for an ordinary footprint, one with no middle
+cell, one anchored well off the origin, and through all six rotations — because rotation is about
+the anchor too, so a turned part would jump as well as sit wrong.
+
+---
+
+## D52 — One body in the inspector's scene, and one place that removes it
+
+**Reported: "under Space on the wall, if I click The wall face then Its inserts, the model
+duplicates."**
+
+The model-load effect added the part's mesh to the stage and overwrote `s.part` — and never took the
+previous mesh away. Any re-run of that effect (its dependencies are the part and its saved mounting,
+both of which are new objects whenever the catalogue is rebuilt) left the old mesh standing in the
+scene. Every other effect drives `s.part` alone, so the abandoned copy sits still while the real one
+moves: a part that duplicates itself and then leaves a ghost behind.
+
+**Removed and disposed in the effect's cleanup**, which React runs before a re-run as well as on
+unmount, plus a defensive drop at the point of adding — the invariant is one body, and it should be
+readable where it could break, not only where it is tidied. The geometry built here is this dialog's
+own; `meshLibrary`'s is the wall's too and is never disposed from here.
+
+**Two things next to it were wrong for the same reason.** The plate effect removed the previous plate
+itself and had no cleanup, so a closed dialog left its buffers behind; it now adds in the effect and
+removes in the cleanup, one place each. And it bailed out while no body was loaded — right, because
+it needs the body's half-extent for the stand-off — but nothing brought it back afterwards except
+the first `status` change, so a RE-loaded part kept a plate sized for the previous one. `bodyTick`
+is the signal now.
+
+**What I could not do: reproduce the exact click sequence.** Four seat toggles, before and after a
+saved correction, with the part moved 10 mm out to expose any ghost — one body every time, both
+before and after the fix. The defect above is the only mechanism in the file that can leave a second
+copy in the scene, and it is closed; if it turns up again it will be from a path I have not found,
+and the thing to look at first is what changed `part` or `current` identity while the dialog stayed
+open.

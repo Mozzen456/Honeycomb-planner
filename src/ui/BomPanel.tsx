@@ -241,6 +241,17 @@ function BomSection({ title, lines, index, onSelectPart, emptyText }: SectionPro
                       {line.supports ? (
                         <span className="bom-line__flag">needs supports</span>
                       ) : null}
+                      {/* Why the quantity is not higher: the wall fastener's own
+                          sockets ARE inserts, so the parts hung on them do not
+                          each need another one printed. */}
+                      {line.providedBySockets > 0 ? (
+                        <span
+                          className="bom-line__flag"
+                          title="Sockets in the wall fasteners already do this job, so these are not printed"
+                        >
+                          {line.providedBySockets} already in the wall
+                        </span>
+                      ) : null}
                     </span>
                   </td>
                   <td className="bom-table__num bom-line__time">{formatMinutes(line.minutes)}</td>

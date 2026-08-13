@@ -30,16 +30,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 
 import { CELL, INSERT, PANEL_DEPTH, PITCH } from '../core/constants';
-import { hexCorners, hexKey, hexNeighbours, hexToMm } from '../core/hex';
+import {
+  cellsBoundsMm, hexCorners, hexKey, hexNeighbours, hexToMm, panelCells,
+} from '../core/hex';
 import { AXES, detect } from '../core/detect';
 import {
-  MAX_OFFSET_MM, MAX_TILT_DEG, socketsOf, type MountingOverride,
+  anchorOf, MAX_OFFSET_MM, MAX_TILT_DEG, socketsOf, type MountingOverride,
 } from '../core/overrides';
 import type { Catalog, CatalogPart, Hex, InsertRequirement } from '../core/types';
 import { FootprintEditor } from './FootprintEditor';
 import { thumbnailFor } from './partThumbnails';
-import { loadRawMesh } from './meshLibrary';
-import { fileToScene, mountingMatrixInFileFrame } from './mountingTransform';
+import { loadPartMesh, loadRawMesh } from './meshLibrary';
+import { fileToScene, mountingMatrixInFileFrame, wallBasis } from './mountingTransform';
 import './PartInspector.css';
 
 export interface PartInspectorProps {
@@ -63,16 +65,17 @@ type End = 'low' | 'high';
 type Seat = 'wall' | 'insert';
 
 /**
- * A footprint the editor can work on: the anchor is always a member, and no
- * cell appears twice.
+ * A footprint the editor can work on: no cell twice, and at least one cell.
  *
- * `partCells` puts the anchor under the cursor, so a footprint with nothing at
- * the origin has no cell to drag the part by. `applyOverrides` enforces the
- * same two rules on the way back in, which is what makes the round trip stable.
+ * The centre is NOT forced in — a two-peg shelf hangs on the cells above and
+ * below its middle and uses nothing in between, and a forced middle cell is a
+ * third cell the part does not have. `anchorOf` picks the drag cell from
+ * whatever cells there are, and `applyOverrides` keeps the same two rules on
+ * the way back in, which is what makes the round trip stable.
  */
 function normaliseCells(cells: readonly Hex[] | undefined): Hex[] {
-  const seen = new Set<string>(['0,0']);
-  const out: Hex[] = [{ q: 0, r: 0 }];
+  const seen = new Set<string>();
+  const out: Hex[] = [];
   for (const c of cells ?? []) {
     if (typeof c?.q !== 'number' || typeof c?.r !== 'number') continue;
     const key = hexKey(c);
@@ -80,7 +83,7 @@ function normaliseCells(cells: readonly Hex[] | undefined): Hex[] {
     seen.add(key);
     out.push({ q: c.q, r: c.r });
   }
-  return out;
+  return out.length > 0 ? out : [{ q: 0, r: 0 }];
 }
 
 const sameCells = (a: readonly Hex[], b: readonly Hex[]): boolean => {
@@ -255,6 +258,15 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
   );
   const [status, setStatus] = useState<string>('Loading the model…');
   /**
+   * Bumped whenever a body is installed, and a dependency of everything that
+   * measures one — the plate needs `s.half` for its stand-off and the transform
+   * needs a body to write a matrix into. `status` used to carry that signal,
+   * but only for the FIRST load: it goes from "Loading…" to "" once and then
+   * never changes, so a re-loaded part would leave the plate sized for the
+   * previous one.
+   */
+  const [bodyTick, setBodyTick] = useState(0);
+  /**
    * What the detector says, computed here from the same mesh rather than passed
    * in. Shown so a person can see exactly what they are overruling — and so the
    * dialog can never disagree with the detector about what the detector said.
@@ -358,6 +370,36 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
 
   // --- the model ------------------------------------------------------------
 
+  /**
+   * ONE body in the scene, ever.
+   *
+   * This effect adds the part's mesh when the model arrives, and it used to add
+   * it without taking the previous one away: `s.part` was overwritten while the
+   * old mesh stayed in the stage, so any re-run left a second copy standing
+   * exactly where the first one had been. Every later effect drives `s.part`
+   * alone, so the abandoned one sits still while the real one moves — a part
+   * that duplicates itself and then leaves a ghost behind.
+   *
+   * Removed in the cleanup, which React runs before the effect re-runs as well
+   * as on unmount, and disposed with it: the geometry here is built in this
+   * effect and shared with nothing (unlike `meshLibrary`'s, which is the wall's
+   * too and must never be disposed from here).
+   */
+  const dropBody = useCallback(() => {
+    const s = scene.current;
+    if (s === null || s.part === null) return;
+    s.stage.remove(s.part);
+    s.part.traverse((o) => {
+      if (o instanceof THREE.Mesh || o instanceof THREE.LineSegments) {
+        o.geometry.dispose();
+        const material = o.material;
+        if (Array.isArray(material)) material.forEach((m) => m.dispose());
+        else material.dispose();
+      }
+    });
+    s.part = null;
+  }, []);
+
   useEffect(() => {
     let live = true;
     void loadRawMesh(part).then((mesh) => {
@@ -406,8 +448,13 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
       // helper — so three.js must not recompute it from position/rotation.
       body.matrixAutoUpdate = false;
       body.add(edges);
+      // Whatever was there goes first. Belt and braces with the cleanup below:
+      // the invariant is one body, and it should be readable at the point that
+      // could break it rather than only at the point that tidies up.
+      dropBody();
       s.stage.add(body);
       s.part = body;
+      setBodyTick((n) => n + 1);
       s.size = Math.max(size.x, size.y, size.z);
       s.half.set(size.x / 2, size.y / 2, size.z / 2);
 
@@ -436,8 +483,11 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
       if (known !== null) setView({ axis: known.axis, end: known.end === 'high' ? 'low' : 'high' });
       setStatus('');
     });
-    return () => { live = false; };
-  }, [part, current]);
+    return () => {
+      live = false;
+      dropBody();
+    };
+  }, [part, current, dropBody]);
 
   /*
    * The camera looks from wherever `view` says, and every face has a button.
@@ -538,30 +588,139 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
     applyCamera();
   }, [view, zoom, status, applyCamera]);
 
+  // --- the wall itself, out of models/ ---------------------------------------
+
+  /**
+   * The smallest shipped panel that covers the patch.
+   *
+   * Smallest because it is the honeycomb immediately around the part that is
+   * being judged, and a 288-cell plate behind a one-cell hook is a megabyte of
+   * STL and a wall of holes to hunt through. `panel.columns/rows` is the WALL
+   * footprint — never `widthMm/heightMm`, which is the printed bed footprint
+   * and a different frame (CLAUDE.md).
+   */
+  const panelPart = useMemo(() => {
+    let needX = PITCH;
+    let needY = PITCH;
+    const mid = { x: 0, y: 0 };
+    for (const c of cells) {
+      const m = hexToMm(c);
+      mid.x += m.x / cells.length;
+      mid.y += m.y / cells.length;
+    }
+    for (const c of cells) {
+      for (const n of [c, ...hexNeighbours(c)]) {
+        const m = hexToMm(n);
+        needX = Math.max(needX, Math.abs(m.x - mid.x) + PITCH * 0.75);
+        needY = Math.max(needY, Math.abs(m.y - mid.y) + PITCH * 0.75);
+      }
+    }
+    let best: CatalogPart | undefined;
+    let bestCells = Infinity;
+    for (const candidate of catalog.parts) {
+      const panel = candidate.panel;
+      if (candidate.type !== 'panel' || panel === undefined) continue;
+      const bounds = cellsBoundsMm(panelCells({ q: 0, r: 0 }, panel.columns, panel.rows));
+      if ((bounds.maxX - bounds.minX) / 2 < needX) continue;
+      if ((bounds.maxY - bounds.minY) / 2 < needY) continue;
+      const count = panel.columns * panel.rows;
+      if (count < bestCells) {
+        bestCells = count;
+        best = candidate;
+      }
+    }
+    return best ?? null;
+  }, [catalog, cells]);
+
+  /**
+   * That panel's real mesh, with the two facts needed to line its lattice up
+   * with this dialog's: where its block's centre is, and which of its cells sits
+   * nearest that centre.
+   *
+   * `loadPartMesh` is the wall view's own loader, so this gets the same
+   * geometry — including the 90° spin a pointy-drawn plate needs to match its
+   * own block — and shares its cache. Which also means the geometry must NOT be
+   * disposed here.
+   */
+  const [panelMesh, setPanelMesh] = useState<{
+    geometry: THREE.BufferGeometry;
+    centreCell: Hex;
+    blockCentre: { x: number; y: number };
+  } | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    if (panelPart === null) {
+      setPanelMesh(null);
+      return;
+    }
+    const panel = panelPart.panel!;
+    void loadPartMesh(panelPart).then((mesh) => {
+      if (!live) return;
+      if (mesh === null) {
+        // No models/ to fetch from — the drawn plate takes over.
+        setPanelMesh(null);
+        return;
+      }
+      const block = panelCells({ q: 0, r: 0 }, panel.columns, panel.rows);
+      const bounds = cellsBoundsMm(block);
+      const blockCentre = {
+        x: (bounds.minX + bounds.maxX) / 2,
+        y: (bounds.minY + bounds.maxY) / 2,
+      };
+      let centreCell = block[0] ?? { q: 0, r: 0 };
+      let nearest = Infinity;
+      for (const c of block) {
+        const m = hexToMm(c);
+        const d = (m.x - blockCentre.x) ** 2 + (m.y - blockCentre.y) ** 2;
+        if (d < nearest) {
+          nearest = d;
+          centreCell = c;
+        }
+      }
+      setPanelMesh({ geometry: mesh.geometry, centreCell, blockCentre });
+    });
+    return () => { live = false; };
+  }, [panelPart]);
+
   // --- the wall plate, against the chosen face ------------------------------
 
   useEffect(() => {
     const s = scene.current;
+    // No body yet: `s.half` would still be the placeholder and the plate would
+    // stand off by the wrong distance. `bodyTick` brings the effect back the
+    // moment there is one.
     if (s === null || s.part === null) return;
-    if (s.plate) {
-      const old = s.plate.userData['arrow'];
-      if (old instanceof THREE.Object3D) s.stage.remove(old);
-      s.stage.remove(s.plate);
-      s.plate.traverse((o) => {
-        if (o instanceof THREE.Mesh) o.geometry.dispose();
-      });
-    }
+    // The previous plate is taken away by this effect's own cleanup, which
+    // React runs before the re-run — one place that removes, one that adds.
 
+    /*
+     * The plate is built in WALL coordinates and turned as a whole.
+     *
+     * `wallBasis` maps wall axes to file ones, so setting it as the group's
+     * rotation makes everything inside read in the frame it is actually about:
+     * +X across the wall, +Y up it, +Z out of it toward the part. That deleted a
+     * sign that used to be worked out per axis and then carried by hand into
+     * every position in here — the kind of thing that is right until somebody
+     * adds one more object to the group.
+     */
     const group = new THREE.Group();
+    group.setRotationFromMatrix(wallBasis(axis, end));
+    const i = AXIS_INDEX[axis];
+    /*
+     * Its front face lands ON the mating plane, which is where `orient` puts the
+     * part's own mating face. Zero depth therefore looks like what zero means:
+     * the part sitting flat on the wall.
+     */
+    group.position.setComponent(i, (end === 'high' ? 1 : -1) * s.half.getComponent(i));
+
     /*
      * The patch is the part's OWN cells, plus a ring to see them against.
      *
      * It was a fixed centre-and-six, which is right for a one-cell hook and
      * wrong for everything else: a four-cell shelf spilled off the plate, and
      * the one question the plate exists to answer — does this part cover the
-     * cells it claims — could not be asked at all. Now the chosen cells are
-     * drawn as chosen, their neighbours as context, and the slab is sized to
-     * hold both.
+     * cells it claims — could not be asked at all.
      */
     const patch = new Map<string, Hex>();
     for (const c of cells) {
@@ -572,11 +731,12 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
     /*
      * The BLOCK's centre, not cell (0, 0).
      *
-     * `meshLibrary.orient` centres a part on its own wall-plane bounding box and
-     * this dialog centres the mesh on its bbox too, so the cells have to be
-     * centred on the block or the two are offset by however far the anchor sits
-     * from the middle. On a four-cell diamond that is 20 mm — the part drawn
-     * beside its own holes rather than in them.
+     * `WallView3D` puts a placed part at the MEAN of the cells it covers, and
+     * `meshLibrary.orient` centres the mesh on its own wall-plane bounding box.
+     * This dialog centres the mesh the same way, so the cells have to be centred
+     * the same way too — the mean, not the anchor. On a four-cell diamond the
+     * difference is 20 mm: the part drawn beside its own holes rather than in
+     * them.
      */
     const mid = { x: 0, y: 0 };
     for (const c of cells) {
@@ -597,51 +757,79 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
     const plateSize = reach * 2;
 
     /*
-     * A plate with HOLES in it, not a slab with plugs in it.
+     * THE HONEYCOMB IS A REAL PANEL, out of `models/`.
      *
-     * This is what made every insert disappear. The cells were drawn as solid
-     * hexagonal prisms filling each hole, which is fine behind an accessory that
-     * stands proud of the wall and fatal for a part that goes INTO the cells:
-     * `insert-for-countersunk-hole-3` sat exactly inside four opaque prisms and
-     * could not be seen at all. A cell is a hole. Drawing it as material was the
-     * bug, and the wall view had already got this right — `buildPanelGeometry`
-     * extrudes one outline with a hole per cell for the same reason.
+     * It was drawn from the lattice constants instead — first as a slab with a
+     * prism plugged into every cell, then as an extrusion with the mouth and
+     * throat cut out of it. Each version was closer, and each was still a
+     * DRAWING of a cell rather than a cell, which is exactly the argument this
+     * repo settles by measuring: the wall in this dialog is the thing a person
+     * holds their part up against, and it should be the same file they are going
+     * to print.
+     *
+     * So the plate is the smallest shipped panel that covers the patch, loaded
+     * through the same `loadPartMesh` the wall view uses — which means it also
+     * gets the pointy-drawn 90° spin that makes a plate match its own block. Its
+     * lattice is aligned to this dialog's by putting the panel's most central
+     * cell exactly where cell (0, 0) of the part goes; both sides are `hexToMm`,
+     * so from there every other cell agrees for free.
+     *
+     * The drawn plate stays as the fallback for when the STL cannot be had — the
+     * app is built to run from a file:// URL with no `models/` beside it.
      */
-    const half = plateSize / 2;
-    /** The plate with a hexagon of `acrossFlats` taken out of every patch cell. */
-    const perforated = (acrossFlats: number): THREE.Shape => {
-      const shape = new THREE.Shape([
-        new THREE.Vector2(-half, -half), new THREE.Vector2(half, -half),
-        new THREE.Vector2(half, half), new THREE.Vector2(-half, half),
-      ]);
-      for (const c of patch.values()) {
-        // Clockwise, so it reads as a hole against the counter-clockwise outline.
-        const corners = hexCorners(c, acrossFlats);
-        const pts: THREE.Vector2[] = [];
-        for (let k = corners.length - 1; k >= 0; k--) {
-          pts.push(new THREE.Vector2(corners[k]!.x - mid.x, corners[k]!.y - mid.y));
-        }
-        shape.holes.push(new THREE.Path(pts));
-      }
-      return shape;
-    };
-
-    const layer = (acrossFlats: number, thickness: number, farFace: number): THREE.Mesh => {
-      const g = new THREE.ExtrudeGeometry([perforated(acrossFlats)], {
-        depth: thickness, bevelEnabled: false, curveSegments: 1,
-      });
-      g.translate(0, 0, farFace);
-      g.computeVertexNormals();
-      return new THREE.Mesh(
-        g,
-        // Faint as well as perforated. Pressing a face button can put the plate
-        // between the camera and the part, so it has to be something you can see
-        // THROUGH — or choosing a face hides the thing you are choosing it for.
-        new THREE.MeshLambertMaterial({
-          color: 0x9aa4b2, transparent: true, opacity: 0.35, side: THREE.DoubleSide,
-        }),
+    const wallPanel = panelMesh?.geometry ?? null;
+    if (wallPanel !== null && panelMesh !== null) {
+      const anchor = panelMesh.centreCell;
+      const slab = new THREE.Mesh(
+        wallPanel,
+        new THREE.MeshLambertMaterial({ color: 0x9aa4b2, side: THREE.DoubleSide }),
       );
-    };
+      const a = hexToMm(anchor);
+      // `loadPartMesh` centres the plate on its own block and leaves its mating
+      // face at z = 0, so the mesh's front is a panel thickness further out.
+      slab.position.set(
+        -mid.x - (a.x - panelMesh.blockCentre.x),
+        -mid.y - (a.y - panelMesh.blockCentre.y),
+        -PANEL_DEPTH,
+      );
+      group.add(slab);
+      group.userData['ownGeometry'] = false;
+    } else {
+      /** The plate with a hexagon of `acrossFlats` taken out of every patch cell. */
+      const half = plateSize / 2;
+      const perforated = (acrossFlats: number): THREE.Shape => {
+        const shape = new THREE.Shape([
+          new THREE.Vector2(-half, -half), new THREE.Vector2(half, -half),
+          new THREE.Vector2(half, half), new THREE.Vector2(-half, half),
+        ]);
+        for (const c of patch.values()) {
+          // Clockwise, so it reads as a hole against the counter-clockwise outline.
+          const corners = hexCorners(c, acrossFlats);
+          const pts: THREE.Vector2[] = [];
+          for (let k = corners.length - 1; k >= 0; k--) {
+            pts.push(new THREE.Vector2(corners[k]!.x - mid.x, corners[k]!.y - mid.y));
+          }
+          shape.holes.push(new THREE.Path(pts));
+        }
+        return shape;
+      };
+      // The real cell is stepped: a 22.0 mouth 2.0 deep over the 20.0 throat that
+      // retains an insert (HSW-SPEC §3). Two layers, as `buildPanelGeometry`
+      // builds the wall itself, with the mouth on the side the part is on.
+      const layer = (acrossFlats: number, thickness: number, back: number): THREE.Mesh => {
+        const g = new THREE.ExtrudeGeometry([perforated(acrossFlats)], {
+          depth: thickness, bevelEnabled: false, curveSegments: 1,
+        });
+        g.translate(0, 0, back);
+        g.computeVertexNormals();
+        return new THREE.Mesh(
+          g,
+          new THREE.MeshLambertMaterial({ color: 0x9aa4b2, side: THREE.DoubleSide }),
+        );
+      };
+      group.add(layer(CELL.mouthAcrossFlats, CELL.mouthDepth, -CELL.mouthDepth));
+      group.add(layer(CELL.throatAcrossFlats, PANEL_DEPTH - CELL.mouthDepth, -PANEL_DEPTH));
+    }
 
     /**
      * A hexagonal prism on the FLAT-TOP lattice.
@@ -661,39 +849,40 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
     };
 
     /*
-     * The cells do NOT turn. The wall does not turn.
-     *
-     * The spin used to be applied here, and that is backwards: pressing the spin
-     * control rotated the HOLE while the part sat still, which is the opposite of
-     * what is being decided. A cell is a fixture of the wall — it is the thing
-     * the part has to line up WITH — so it stays put and the part moves against
-     * it, which is also what `meshLibrary` does when it saves the result.
-     */
-    /*
      * Which cells the part claims, as a RING round the hole rather than a plug
-     * in it — for the same reason the plate is perforated. Blue for a cell the
-     * part covers, gold for one it offers as a socket, nothing at all for the
-     * neighbours that are only there for context.
+     * in it: a cell is a hole, and filling it hides whatever goes into it. Blue
+     * for a cell the part covers, gold for one it offers as a socket, nothing at
+     * all for the neighbours that are only there for context.
+     *
+     * The cells do NOT turn. The spin used to be applied here, and that is
+     * backwards — pressing it rotated the HOLE while the part sat still. A cell
+     * is a fixture of the wall; the part moves against it.
      */
     const claimedMat = new THREE.MeshBasicMaterial({ color: 0x2f5d8a, side: THREE.DoubleSide });
     const socketMat = new THREE.MeshBasicMaterial({ color: 0xc9a227, side: THREE.DoubleSide });
     const open = new Set(sockets.map(hexKey));
     const ring = (cell: Hex): THREE.ExtrudeGeometry => {
       // 0.6 mm each side, so the marker sits ON the web without swallowing it:
-      // the web is 1.6 mm and it is now drawn at its real width.
+      // the web is 1.6 mm and the honeycomb is drawn at its real size.
       const outer = hexCorners(cell, CELL.mouthAcrossFlats + 1.2)
         .map((p) => new THREE.Vector2(p.x - mid.x, p.y - mid.y));
       const innerPts = hexCorners(cell, CELL.mouthAcrossFlats)
         .map((p) => new THREE.Vector2(p.x - mid.x, p.y - mid.y))
         .reverse();
-      const s = new THREE.Shape(outer);
-      s.holes.push(new THREE.Path(innerPts));
-      const g = new THREE.ExtrudeGeometry([s], {
+      const s2 = new THREE.Shape(outer);
+      s2.holes.push(new THREE.Path(innerPts));
+      const g = new THREE.ExtrudeGeometry([s2], {
         depth: 0.8, bevelEnabled: false, curveSegments: 1,
       });
       g.computeVertexNormals();
       return g;
     };
+
+    for (const c of cells) {
+      const mark = new THREE.Mesh(ring(c), open.has(hexKey(c)) ? socketMat : claimedMat);
+      mark.position.z = -0.4;
+      group.add(mark);
+    }
 
     /*
      * The inserts, when the part is seated on them.
@@ -703,45 +892,7 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
      * 22.0 mm mouth, so it stands proud by `INSERT.flangeThickness` and the part
      * rests on THAT, not on the wall. Drawn only when the seat says so, so the
      * control has a visible consequence rather than being 2.5 mm of arithmetic.
-     *
-     * Which way is proud is not assumed: the plate is turned to face the chosen
-     * axis, so the direction back toward the part is taken from the group's own
-     * rotation rather than from a sign somebody has to keep true by hand.
      */
-    const i = AXIS_INDEX[axis];
-    if (axis === 'x') group.rotation.y = Math.PI / 2;
-    if (axis === 'y') group.rotation.x = Math.PI / 2;
-    const towardPart = new THREE.Vector3()
-      .setComponent(i, end === 'high' ? -1 : 1)
-      .applyQuaternion(group.quaternion.clone().invert());
-    const face = Math.sign(towardPart.z) || 1;
-
-    /*
-     * THE CELL IS THE REAL CELL, not a straight 22 mm hole.
-     *
-     * A wall cell is stepped: a 22.0 mm mouth 2.0 mm deep, then the 20.0 mm
-     * throat that actually retains an insert (HSW-SPEC §3, `CELL`). Drawing one
-     * straight bore at the mouth made every cell in this dialog read wider than
-     * the same cell on the wall — the tool and the wall disagreeing about the
-     * size of the honeycomb, which is the one thing a person is here to judge.
-     * Two layers, exactly as `buildPanelGeometry` builds the wall itself, and
-     * the mouth goes on the side the PART is on.
-     */
-    group.add(layer(CELL.mouthAcrossFlats, CELL.mouthDepth, face > 0
-      ? PANEL_DEPTH / 2 - CELL.mouthDepth
-      : -PANEL_DEPTH / 2));
-    group.add(layer(CELL.throatAcrossFlats, PANEL_DEPTH - CELL.mouthDepth, face > 0
-      ? -PANEL_DEPTH / 2
-      : -PANEL_DEPTH / 2 + CELL.mouthDepth));
-
-    // The rings sit on the face the part is on, so they are never behind it.
-    for (const c of cells) {
-      const key = hexKey(c);
-      const mark = new THREE.Mesh(ring(c), open.has(key) ? socketMat : claimedMat);
-      mark.position.z = face * (PANEL_DEPTH / 2 - 0.4);
-      group.add(mark);
-    }
-
     if (seat === 'insert') {
       const insertMat = new THREE.MeshPhongMaterial({ color: 0xc9a227, shininess: 16 });
       for (const c of cells) {
@@ -750,83 +901,44 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
           insertMat,
         );
         const m = at(c);
-        flange.position.set(
-          m.x, m.y, face * (PANEL_DEPTH / 2 + INSERT.flangeThickness / 2),
-        );
+        flange.position.set(m.x, m.y, INSERT.flangeThickness / 2);
         group.add(flange);
       }
     }
 
     /*
-     * The plate goes FLUSH against the chosen face, not near it.
+     * Which way is UP on the wall — now simply +Y of this group.
      *
-     * It used to stand off by half the part's LARGEST dimension plus a 4% gap,
-     * which for anything that is not a cube left the part hanging in mid air —
-     * so zero depth looked wrong and every reading of the depth control was
-     * relative to a gap nobody chose. On the wall, zero means the mating face is
-     * ON the wall surface (`orient` puts it at z = 0), and that is now what zero
-     * looks like here: the plate's inner face is the mating plane, and the six
-     * seating numbers move the part against it.
-     *
-     * `standOff`, NOT `offset`. It was called `offset` and shadowed the depth
-     * state of the same name, so the part was positioned at the plate's fixed
-     * stand-off distance and never moved when the depth changed — the number on
-     * screen went up and down and nothing happened, which is the one thing this
-     * preview exists to show.
+     * Drawn ON the wall, running up it, and long enough to read: a short arrow
+     * beside the patch foreshortens to a dot whenever the view is anywhere near
+     * the normal, which is where it usually is.
      */
-    const standOff = s.half.getComponent(i) + PANEL_DEPTH / 2;
-    const pos = new THREE.Vector3();
-    pos.setComponent(i, end === 'high' ? standOff : -standOff);
-    group.position.copy(pos);
-
-    /*
-     * Which way is UP on the wall.
-     *
-     * The part is shown in the FILE's frame, so "up" is not the screen's up and
-     * not any fixed axis — it is whichever file axis `orient` will map to the
-     * wall's +Y. That is `AXES[axis][1]`, negated when the mating end is `high`
-     * because the flip negates v. Without it you can line a part up against the
-     * cells and still hang a shelf sideways, which is the one mistake the
-     * geometry cannot catch for you.
-     */
-    const upIndex = AXES[axis][1];
-    const upSign = end === 'high' ? -1 : 1;
-    const upDir = new THREE.Vector3();
-    upDir.setComponent(upIndex, upSign);
-    /*
-     * Drawn ON the wall, running up it, and long enough to read.
-     *
-     * The first attempt was a short arrow floating beside the patch, and it was
-     * useless in the common case: with the camera looking at the mounting face,
-     * "up the wall" can point nearly away from you, and a short arrow foreshortens
-     * to a dot. It now spans most of the patch and starts from the bottom of it,
-     * so even heavily foreshortened there is a line with a head on it.
-     *
-     * Lifted just off the plate along the face normal so it is not buried in the
-     * slab, and drawn against the cells rather than beside them — the question it
-     * answers is "which way up is this part going to hang", and that is only
-     * meaningful against the wall it hangs on.
-     */
-    const normal = new THREE.Vector3();
-    normal.setComponent(i, end === 'high' ? -1 : 1);
     const arrow = new THREE.ArrowHelper(
-      upDir,
-      upDir.clone().multiplyScalar(-plateSize * 0.46)
-        .add(normal.clone().multiplyScalar(PANEL_DEPTH * 0.8))
-        .add(pos),
+      new THREE.Vector3(0, 1, 0),
+      new THREE.Vector3(0, -plateSize * 0.46, PANEL_DEPTH * 0.1),
       plateSize * 0.92,
       0x8fd18f,
       plateSize * 0.2,
       plateSize * 0.12,
     );
-    s.stage.add(arrow);
+    group.add(arrow);
 
     s.stage.add(group);
     s.plate = group;
-    // The arrow belongs to the plate's lifetime — parented so the one disposal
-    // path below clears it too.
-    group.userData['arrow'] = arrow;
-  }, [axis, end, cells, sockets, seat, status]);
+
+    // ...and on the way out, so a closed dialog leaves no buffers behind. The
+    // panel's own geometry is `meshLibrary`'s and the wall view's too — it is
+    // removed from the scene here and never disposed.
+    return () => {
+      const live = scene.current;
+      if (live === null || live.plate !== group) return;
+      live.stage.remove(group);
+      group.traverse((o) => {
+        if (o instanceof THREE.Mesh && o.geometry !== panelMesh?.geometry) o.geometry.dispose();
+      });
+      live.plate = null;
+    };
+  }, [axis, end, cells, sockets, seat, status, panelMesh, bodyTick]);
 
   // --- the six seating numbers ----------------------------------------------
 
@@ -872,7 +984,7 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
     // matrix nobody told it had changed — and the raycast that picks a face
     // reads exactly that.
     s.part.updateMatrixWorld(true);
-  }, [mounting, axis, end, status]);
+  }, [mounting, axis, end, status, bodyTick]);
 
   // --- picking --------------------------------------------------------------
 
@@ -1096,14 +1208,16 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
    * person marking up a four-cell junction insert is going round all four of
    * them in one pass.
    *
-   * The anchor cycles between covered and socket and is never removed:
-   * `partCells` hangs the whole footprint off it, so a part without one has no
-   * cell under the cursor to drag by. `ImportDialog` and `applyOverrides` keep
-   * the same rule.
+   * ANY cell can go back to empty, the middle one included. It used to be
+   * pinned on the reasoning that the drag hangs off the origin, which is true
+   * of the anchor and not of the origin: a two-peg shelf uses the cells above
+   * and below its middle and nothing in between, and pinning the middle gave it
+   * a third cell it does not have. The anchor now follows the cells
+   * (`anchorOf`). The last cell stays, because a part covering nothing cannot
+   * be checked against anything.
    */
   const toggleCell = (cell: Hex): void => {
     const key = hexKey(cell);
-    const anchor = cell.q === 0 && cell.r === 0;
     const covered = cells.some((c) => hexKey(c) === key);
     const open = sockets.some((c) => hexKey(c) === key);
 
@@ -1116,7 +1230,7 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
       return;
     }
     setSockets((prev) => prev.filter((c) => hexKey(c) !== key));
-    if (!anchor) setCells((prev) => prev.filter((c) => hexKey(c) !== key));
+    setCells((prev) => (prev.length > 1 ? prev.filter((c) => hexKey(c) !== key) : prev));
   };
 
   return (
@@ -1279,6 +1393,7 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
               onToggle={toggleCell}
               showInserts={seat === 'insert'}
               sockets={sockets}
+              anchor={anchorOf(cells)}
               label={`Cells ${part.name} covers`}
             />
           </div>
@@ -1289,8 +1404,9 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
               {' '}<strong>a socket</strong> → empty. Covered is the wall this part occupies and
               what the planner checks when you drop it. A socket is a cell you can install
               something else INTO — three of the four on a junction insert are open holes, and
-              marking them is what lets another part go in there. The centre cell is the one
-              under your cursor while dragging, so it always belongs to the part.
+              marking them is what lets another part go in there. Any cell can go back to empty,
+              the middle one included; the outlined cell is simply the one that ends up under
+              your cursor while dragging, and the last cell cannot be removed.
             </p>
             <p className="inspector__count tabular-nums">
               {cells.length} cell{cells.length === 1 ? '' : 's'}

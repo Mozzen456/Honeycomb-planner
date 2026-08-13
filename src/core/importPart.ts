@@ -21,6 +21,7 @@
 import { detect, type Detection } from './detect';
 import { PITCH, ROW_STEP } from './constants';
 import { estimatePrint, measureMesh, parseStl, type MeshMeasure } from './stl';
+import { anchorOf } from './overrides';
 import type { Catalog, CatalogPart, Hex, PartType } from './types';
 
 /** Panels get four wall mounts, plus one more per 50 cells (tools/scan.py). */
@@ -382,7 +383,9 @@ export function withFootprint(
   const next: ImportedPart = {
     ...part,
     footprint,
-    anchor: { q: 0, r: 0 },
+    // The drag cell follows the cells drawn, rather than being assumed at the
+    // origin: a part need not cover its own middle (see `anchorOf`).
+    anchor: anchorOf(footprint),
     needsReview: part.needsReview && !edited,
     provenance: {
       ...part.provenance,

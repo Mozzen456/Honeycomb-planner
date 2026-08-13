@@ -187,14 +187,15 @@
     },
     {
      "q": 1,
-     "r": 0
+     "r": -1
     },
     {
      "q": 2,
      "r": -1
     }
    ],
-   "_note": "three of its four cells are open hexagonal sockets, 13.2 mm across flats and 15.2 across corners - the standard 13.4 mm insert socket an accessory peg plugs into. The fourth cell (1,-1) carries the 3.2 mm wall-screw bore. Measured by rastering the mating face and matching each enclosed hole's centroid to a cell of the footprint"
+   "_note": "three of its four cells are open hexagonal sockets, 13.2 mm across flats and 15.2 across corners - the standard 13.4 mm insert socket an accessory peg plugs into. The fourth cell (1,0) carries the 3.2 mm wall-screw bore. Measured on the mesh AS THE WALL DRAWS IT - oriented through the mating flip, positioned at the mean of its cells - and each hole's centroid put through mmToHex. Measuring the raw file instead swaps the middle two cells, because a 'high' mating end mirrors the mesh and toAxial does not mirror the footprint with it (PARKED P10); its three sockets are the same 13.2 mm hexagonal socket insert-empty provides, so a part hung on one does not need an insert-empty printed for it as well",
+   "socketProvides": "insert-empty"
   },
   "insert-countersunk-with-m3x3": {
    "socketCells": [
@@ -204,14 +205,15 @@
     },
     {
      "q": 1,
-     "r": 0
+     "r": -1
     },
     {
      "q": 2,
      "r": -1
     }
    ],
-   "_note": "three of its four cells carry a 3.0 mm M3 bore to bolt an accessory to; the fourth (1,-1) carries the 3.2 mm wall-screw bore. Same measurement as insert-for-countersunk-hole-3, and the same three cells"
+   "_note": "three of its four cells carry a 3.0 mm M3 bore to bolt an accessory to; the fourth (1,0) carries the 3.2 mm wall-screw bore. Same measurement as insert-for-countersunk-hole-3, in the same frame, and the same three cells; its three cells carry M3 bores, which is what insert-with-m3 provides - and its own hardware already orders the three bolts and nuts",
+   "socketProvides": "insert-with-m3"
   },
   "insert-hollow-dual": {
    "socketCells": [
@@ -224,7 +226,8 @@
      "r": -1
     }
    ],
-   "_note": "both cells are 13.2 mm across-flats hexagonal sockets, measured from the enclosed holes on the mating face"
+   "_note": "both cells are 13.2 mm across-flats hexagonal sockets, measured from the enclosed holes on the mating face; its sockets are the same hexagonal socket insert-empty provides",
+   "socketProvides": "insert-empty"
   },
   "insert-hollow-tre": {
    "socketCells": [
@@ -241,7 +244,8 @@
      "r": 0
     }
    ],
-   "_note": "all three cells are 13.2 mm across-flats hexagonal sockets, measured from the enclosed holes on the mating face"
+   "_note": "all three cells are 13.2 mm across-flats hexagonal sockets, measured from the enclosed holes on the mating face; its sockets are the same hexagonal socket insert-empty provides",
+   "socketProvides": "insert-empty"
   },
   "insert-hollow-for": {
    "socketCells": [
@@ -262,7 +266,8 @@
      "r": 0
     }
    ],
-   "_note": "all four cells are 13.2 mm across-flats hexagonal sockets, measured from the enclosed holes on the mating face"
+   "_note": "all four cells are 13.2 mm across-flats hexagonal sockets, measured from the enclosed holes on the mating face; its sockets are the same hexagonal socket insert-empty provides",
+   "socketProvides": "insert-empty"
   }
  }
 }

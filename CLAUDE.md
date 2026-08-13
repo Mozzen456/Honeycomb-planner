@@ -130,6 +130,13 @@ hexagonality measures the material *outside* the hexagon but inside its bounding
 works alone: hexagonality by itself prefers whichever end is smaller and mounts an insert tip-first.
 Getting this wrong mounted all 17 clip-in parts back-to-front.
 
+**A part pegged into a junction's socket does not block that junction** (D48). `planFixings` checks
+`avoid` across all four cells, so one hook on one open socket used to delete the whole fixing — the
+wall mount disappearing from the plan, the list and the picture. `SharedCells` lets the junction pass
+accept a shared cell where that placement has a socket; the wall-screw cell still blocks, and the
+spacing grid still avoids everything. Build both sets with `bom.fixingPlanFor` — `WallView3D` and
+`bom.ts` must not have their own reading of which cells are free.
+
 **A junction fixing REPLACES nearby fixings; it does not add to them.** Planned independently, the
 seam rule and the spacing grid gave 56 four-cell inserts on top of 74 single ones — 128 holes in a
 wall needing about 80. Same class of error as the original 370.
@@ -137,6 +144,26 @@ wall needing about 80. Same class of error as the original 370.
 **Overlap is allowed.** The wall exists to mount things *on*, so accessories may share cells freely
 and silently — no warning, no issue. The only impossibility is two parts that plug *into* a cell
 (`type` `insert` or `fastener`) sharing one. See `isExclusive` in `src/core/store.ts`.
+
+**Where a feature sits ON a part must be measured on the ORIENTED mesh, not on the file** (D49,
+PARKED P10). `orient` turns a `high`-mating part over (`v = -v`) and `toAxial` does not turn the
+footprint with it, so the mesh is mirrored relative to its own cells. A symmetric footprint hides it
+completely — and measuring `insert-for-countersunk-hole-3` in the file's frame swapped its middle
+two cells, so the app offered the countersunk bore as a socket and refused a real one.
+
+**The parts list is `computeBom(doc, catalog)`, NOT `store.bom()`** (D50). The store's catalogue is
+set in an effect, so during the render after a correction it is still the old one — a list computed
+through the store shows the previous fastener until an unrelated edit moves an item. Any state that
+belongs to two owners (a React memo and an object mutated in an effect) has this hazard; prefer the
+pure function of the immutable inputs.
+
+**A socket may also SUPPLY the insert a part needs** (D47). Any EMPTY insert answers a part that
+wants an empty insert — same socket, different id — while a bolted one answers only its own kind. `socketProvides` on the socket-offering
+part names the insert its holes stand in for; `bom.ts` then deducts one from what a part hung on that
+cell orders, allocating each socket once, in document order, and never to the part that offers it.
+Absent `socketProvides` nothing is deducted — sameness of size is not sameness of job. The deduction
+is visible on the line (`providedBySockets`), because a quantity that silently drops is
+indistinguishable from a bug at the printer.
 
 **...except where a cell is a SOCKET, and that rule lives in two places that must agree** (D43).
 `insert-for-countersunk-hole-3` spans four cells and three of them are open 13.2 mm sockets
@@ -165,6 +192,13 @@ pointy-drawn part's cells. Unspun, `wall-honeycomb-part` draws 177 × 170.32 whe
 170.32 × 177. It hides on a wall of ONE pointy panel — every plate wrong the same way reads as a
 continuous honeycomb — and only shows when a bed mixes pointy with flat. `tests/panel-mesh.test.ts`
 compares every plate's bbox with its block.
+
+**In `PartInspector`, one effect adds a thing to the scene and its own cleanup removes it** (D52).
+The model effect used to add the part's mesh and overwrite `s.part` without removing the old one, so
+a re-run left a second copy standing where the first was — and since every other effect drives
+`s.part`, the abandoned one sat still while the real one moved. The plate has the same shape now:
+added in the effect, removed in the cleanup. Anything that measures the body (the plate's stand-off,
+the transform) must also depend on `bodyTick`, or a re-loaded part keeps the previous one's plate.
 
 **`WallView3D` keeps a SECOND mesh cache in front of `meshLibrary`'s.** `forgetPartMesh` clears the
 library's copy and nothing else; the view's `meshes` ref is dropped on `catalog` identity. Miss that
@@ -236,10 +270,16 @@ wall interface at all — so there is a human channel, and it is one channel wit
   prism hides anything that goes into it — every insert vanished (D44) — and with the plate flush
   against the mating face, looking AT that face means looking at the back of the wall.
 
-  **Its cell is the wall's cell: a 22.0 mouth 2.0 deep over a 20.0 throat**, built as the same two
-  layers `buildPanelGeometry` builds, from the same constants (D45). One straight bore at the mouth
-  read wider than the real thing, and the tool disagreeing with the wall about the size of the
-  honeycomb is the one comparison a person makes by eye.
+  **Its honeycomb is a real panel STL** — the smallest shipped panel that covers the patch, through
+  the same `loadPartMesh` the wall uses, aligned by putting its most central cell where the part's
+  cell (0, 0) goes (D46). Drawing the cell from constants was right and still not believable to
+  someone holding a printed panel up to the screen. The drawn two-layer plate (22.0 mouth over a
+  20.0 throat, D45) is the fallback for when `models/` cannot be fetched. Do NOT dispose that
+  geometry on rebuild: it is `meshLibrary`'s, shared with the wall view.
+
+  **The dialog is keyed on the part** (`key={part.id}` in `App.tsx`). Every control seeds its state
+  from the part it opened on, and React keeps state across a prop change — so a part swapped under
+  an open dialog would inherit the previous one's alignment and offer to save it.
 
   **The stage is turned so UP THE WALL IS UP** — `fileToScene` in `mountingTransform.ts`, tested to
   determinant +1 on all six faces. The part keeps its FILE coordinates inside that turn, which is
@@ -263,6 +303,11 @@ what comes out of localStorage field by field — right, because a stored docume
 then — so a field nobody reads is a correction that applies for one session and disappears on
 reload. That is exactly what happened to the chosen fastener (D44). It is exported and browser-free
 so each field is tested.
+
+**A footprint need not contain the origin, and `anchorOf` is why** (D46). The drag hangs off the
+ANCHOR, not off cell (0, 0): a two-peg shelf uses the cells above and below its middle and nothing
+in between. `applyOverrides`, `withFootprint` and the cell editor all take the anchor from the cells
+that are actually there. The floor is one cell — a part covering nothing cannot be checked.
 
 **A hand-drawn footprint replaces the detected cells and clears `needsReview`; re-stating the same
 cells does neither** (D42). It is the same line `withFootprint` draws for an imported part: the flag
@@ -298,7 +343,10 @@ Two invariants the whole thing rests on:
 
 `store.partCells()` and `bom.itemCells()` must agree exactly on which cells a placed part covers —
 anchor handling and empty footprints included. When they disagreed, the editor accepted drops that
-the BOM then reported as overlaps.
+the BOM then reported as overlaps. **The drag ghosts are the same question and must call
+`partCells`** (D51): both re-derived it with `placeFootprint` on the raw footprint, skipping the
+anchor, so the green honeycomb sat a cell from where the part landed as soon as a footprint had a
+non-origin anchor. `tests/ghost.test.ts` is the guard.
 
 ### Catalogue
 

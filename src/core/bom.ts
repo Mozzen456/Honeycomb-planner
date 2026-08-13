@@ -35,8 +35,8 @@
  */
 
 import { customPanelGroups, isCustomPanel } from './customiser';
-import { fixingsFor, JUNCTION_FIXING_ID } from './fixings';
-import { fastenersNeedReview, socketsOf } from './overrides';
+import { fixingsFor, JUNCTION_FIXING_ID, type FixingPlan } from './fixings';
+import { fastenersNeedReview, socketProvidesOf, socketsOf } from './overrides';
 import { hexKey, hexSub, keyToHex, placedPanelCells, placeFootprint } from './hex';
 import { crossesSeam } from './tiling';
 import type {
@@ -202,6 +202,63 @@ function dedupeCells(cells: Hex[]): Hex[] {
     out.push(c);
   }
   return out;
+}
+
+/**
+ * An EMPTY insert: one that is nothing but a socket.
+ *
+ * Derived, not listed: an insert or fastener that asks for no hardware takes no
+ * bolt and no wall screw, so all it offers is the hexagonal socket a peg plugs
+ * into. That is `insert-empty` and the whole hollow family, and it excludes
+ * every M3/M4/M5 insert and every countersunk one — which is what "an empty
+ * insert of any kind" means.
+ */
+export function isEmptyInsert(part: CatalogPart | undefined): boolean {
+  if (part === undefined) return false;
+  if (part.type !== 'insert' && part.type !== 'fastener') return false;
+  return asArray(part.hardware).length === 0;
+}
+
+/** Does this part hang on a plain socket, rather than on a bolt or a screw? */
+function mountsThroughSocket(
+  part: CatalogPart | undefined,
+  index: ReadonlyMap<string, CatalogPart>,
+): boolean {
+  return asArray(part?.requires).some((r) => r && isEmptyInsert(index.get(r.partId)));
+}
+
+/**
+ * The fixing plan for a document, with the ONE reading of "occupied" that the
+ * parts list and the 3D view must share.
+ *
+ * Two sets, because a cell can be busy in two different ways. Anything on a
+ * cell keeps the spacing grid out of it — a wall screw needs a hole and a
+ * screwdriver needs to reach it. But a part that mounts through a plain socket
+ * sitting on a JUNCTION's socket cell is not in the way of anything: that
+ * socket is what it is pegged into. Treating those the same made the wall mount
+ * disappear the moment you hung a hook on one of its open holes (D48).
+ */
+export function fixingPlanFor(
+  doc: LayoutDoc | undefined,
+  catalog: Catalog,
+  spacingMm?: number,
+): FixingPlan {
+  const index = partIndex(catalog);
+  const avoid = new Set<string>();
+  const shared = new Set<string>();
+  for (const item of asArray(doc?.items)) {
+    const part = index.get(item.partId);
+    const pegged = mountsThroughSocket(part, index);
+    for (const cell of itemCells(item, catalog)) {
+      const key = hexKey(cell);
+      avoid.add(key);
+      if (pegged) shared.add(key);
+    }
+  }
+  const junction = index.get(JUNCTION_FIXING_ID);
+  const anchor = junction?.anchor ?? ORIGIN;
+  const junctionSockets = socketsOf(junction).map((c) => hexSub(c, anchor));
+  return fixingsFor(doc as LayoutDoc, spacingMm, avoid, { cells: shared, junctionSockets });
 }
 
 /**
@@ -497,7 +554,7 @@ export function validate(doc: LayoutDoc, catalog: Catalog): Issue[] {
   for (const footprint of itemFootprints) {
     for (const cell of footprint.cells) taken.add(hexKey(cell));
   }
-  for (const panelId of fixingsFor(doc, undefined, taken).starvedPanelIds) {
+  for (const panelId of fixingPlanFor(doc, catalog).starvedPanelIds) {
     issues.push({
       level: 'warning',
       code: 'no-room-for-mounts',
@@ -563,11 +620,7 @@ export function computeBom(doc: LayoutDoc, catalog: Catalog): Bom {
    * tools/scan.py), at which point this becomes a no-op rather than a
    * correction.
    */
-  const occupied = new Set<string>();
-  for (const item of asArray(doc?.items)) {
-    for (const cell of itemCells(item, catalog)) occupied.add(hexKey(cell));
-  }
-  const fixings = fixingsFor(doc, undefined, occupied);
+  const fixings = fixingPlanFor(doc, catalog);
   const isWallMountOf = (requiredId: string): boolean => {
     const required = index.get(requiredId);
     return (
@@ -576,6 +629,100 @@ export function computeBom(doc: LayoutDoc, catalog: Catalog): Bom {
       isWallMount(required)
     );
   };
+
+  /*
+   * INSERTS THE WALL ALREADY HAS.
+   *
+   * The combined wall fastener is one screw hole and three open sockets, and
+   * those sockets are inserts: an accessory hung on one of them does not also
+   * need an `insert-empty` printed for it. Ordering both is the same
+   * double-count as a fixing being claimed twice — you end up printing a part
+   * that is already in the wall.
+   *
+   * Only where somebody has SAID the socket does that job (`socketProvides`).
+   * Two sockets being the same size is not proof they are interchangeable, and
+   * this is a shopping list.
+   *
+   * Sockets come from placed items and from the junction fixings the plan puts
+   * in at the seams — those are in the wall whether or not anybody dropped them
+   * by hand. Each is consumed at most once, in document order, so two
+   * accessories over the same socket cannot both claim it.
+   */
+  const socketAt = new Map<string, { provides: string; by: string }>();
+  const noteSocket = (item: PlacedItem, provides: string): void => {
+    for (const cell of itemSocketCells(item, catalog)) {
+      const key = hexKey(cell);
+      if (!socketAt.has(key)) socketAt.set(key, { provides, by: item.id });
+    }
+  };
+  for (const item of asArray(doc?.items)) {
+    const provides = socketProvidesOf(index.get(item.partId));
+    if (provides !== undefined) noteSocket(item, provides);
+  }
+  const junctionPart = index.get(JUNCTION_FIXING_ID);
+  const junctionProvides = socketProvidesOf(junctionPart);
+  if (junctionPart !== undefined && junctionProvides !== undefined) {
+    for (const [n, junction] of fixings.junctions.entries()) {
+      // Through `itemSocketCells`, so a planned fixing and a placed one place
+      // their sockets by the same transform.
+      noteSocket(
+        {
+          id: `fixing/${n}`,
+          partId: JUNCTION_FIXING_ID,
+          at: junction.anchor,
+          rotation: junction.rotation,
+        },
+        junctionProvides,
+      );
+    }
+  }
+
+  /**
+   * Does a socket that provides `has` satisfy a part that asks for `wants`?
+   *
+   * The same id, obviously. And any EMPTY insert answers any other: they are
+   * all just a hexagonal socket for a peg, so a part that asks for
+   * `insert-empty` is as well served by the hollow family's socket as by its
+   * own — which is what "an empty insert of any kind" means, and what a person
+   * choosing a fastener in the inspector expects when they then hang the part
+   * on a wall fastener's open hole.
+   *
+   * It is NOT symmetric with the bolted ones: an M3 bore answers only a part
+   * that wants an M3 insert. A plain socket has no thread, and a part that
+   * needs one still needs it.
+   */
+  const answers = (has: string, wants: string): boolean =>
+    has === wants || (isEmptyInsert(index.get(has)) && isEmptyInsert(index.get(wants)));
+
+  /** partId -> requiredId -> how many the wall already provides. */
+  const provided = new Map<string, Map<string, number>>();
+  const spent = new Set<string>();
+  for (const item of asArray(doc?.items)) {
+    const part = index.get(item.partId);
+    if (part === undefined) continue;
+    const wants = asArray(part.requires);
+    if (wants.length === 0) continue;
+    const cells = itemCells(item, catalog);
+    for (const req of wants) {
+      if (!req || !index.has(req.partId)) continue;
+      let left = countOf(req.count);
+      for (const cell of cells) {
+        if (left <= 0) break;
+        const key = hexKey(cell);
+        const socket = socketAt.get(key);
+        // Never its own socket, and never one already claimed.
+        if (socket === undefined || socket.by === item.id || spent.has(key)) continue;
+        if (!answers(socket.provides, req.partId)) continue;
+        spent.add(key);
+        left -= 1;
+        const forPart = provided.get(item.partId) ?? new Map<string, number>();
+        forPart.set(req.partId, (forPart.get(req.partId) ?? 0) + 1);
+        provided.set(item.partId, forPart);
+      }
+    }
+  }
+  /** How many of each insert the wall provided, for the lines to say so. */
+  const providedTotals = new Map<string, number>();
 
   for (const [partId, times] of placements) {
     const part = index.get(partId);
@@ -586,7 +733,11 @@ export function computeBom(doc: LayoutDoc, catalog: Catalog): Bom {
     for (const req of asArray(part.requires)) {
       if (!req || !index.has(req.partId)) continue;
       const uses = isWallMountOf(req.partId) ? expand : times;
-      const needed = countOf(req.count) * uses;
+      const already = provided.get(partId)?.get(req.partId) ?? 0;
+      const needed = countOf(req.count) * uses - already;
+      if (already > 0) {
+        providedTotals.set(req.partId, (providedTotals.get(req.partId) ?? 0) + already);
+      }
       if (needed > 0) bump(quantities, req.partId, needed);
     }
   }
@@ -657,6 +808,7 @@ export function computeBom(doc: LayoutDoc, catalog: Catalog): Bom {
       needsReview: needsReviewOf(part),
       estimated: isEstimated(part),
       fastenersUnknown: fastenersNeedReview(part),
+      providedBySockets: providedTotals.get(partId) ?? 0,
     };
     (isFastener(part) ? fasteners : printed).push(line);
   }
@@ -701,6 +853,7 @@ export function computeBom(doc: LayoutDoc, catalog: Catalog): Bom {
       needsReview: false,
       estimated: true,
       fastenersUnknown: false,
+      providedBySockets: 0,
     });
   }
 

@@ -16,7 +16,7 @@ import catalogJson from '../src/catalog/catalog.json';
 import { detect } from '../src/core/detect';
 import { hexKey } from '../src/core/hex';
 import {
-  applyOverrides, mountingOf, readFootprint, readMounting,
+  anchorOf, applyOverrides, mountingOf, readFootprint, readMounting,
 } from '../src/core/overrides';
 import { partCells } from '../src/core/store';
 import {
@@ -172,25 +172,67 @@ describe('forcing the wall face through detect', () => {
  * has no cell to drag by), and only an actual EDIT clears `needsReview`.
  */
 describe('reading a hand-drawn footprint', () => {
-  it('keeps the anchor, whatever the file says', () => {
-    expect(readFootprint([{ q: 1, r: 0 }])).toEqual([{ q: 0, r: 0 }, { q: 1, r: 0 }]);
-    expect(readFootprint([])).toEqual([{ q: 0, r: 0 }]);
+  const keys = (cells: readonly { q: number; r: number }[] | undefined): string[] =>
+    (cells ?? []).map(hexKey).sort();
+
+  /**
+   * The middle cell is NOT forced in.
+   *
+   * It was, on the reasoning that the drag hangs off the origin — true of the
+   * ANCHOR, not of the origin. A two-peg shelf uses the cells above and below
+   * its middle and nothing in between, and pinning the middle gave it a third
+   * cell it does not have, which then fouls a neighbour that is not there.
+   */
+  it('keeps exactly the cells it is given', () => {
+    expect(keys(readFootprint([{ q: 1, r: 0 }]))).toEqual(['1,0']);
+    expect(keys(readFootprint([{ q: 0, r: -1 }, { q: 0, r: 1 }]))).toEqual(['0,-1', '0,1']);
+  });
+
+  /** ...with a floor of one: a part covering nothing cannot be checked. */
+  it('falls back to a single cell when nothing legible is left', () => {
+    expect(keys(readFootprint([]))).toEqual(['0,0']);
+    expect(keys(readFootprint([{ q: 'a', r: 0 }]))).toEqual(['0,0']);
   });
 
   it('deduplicates, so a repeat cannot inflate a cell count', () => {
-    expect(readFootprint([{ q: 1, r: 0 }, { q: 1, r: 0 }, { q: 0, r: 0 }]))
-      .toEqual([{ q: 0, r: 0 }, { q: 1, r: 0 }]);
+    expect(keys(readFootprint([{ q: 1, r: 0 }, { q: 1, r: 0 }, { q: 0, r: 0 }])))
+      .toEqual(['0,0', '1,0']);
   });
 
   it('drops entries that are not cells', () => {
-    expect(readFootprint([{ q: 'a', r: 0 }, null, { q: 2, r: NaN }, { q: 1, r: 1 }]))
-      .toEqual([{ q: 0, r: 0 }, { q: 1, r: 1 }]);
+    expect(keys(readFootprint([{ q: 'a', r: 0 }, null, { q: 2, r: NaN }, { q: 1, r: 1 }])))
+      .toEqual(['1,1']);
     expect(readFootprint('everywhere')).toBeUndefined();
   });
 
   it('refuses a cell on the other side of the wall', () => {
-    expect(readFootprint([{ q: 900, r: 0 }, { q: 1, r: 0 }]))
-      .toEqual([{ q: 0, r: 0 }, { q: 1, r: 0 }]);
+    expect(keys(readFootprint([{ q: 900, r: 0 }, { q: 1, r: 0 }]))).toEqual(['1,0']);
+  });
+});
+
+/**
+ * The cell that lands under the cursor while dragging.
+ *
+ * Nearest the origin, deterministically — an anchor that wandered between
+ * renders would drop the part somewhere else each time — and for the usual
+ * footprint, which does contain the origin, it IS the origin.
+ */
+describe('the anchor of a footprint', () => {
+  it('is the origin whenever the part covers it', () => {
+    expect(anchorOf([{ q: 2, r: -1 }, { q: 0, r: 0 }, { q: 1, r: 0 }])).toEqual({ q: 0, r: 0 });
+  });
+
+  it('is the nearest cell when the part does not cover its middle', () => {
+    expect(anchorOf([{ q: 0, r: -1 }, { q: 0, r: 2 }])).toEqual({ q: 0, r: -1 });
+  });
+
+  it('breaks ties the same way every time', () => {
+    const ring = [{ q: 1, r: 0 }, { q: 0, r: 1 }, { q: -1, r: 1 }, { q: -1, r: 0 }];
+    expect(anchorOf(ring)).toEqual(anchorOf([...ring].reverse()));
+  });
+
+  it('answers for an empty list rather than throwing', () => {
+    expect(anchorOf([])).toEqual({ q: 0, r: 0 });
   });
 });
 
@@ -246,6 +288,31 @@ describe('applying a hand-drawn footprint to the catalogue', () => {
       parts: { [id]: { footprint: [{ q: 0, r: 0 }, { q: 1, r: 0 }, { q: 2, r: 0 }] } },
     });
     expect(applied.parts.find((p) => p.id === id)!.requires).toEqual(before.requires);
+  });
+
+  /**
+   * A part that does not cover its own middle still hangs off one of its own
+   * cells: `anchorOf` picks the drag cell, and `partCells` puts THAT under the
+   * cursor. Dropping at (4, 2) therefore covers (4, 2) and (4, 4) — not the
+   * cell between them, which is the whole point.
+   */
+  it('places a footprint with no middle cell off its own anchor', () => {
+    const applied = applyOverrides(catalog, {
+      parts: { [id]: { footprint: [{ q: 0, r: 0 }, { q: 0, r: 2 }] } },
+    });
+    const part = applied.parts.find((p) => p.id === id)!;
+    expect(part.anchor).toEqual({ q: 0, r: 0 });
+    expect(partCells(part, { q: 4, r: 2 }, 0).map(hexKey).sort())
+      .toEqual(['4,2', '4,4'].sort());
+
+    const offset = applyOverrides(catalog, {
+      parts: { [id]: { footprint: [{ q: 0, r: -1 }, { q: 0, r: 1 }] } },
+    });
+    const shifted = offset.parts.find((p) => p.id === id)!;
+    expect(shifted.anchor).toEqual({ q: 0, r: -1 });
+    // The anchor lands on the cursor cell; the other cell is two rows up.
+    expect(partCells(shifted, { q: 4, r: 2 }, 0).map(hexKey).sort())
+      .toEqual(['4,2', '4,4'].sort());
   });
 
   /** What the editor draws is what a drop covers. */

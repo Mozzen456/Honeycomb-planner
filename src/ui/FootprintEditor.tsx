@@ -44,13 +44,24 @@ export interface FootprintEditorProps {
    * because that is what they are: a hole in the part rather than material.
    */
   sockets?: readonly Hex[];
+  /**
+   * The cell that lands under the cursor while dragging, outlined so it can be
+   * seen. Defaults to the origin, which is where it is for any footprint that
+   * includes the origin — but a part need not, so it is passed in rather than
+   * assumed (`anchorOf`).
+   */
+  anchor?: Hex;
   label?: string;
 }
 
 export function FootprintEditor(props: FootprintEditorProps): JSX.Element {
-  const { cells, onToggle, reach: extra = 2, showInserts = false, sockets = [] } = props;
+  const {
+    cells, onToggle, reach: extra = 2, showInserts = false, sockets = [],
+    anchor = { q: 0, r: 0 },
+  } = props;
   const chosen = new Set(cells.map(hexKey));
   const open = new Set(sockets.map(hexKey));
+  const anchorKey = hexKey(anchor);
 
   // Always show a ring or two beyond whatever is selected, so there is
   // somewhere to grow into.
@@ -93,7 +104,7 @@ export function FootprintEditor(props: FootprintEditorProps): JSX.Element {
       {pts.map(({ cell }) => {
         const key = hexKey(cell);
         const on = chosen.has(key);
-        const origin = cell.q === 0 && cell.r === 0;
+        const origin = key === anchorKey;
         return (
           <polygon
             key={key}

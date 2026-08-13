@@ -18,12 +18,13 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 
-import { itemCells } from '../core/bom';
-import { fixingsFor, JUNCTION_FIXING_ID } from '../core/fixings';
+import { fixingPlanFor, itemCells } from '../core/bom';
+import { JUNCTION_FIXING_ID } from '../core/fixings';
 import { CELL, PANEL_DEPTH, PITCH } from '../core/constants';
 import {
-  cellsBoundsMm, hexKey, hexToMm, mmToHex, panelCells, placedPanelCells, placeFootprint,
+  cellsBoundsMm, hexKey, hexToMm, mmToHex, panelCells, placedPanelCells,
 } from '../core/hex';
+import { partCells } from '../core/store';
 import type { Catalog, CatalogPart, Hex, LayoutDoc, Rotation } from '../core/types';
 import { loadPartMesh, type PartMesh } from './meshLibrary';
 import './WallView3D.css';
@@ -795,9 +796,11 @@ export function WallView3D(props: WallView3DProps) {
     }
     if (doc.panels.length === 0) return;
 
-    const occupied = new Set<string>();
-    for (const it of doc.items) for (const c of itemCells(it, catalog)) occupied.add(hexKey(c));
-    const plan = fixingsFor(doc, undefined, occupied);
+    // The SAME reading of "occupied" the parts list uses: a part pegged into a
+    // junction's own socket does not delete the junction (D48). Drawing this
+    // from a second rule would put a fixing in the picture that is not on the
+    // list, or the reverse.
+    const plan = fixingPlanFor(doc, catalog);
 
     // Lighter than the plate, not darker. These are structure rather than the
     // things you came to hang up, so they must not compete with a placed
@@ -1263,7 +1266,12 @@ export function ghost3DCells(
   if (drag.partId !== undefined) {
     const part = catalog.parts.find((p) => p.id === drag.partId);
     if (!part) return [];
-    return placeFootprint(part.footprint, anchor, drag.rotation);
+    // `partCells`, not `placeFootprint` on the raw footprint: the two differ by
+    // the part's ANCHOR, and the ghost that skipped it drew the landing zone a
+    // cell or two from where the part actually lands. Invisible while every
+    // shipped anchor was the origin, and immediate once a hand-drawn footprint
+    // left the middle cell out (D46) and `anchorOf` moved the anchor.
+    return partCells(part, anchor, drag.rotation);
   }
   const ids = new Set(drag.itemIds ?? []);
   const members = doc.items.filter((i) => ids.has(i.id));
@@ -1274,8 +1282,7 @@ export function ghost3DCells(
   for (const m of members) {
     const part = catalog.parts.find((p) => p.id === m.partId);
     if (!part) continue;
-    out.push(...placeFootprint(part.footprint,
-      { q: m.at.q + delta.q, r: m.at.r + delta.r }, m.rotation));
+    out.push(...partCells(part, { q: m.at.q + delta.q, r: m.at.r + delta.r }, m.rotation));
   }
   return out;
 }

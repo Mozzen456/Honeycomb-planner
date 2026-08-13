@@ -110,12 +110,38 @@ export interface FixingPlan {
  * parts list does not shuffle between renders and a saved layout can be built
  * from the printed sheet months later.
  */
+/**
+ * Cells a JUNCTION may take even though something is on them.
+ *
+ * A part that mounts through a plain socket is not blocking the hole, it is
+ * USING it — the junction fastener's three open cells are exactly the sockets it
+ * pegs into. Without this, hanging a hook on one of those cells deleted the
+ * whole fixing: `avoid` is checked over all four of its cells, so one occupied
+ * cell dropped the placement, and the wall mount vanished from the plan and from
+ * the picture (D48).
+ *
+ * The grid pass still avoids them. A single-cell countersunk fixing has no
+ * socket to peg into and a screwdriver has to reach its head, so a part over one
+ * really is in the way.
+ */
+export interface SharedCells {
+  /** Cells occupied by parts that mount through an empty insert. */
+  cells: ReadonlySet<string>;
+  /**
+   * Which cells of the junction fastener are its sockets, as offsets from its
+   * anchor. Passed in rather than restated here: it is measured, and it lives
+   * in `overrides.json` with the measurement that produced it.
+   */
+  junctionSockets: readonly Hex[];
+}
+
 export function planFixings(
   panels: readonly PlacedPanel[],
   spacingMm: number = DEFAULT_FIXING_SPACING_MM,
   /** Cells already taken by accessories. A fixing routes around them rather
    *  than being ordered for a hole that is not free. */
   avoid: ReadonlySet<string> = new Set(),
+  shared: SharedCells = { cells: new Set(), junctionSockets: [] },
 ): FixingPlan {
   const spacing = clampSpacing(spacingMm);
   const chosen = new Map<string, string>(); // cell key -> panel id
@@ -179,8 +205,19 @@ export function planFixings(
         for (let rot = 0; rot < 6 && !taken; rot++) {
           const placed = placeFootprint(JUNCTION_FOOTPRINT, anchor, rot as Rotation);
           const keys = placed.map(hexKey);
-          // Every cell must be on a panel, free, and not already spoken for.
-          if (keys.some((k) => !owner.has(k) || avoid.has(k) || usedByJunction.has(k))) continue;
+          /*
+           * Every cell must be on a panel, free, and not already spoken for —
+           * where "free" means free of anything that is not plugged INTO this
+           * fixing. A part mounting through a plain socket may sit on one of the
+           * three socket cells; the fourth takes the wall screw, and a part over
+           * THAT is in the way of a screwdriver whatever it mounts with.
+           */
+          const socketKeys = new Set(
+            placeFootprint(shared.junctionSockets, anchor, rot as Rotation).map(hexKey),
+          );
+          const blocked = (k: string): boolean =>
+            avoid.has(k) && !(shared.cells.has(k) && socketKeys.has(k));
+          if (keys.some((k) => !owner.has(k) || blocked(k) || usedByJunction.has(k))) continue;
           const panels = new Set(keys.map((k) => owner.get(k)!));
           // Two plates is an ordinary seam, which the interlocking edge already
           // handles; this pass wants exactly `want`.
@@ -321,5 +358,6 @@ export const fixingsFor = (
   doc: LayoutDoc,
   spacingMm?: number,
   avoid?: ReadonlySet<string>,
+  shared?: SharedCells,
 ): FixingPlan =>
-  planFixings(doc?.panels ?? [], spacingMm ?? DEFAULT_FIXING_SPACING_MM, avoid);
+  planFixings(doc?.panels ?? [], spacingMm ?? DEFAULT_FIXING_SPACING_MM, avoid, shared);

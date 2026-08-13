@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import catalogJson from '../catalog/catalog.json';
 import overridesJson from '../catalog/overrides.json';
 import { BEDS } from '../core/constants';
+import { computeBom } from '../core/bom';
 import { toCsv, toMarkdownChecklist, toPrintableHtml, downloadName } from '../core/exporters';
 import { proposePart, type ImportedPart, type ImportProposal } from '../core/importPart';
 import { applyOverrides, mountingOf, type MountingOverride } from '../core/overrides';
@@ -116,12 +117,22 @@ export function App() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  const bom = useMemo(
-    () => store.bom(),
-    // Recomputed whenever the document identity changes — the doc is immutable,
-    // so identity is a sound dependency.
-    [store, state.doc],
-  );
+  /*
+   * The parts list is a pure function of the document and the catalogue, so it
+   * is computed from those two directly rather than through the store.
+   *
+   * Going through `store.bom()` looked equivalent and was not. The store's
+   * catalogue is set in an EFFECT (`store.setCatalog`), which runs after the
+   * render — so on the render where a correction has just changed the
+   * catalogue, `store.bom()` still reads the old one, and by the next render
+   * the memo has nothing new to react to. The list kept showing the old
+   * fastener until an unrelated edit moved an item: you would set a part to
+   * insert-M5, place it, and be told to print insert-empty.
+   *
+   * `computeBom` is pure and memoised on both immutable inputs, which is what
+   * `bom.ts` was written to be. No ordering to get right.
+   */
+  const bom = useMemo(() => computeBom(state.doc, catalog), [state.doc, catalog]);
 
   // --- drag lifecycle -----------------------------------------------------
 
@@ -858,6 +869,15 @@ export function App() {
         if (!part) return null;
         return (
           <PartInspector
+            /*
+             * Keyed on the part, so switching parts REMOUNTS the dialog.
+             * Every control in it seeds its state from the part it opened on —
+             * the face, the cells, the sockets, the six seating numbers — and
+             * React keeps state across a prop change, so without this a second
+             * part would inherit the first one's alignment and quietly offer to
+             * save it.
+             */
+            key={part.id}
             part={part}
             catalog={catalog}
             current={mountingOf(part)}
