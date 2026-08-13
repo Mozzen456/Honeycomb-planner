@@ -119,3 +119,14 @@
   padding-block-start: var(--space-3);
   border-block-start: var(--border-width-hair) solid var(--border-subtle);
 }
+
+/* A swatch matching the up arrow in the viewport, so the row and the 3D marker
+   are obviously the same thing rather than two facts to correlate. */
+.inspector__upkey {
+  display: inline-block;
+  inline-size: var(--space-2);
+  block-size: var(--space-2);
+  border-radius: var(--radius-sm);
+  background-color: #8fd18f;
+  vertical-align: baseline;
+}

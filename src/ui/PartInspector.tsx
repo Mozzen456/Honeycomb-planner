@@ -22,7 +22,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 
 import { CELL, PANEL_DEPTH, PITCH } from '../core/constants';
-import { detect } from '../core/detect';
+import { hexToMm } from '../core/hex';
+import { AXES, detect } from '../core/detect';
 import type { MountingOverride } from '../core/overrides';
 import type { CatalogPart } from '../core/types';
 import { loadRawMesh } from './meshLibrary';
@@ -41,6 +42,17 @@ type Axis = 'x' | 'y' | 'z';
 type End = 'low' | 'high';
 
 const AXIS_INDEX: Record<Axis, number> = { x: 0, y: 1, z: 2 };
+/**
+ * Which FILE axis ends up pointing up the wall, named so the green arrow is not
+ * the only way to read it. `orient` maps `AXES[axis][1]` to the wall's +Y, and
+ * the mating flip negates it.
+ */
+const UP_LABEL: Record<string, string> = {
+  '0:pos': '+X of the file', '0:neg': '−X of the file',
+  '1:pos': '+Y of the file', '1:neg': '−Y of the file',
+  '2:pos': '+Z of the file', '2:neg': '−Z of the file',
+};
+
 const FACE_LABEL: Record<string, string> = {
   'x:low': 'Left (−X)', 'x:high': 'Right (+X)',
   'y:low': 'Front (−Y)', 'y:high': 'Back (+Y)',
@@ -251,6 +263,8 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
     const s = scene.current;
     if (s === null || s.part === null) return;
     if (s.plate) {
+      const old = s.plate.userData['arrow'];
+      if (old instanceof THREE.Object3D) s.root.remove(old);
       s.root.remove(s.plate);
       s.plate.traverse((o) => {
         if (o instanceof THREE.Mesh) o.geometry.dispose();
@@ -259,7 +273,22 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
 
     const group = new THREE.Group();
     const half = s.size / 2;
-    const plateSize = Math.max(Math.min(s.size * 1.1, PITCH * 3), PITCH * 1.6);
+    /*
+     * A PATCH of wall, not a single cell.
+     *
+     * One cell in a small plate tells you the part goes in a hexagon, which you
+     * knew. What you cannot judge from it is whether the part sits square to the
+     * lattice, how far it spills over its neighbours, or whether a shelf's tray
+     * runs along a row or across one — and those are the things a mounting
+     * decision is actually about. So the plate carries the cell and its six
+     * neighbours, at their real `hexToMm` positions.
+     */
+    const patch: readonly { q: number; r: number }[] = [
+      { q: 0, r: 0 },
+      { q: 1, r: 0 }, { q: 0, r: 1 }, { q: -1, r: 1 },
+      { q: -1, r: 0 }, { q: 0, r: -1 }, { q: 1, r: -1 },
+    ];
+    const plateSize = PITCH * 3.4;
 
     const slab = new THREE.Mesh(
       new THREE.BoxGeometry(plateSize, plateSize, PANEL_DEPTH),
@@ -271,18 +300,8 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
     );
     group.add(slab);
 
-    // A cell in the plate, turned by the spin, so the control has something to
-    // read against: this is the hexagon the part's peg has to line up with.
-    const cell = new THREE.Mesh(
-      new THREE.CylinderGeometry(
-        CELL.mouthAcrossFlats / Math.sqrt(3), CELL.mouthAcrossFlats / Math.sqrt(3),
-        PANEL_DEPTH * 1.05, 6,
-      ),
-      new THREE.MeshLambertMaterial({ color: 0x1d2430 }),
-    );
-    cell.geometry.rotateX(Math.PI / 2);
     /*
-     * The cell does NOT turn. The wall does not turn.
+     * The cells do NOT turn. The wall does not turn.
      *
      * The spin used to be applied here, and that is backwards: pressing the spin
      * control rotated the HOLE while the part sat still, which is the opposite of
@@ -290,7 +309,23 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
      * the part has to line up WITH — so it stays put and the part moves against
      * it, which is also what `meshLibrary` does when it saves the result.
      */
-    group.add(cell);
+    const cellMat = new THREE.MeshLambertMaterial({ color: 0x1d2430 });
+    for (const c of patch) {
+      const cell = new THREE.Mesh(
+        new THREE.CylinderGeometry(
+          CELL.mouthAcrossFlats / Math.sqrt(3), CELL.mouthAcrossFlats / Math.sqrt(3),
+          PANEL_DEPTH * 1.05, 6,
+        ),
+        cellMat,
+      );
+      cell.geometry.rotateX(Math.PI / 2);
+      // `cellPrism`'s half-face turn: a raw 6-gon prism lands on a POINTY-top
+      // cell and the wall is flat-top (D35).
+      cell.geometry.rotateZ(Math.PI / 6);
+      const m = hexToMm(c);
+      cell.position.set(m.x, m.y, 0);
+      group.add(cell);
+    }
 
     // Stand the plate off the chosen face, normal pointing back at the part.
     //
@@ -307,8 +342,53 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
     if (axis === 'x') group.rotation.y = Math.PI / 2;
     if (axis === 'y') group.rotation.x = Math.PI / 2;
 
+    /*
+     * Which way is UP on the wall.
+     *
+     * The part is shown in the FILE's frame, so "up" is not the screen's up and
+     * not any fixed axis — it is whichever file axis `orient` will map to the
+     * wall's +Y. That is `AXES[axis][1]`, negated when the mating end is `high`
+     * because the flip negates v. Without it you can line a part up against the
+     * cells and still hang a shelf sideways, which is the one mistake the
+     * geometry cannot catch for you.
+     */
+    const upIndex = AXES[axis][1];
+    const upSign = end === 'high' ? -1 : 1;
+    const upDir = new THREE.Vector3();
+    upDir.setComponent(upIndex, upSign);
+    /*
+     * Drawn ON the wall, running up it, and long enough to read.
+     *
+     * The first attempt was a short arrow floating beside the patch, and it was
+     * useless in the common case: with the camera looking at the mounting face,
+     * "up the wall" can point nearly away from you, and a short arrow foreshortens
+     * to a dot. It now spans most of the patch and starts from the bottom of it,
+     * so even heavily foreshortened there is a line with a head on it.
+     *
+     * Lifted just off the plate along the face normal so it is not buried in the
+     * slab, and drawn against the cells rather than beside them — the question it
+     * answers is "which way up is this part going to hang", and that is only
+     * meaningful against the wall it hangs on.
+     */
+    const normal = new THREE.Vector3();
+    normal.setComponent(i, end === 'high' ? -1 : 1);
+    const arrow = new THREE.ArrowHelper(
+      upDir,
+      upDir.clone().multiplyScalar(-plateSize * 0.46)
+        .add(normal.clone().multiplyScalar(PANEL_DEPTH * 0.8))
+        .add(pos),
+      plateSize * 0.92,
+      0x8fd18f,
+      plateSize * 0.2,
+      plateSize * 0.12,
+    );
+    s.root.add(arrow);
+
     s.root.add(group);
     s.plate = group;
+    // The arrow belongs to the plate's lifetime — parented so the one disposal
+    // path below clears it too.
+    group.userData['arrow'] = arrow;
     // The PART carries the depth offset, not the plate: the plate is the wall
     // and the wall does not move.
     //
@@ -510,6 +590,14 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
           <div>
             <dt>Spin</dt>
             <dd>{spin * 30}°</dd>
+          </div>
+          <div>
+            <dt>Wall up</dt>
+            <dd>
+              <span className="inspector__upkey" aria-hidden="true" /> {UP_LABEL[
+                `${AXES[axis][1]}:${end === 'high' ? 'neg' : 'pos'}`
+              ] ?? '—'}
+            </dd>
           </div>
           <div>
             <dt>Depth</dt>
