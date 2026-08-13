@@ -53,16 +53,30 @@ wall 90° from the designer's own drawings.
 ## Worklist
 
 - [ ] **P9a — turn the lattice. This is the whole objective; everything else is downstream.**
-      Fully specified in the 2026-08-13 pass-2 log entry below: new embedding
-      `x = ROW_STEP·q`, `y = PITCH·(r + q/2)`; `MARGIN_X`↔`MARGIN_Y` swap; `hexCorners` from `60·i`;
-      `panelCells` builds along q; `FITTING_SEAT_RADIANS` deletes itself.
-      **Previously blocked on a catalogue conflict — the user has now said "continue until it
-      works", which authorises the turn.** The remaining sub-question is how to regenerate without
-      baking this machine's slicer hash into all 51 entries. Recommended: re-express footprints only
-      and preserve the committed `print`/estimate blocks, which avoids the hash churn entirely.
-- [ ] **Re-express every stored `footprint` in the new frame** — all 51 parts, not just the 7
-      panels. A cell set cannot be rectangular in both frames. `tools/footprint.py` and
-      `src/core/detect.ts` must change together (CLAUDE.md: two detectors, they must agree).
+      **THE TRANSFORM IS NOW PINNED BY DATA — do not re-derive it, and do not "simplify" it.**
+
+          relabel:   (q, r)  ->  (-r, q + r)
+          embedding: x = ROW_STEP * q,  y = PITCH * (r + q/2)
+          panelCells: build along q, stagger -floor(q/2)   [was -ceil(r/2)]
+          margins:   MARGIN_X <-> MARGIN_Y  (11.8 is the half-flat, 13.6254664 the half-corner)
+          corners:   hexCorners starts at 60*i, not 60*i - 90
+          FITTING_SEAT_RADIANS deletes itself
+
+      How it was pinned, so nobody has to guess again:
+      - `(q,r) -> (r,q)`, the obvious swap, is a **MIRROR** (det −1, verified numerically). It is
+        the invisible-until-printed error. Both `(r,−q−r)` and `(−r,q+r)` are true rotations.
+      - Both rotations give the designer's `170.32 wide × 177 tall` for `wall-honeycomb-part`
+        (app today: 177 × 170.32), so the bounding box CANNOT choose between them — they differ
+        by 180°.
+      - Panel parity chooses: generating the block in the new frame and comparing against the
+        relabelled stored footprints, **`(−r,q+r)` + `floor` matches all 7 panels**;
+        `(r,−q−r)` + `floor` matches 6 and fails on exactly `mk3s` — the panel CLAUDE.md flags as
+        needing a 180°. The canary worked.
+- [ ] **Re-express every stored `footprint` in `catalog.json` by the pinned relabel** — all 51
+      parts. This is a lossless data migration, NOT a rescan: it needs no PrusaSlicer, so the
+      committed `print`/estimate blocks and their provenance survive untouched and this machine's
+      slicer hash is never baked in. `tools/footprint.py` and `src/core/detect.ts` must emit the new
+      labels too (CLAUDE.md: two detectors, they must agree).
 - [ ] **Plan a full wall in the app and photograph it.** The acceptance test proves the numbers;
       only the screenshot proves the picture. Compare against the PDF drawings and
       `Customiser/network_wall` photograph.
@@ -114,3 +128,10 @@ wall 90° from the designer's own drawings.
   `60·i − 90`, and `wall-honeycomb-part` still measures 177 × 170.3171 against the designer's
   170.32 × 177. **The app is still 90° from its own source, so the objective is not met and the
   lattice turn is now the top of the worklist.** No code changed this turn.
+- 2026-08-13 — Pass 4, "go": pinned the lattice turn by experiment before touching code. Verified
+  numerically that the obvious `(q,r)->(r,q)` swap is a MIRROR (det −1) — the invisible-until-printed
+  error — and that `(r,−q−r)` and `(−r,q+r)` are both true rotations, each reproducing the
+  designer's `170.32 × 177` exactly, so the bounding box cannot choose between them. Panel parity
+  chose: **`(−r, q+r)` with a `floor` stagger matches all 7 panels**, while `(r,−q−r)` matches 6 and
+  fails on exactly `mk3s`, the panel CLAUDE.md flags as needing a 180°. Transform recorded in the
+  worklist above. No code changed yet; `npm test` 556 and `tsc` still green.
