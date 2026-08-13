@@ -689,3 +689,49 @@ question.
 
 **What changes immediately:** nothing in code. The 30° seat is no longer an unexplained fudge —
 it is a known 90° frame difference, documented, with the measurement that proves the direction.
+
+---
+
+## D32 — Enter on a catalogue tile places the part; it does not start a drag
+
+**Found by testing the keyboard path, which had no test and did not work.**
+
+The tile's tooltip said "drag onto the wall, or press Enter". Enter synthesised a real `pointerdown`
+on the tile — tidy, because the parent then received a fully-formed event it could measure instead
+of a keyboard event wearing a pointer event's type. But a drag ends on `pointerup` over the wall,
+there is no Enter-to-drop, and the arrow keys move the *selection*, not a pending drag. So Enter
+started a gesture a keyboard could never finish: a ghost that only Escape could clear.
+
+**Decision: `onActivate` is a separate prop from `onDragStart`, and it places the part outright.**
+Blurring the two is what caused this — "start a drag" and "place a part" are different intentions,
+and one event type cannot carry both.
+
+The part lands on the first cell it actually fits, scanned in reading order, and arrives *selected*,
+which hands the rest to keys that already exist: arrows move it, `R` rotates, Delete removes. That
+is a shorter road than a parallel keyboard-drag cursor, and it adds no new vocabulary.
+
+The search is `Store.firstFittingCell`, in core rather than in the shell, so it is tested without a
+browser and reuses `addItem`'s own gate — `partCells` + `exclusiveCellsOf` + `checkPlacement`. The
+keyboard and the pointer therefore cannot come to different views about which cells are legal. It is
+reading order and not nearest-to-centre because it has to be deterministic: the same part on the same
+wall must always land in the same place, or undo/redo stops being a round trip.
+
+## D33 — The seat correction belongs to meshes that came out of a file, and to nothing else
+
+**Found while auditing part orientation against the drawings.**
+
+`FITTING_SEAT_RADIANS` (30°) compensates the orientation an STL was *drawn* in. `Insert-countersunk`'s
+flange vertices sit at 0°/60°/…/300° in the file — flat-top, as its `drawnOrientation` says — while a
+pointy-top cell's corners are at 30°/90°/…, so the real mesh needs exactly that 30° and gets it.
+
+Geometry the view builds for itself does not. `CylinderGeometry(…, 6).rotateX(90°)` already puts its
+vertices at 30°/90°/…/330° — precisely the cell's corners. Two of the four places that draw a fitting
+turned that placeholder by another 30° anyway, laying it *across* the cell walls: the exact failure
+the constant exists to prevent. The placed-item path had always guarded it with `loaded &&`; the wall
+fixing and junction paths had not, and the collar needed no guard because it was never given one.
+
+**Decision: the seat is applied only when the real mesh is present** — `fixingMesh ? … : 0`.
+
+Pinned in `tests/fitting-seat.test.ts` as arithmetic, not as a screenshot. A hexagon looks like a
+hexagon at any angle; this is only wrong *relative to the cell under it*, which is why it survived
+in plain sight and why the eye is the wrong instrument for it.

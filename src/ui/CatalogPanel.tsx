@@ -24,6 +24,11 @@ export interface CatalogPanelProps {
    * discriminate on `event.type` if the parent needs to pick one.
    */
   onDragStart: (partId: string, event: React.DragEvent | React.PointerEvent) => void;
+  /**
+   * Keyboard activation of a tile: place the part outright. Deliberately NOT
+   * folded into `onDragStart` — see `activateFromKeyboard`.
+   */
+  onActivate?: (partId: string) => void;
   selectedPartId?: string;
   filter?: string;
   onFilterChange?: (value: string) => void;
@@ -84,36 +89,28 @@ const cellCount = (part: CatalogPart): number =>
 const ACTIVATION_KEYS = new Set([' ', 'Enter', 'Spacebar']);
 
 /**
- * Enter or Space starts a drag.
+ * Enter or Space PLACES the part. It does not start a drag.
  *
- * `onDragStart` takes a drag or a pointer event, and a keyboard has neither. So
- * rather than hand the parent a keyboard event wearing a pointer event's type —
- * which would give it a `clientX` of `undefined` the first time it looked — the
- * tile dispatches a real `pointerdown` on itself, centred on the tile and marked
- * `pointerType: 'keyboard'`. React's own listener picks it up, the tile's
- * `onPointerDown` runs, and the parent receives a genuine, fully-formed event it
- * can measure and discriminate on.
+ * It used to. The tile dispatched a real `pointerdown` on itself marked
+ * `pointerType: 'keyboard'`, so the parent got a fully-formed event to measure —
+ * which was tidy, and which handed the keyboard a gesture it could not finish. A
+ * drag ends on `pointerup` over the wall; there is no Enter-to-drop, and the
+ * arrow keys move the SELECTION, not a pending drag. So Enter drew a ghost that
+ * only Escape could get rid of, while the tile's own tooltip promised otherwise.
+ *
+ * Placing outright is the shorter path and reuses the keys that already exist:
+ * the part arrives selected, and arrows move it, R rotates it, Delete removes
+ * it. `onActivate` is therefore a separate prop from `onDragStart` — the two
+ * mean different things, and blurring them is what caused this.
  */
-function activateFromKeyboard(event: React.KeyboardEvent<HTMLElement>): void {
+function activateFromKeyboard(
+  event: React.KeyboardEvent<HTMLElement>,
+  partId: string,
+  onActivate: CatalogPanelProps['onActivate'],
+): void {
   if (!ACTIVATION_KEYS.has(event.key)) return;
-
-  const element = event.currentTarget;
-  const view = element.ownerDocument.defaultView;
-  if (view === null || typeof view.PointerEvent !== 'function') return;
-
   event.preventDefault();
-  const box = element.getBoundingClientRect();
-  element.dispatchEvent(
-    new view.PointerEvent('pointerdown', {
-      bubbles: true,
-      cancelable: true,
-      clientX: box.left + box.width / 2,
-      clientY: box.top + box.height / 2,
-      pointerId: -1,
-      pointerType: 'keyboard',
-      isPrimary: true,
-    }),
-  );
+  onActivate?.(partId);
 }
 
 // ---------------------------------------------------------------------------
@@ -124,10 +121,11 @@ interface TileProps {
   part: CatalogPart;
   selected: boolean;
   onDragStart: CatalogPanelProps['onDragStart'];
+  onActivate: CatalogPanelProps['onActivate'];
   onRemove?: (partId: string) => void;
 }
 
-function CatalogTile({ part, selected, onDragStart, onRemove }: TileProps): JSX.Element {
+function CatalogTile({ part, selected, onDragStart, onActivate, onRemove }: TileProps): JSX.Element {
   const cells = cellCount(part);
   const name = part.name.length > 0 ? part.name : part.id;
   const imported = isImported(part);
@@ -155,10 +153,10 @@ function CatalogTile({ part, selected, onDragStart, onRemove }: TileProps): JSX.
         className="catalog-tile"
         data-selected={selected ? 'true' : undefined}
         aria-current={selected ? 'true' : undefined}
-        title={`${part.file} — drag onto the wall, or press Enter`}
+        title={`${part.file} — drag onto the wall, or press Enter to place it`}
         onDragStart={(event) => event.preventDefault()}
         onPointerDown={(event) => onDragStart(part.id, event)}
-        onKeyDown={activateFromKeyboard}
+        onKeyDown={(event) => activateFromKeyboard(event, part.id, onActivate)}
       >
         <span className="catalog-tile__name">{name}</span>
         <span className="catalog-tile__cells tabular-nums">
@@ -197,7 +195,8 @@ function CatalogTile({ part, selected, onDragStart, onRemove }: TileProps): JSX.
 // ---------------------------------------------------------------------------
 
 export function CatalogPanel(props: CatalogPanelProps): JSX.Element {
-  const { catalog, onDragStart, selectedPartId, filter, onFilterChange, onRemovePart } = props;
+  const { catalog, onDragStart, onActivate, selectedPartId, filter, onFilterChange, onRemovePart } =
+    props;
 
   const [collapsed, setCollapsed] = useState<ReadonlySet<PartType>>(() => new Set<PartType>());
 
@@ -321,6 +320,7 @@ export function CatalogPanel(props: CatalogPanelProps): JSX.Element {
                       part={part}
                       selected={part.id === selectedPartId}
                       onDragStart={onDragStart}
+                      onActivate={onActivate}
                       onRemove={onRemovePart}
                     />
                   ))}

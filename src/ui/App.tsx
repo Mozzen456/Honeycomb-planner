@@ -163,6 +163,39 @@ export function App() {
     [store, say],
   );
 
+  /**
+   * Enter on a catalogue tile, which places the part rather than starting a drag
+   * no keyboard can finish (see `activateFromKeyboard`).
+   *
+   * The search for a cell is `Store.firstFittingCell`, so it is tested without a
+   * browser and shares `addItem`'s gate. The part arrives SELECTED, which hands
+   * the rest of the job to keys that already exist: arrows move it, R rotates,
+   * Delete removes it.
+   */
+  const placePartFromKeyboard = useCallback(
+    (partId: string) => {
+      const doc = store.getState().doc;
+      if (doc.panels.length === 0) {
+        say('Solve the panels first — there is no wall to place it on', 'error');
+        return;
+      }
+      const at = store.firstFittingCell(partId);
+      if (at === null) {
+        say('No room on the wall for that part', 'error');
+        return;
+      }
+      const result = store.addItem(partId, at, 0);
+      if (!result.ok) {
+        say(result.reason ?? 'That does not fit there', 'error');
+        return;
+      }
+      const placed = store.getState().doc.items.at(-1);
+      if (placed) store.select([placed.id]);
+      say('Placed — arrow keys move it, R rotates, Delete removes it', 'ok');
+    },
+    [store, say],
+  );
+
   const cancelDrag = useCallback(() => {
     dragRef.current = null;
     setDrag(null);
@@ -562,6 +595,7 @@ export function App() {
             onFilterChange={setFilter}
             selectedPartId={[...selectedPartIds][0]}
             onDragStart={(partId) => beginPartDrag(partId)}
+            onActivate={placePartFromKeyboard}
             onRemovePart={removeImportedPart}
           />
         </aside>

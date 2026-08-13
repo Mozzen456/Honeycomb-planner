@@ -691,7 +691,14 @@ export function WallView3D(props: WallView3DProps) {
             mat,
           );
       if (!fixingMesh) mesh.geometry.rotateX(Math.PI / 2);
-      mesh.rotation.z = FITTING_SEAT_RADIANS;
+      // Only the REAL mesh gets the seat correction. `FITTING_SEAT_RADIANS`
+      // compensates the orientation an STL was drawn in; the fallback prism was
+      // built here, and `CylinderGeometry(…, 6).rotateX(90°)` already puts its
+      // vertices at 30/90/150/210/270/330 — exactly a pointy-top cell's corners.
+      // Turning that by another 30° laid the placeholder ACROSS the cell walls,
+      // which is the very thing the constant exists to prevent. The placed-item
+      // path has always guarded this with `loaded &&`; these two had not.
+      mesh.rotation.z = fixingMesh ? FITTING_SEAT_RADIANS : 0;
       // Seated in the cell: the insert drops in from behind and its flange sits
       // proud of the front face, which is what the photographs show.
       mesh.position.set(p.x, p.y, fixingMesh ? PANEL_DEPTH - fixingMesh.depthMm : PANEL_DEPTH / 2);
@@ -731,7 +738,9 @@ export function WallView3D(props: WallView3DProps) {
             mat,
           );
       if (!junctionMesh) mesh.geometry.rotateX(Math.PI / 2);
-      mesh.rotation.z = (Math.PI / 3) * junction.rotation + FITTING_SEAT_RADIANS;
+      // Seat correction on the real mesh only — see the wall-fixing loop above.
+      mesh.rotation.z =
+        (Math.PI / 3) * junction.rotation + (junctionMesh ? FITTING_SEAT_RADIANS : 0);
       mesh.position.set(
         cx, cy,
         junctionMesh ? PANEL_DEPTH - junctionMesh.depthMm : PANEL_DEPTH / 2,

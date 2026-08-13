@@ -395,6 +395,42 @@ export class Store {
     });
   }
 
+  /**
+   * The first cell of the wall, in reading order, where `partId` would be a
+   * legal placement — or null if there is nowhere it fits.
+   *
+   * This is what Enter on a catalogue tile uses. It reuses `partCells` +
+   * `exclusiveCellsOf` + `checkPlacement`, which is the exact gate `addItem`
+   * applies, so the keyboard and the pointer cannot come to different views
+   * about which cells are legal: an accessory may overlap freely, two things
+   * that plug INTO a cell may not.
+   *
+   * Reading order rather than nearest-to-centre because it has to be
+   * deterministic — the same part on the same wall must always land in the same
+   * place, or an undo/redo pair stops being a round trip.
+   */
+  firstFittingCell(partId: string): Hex | null {
+    const part = this.part(partId);
+    if (!part) return null;
+    const seen = new Set<string>();
+    const cells: Hex[] = [];
+    for (const panel of this.current.doc.panels) {
+      for (const cell of placedPanelCells(panel)) {
+        const key = hexKey(cell);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        cells.push(cell);
+      }
+    }
+    cells.sort((a, b) => a.r - b.r || a.q - b.q);
+    for (const at of cells) {
+      const covered = partCells(part, at, 0);
+      if (covered.length === 0) return null;
+      if (this.checkPlacement(covered, new Set(), exclusiveCellsOf(part, covered)).ok) return at;
+    }
+    return null;
+  }
+
   addItem(partId: string, at: Hex, rotation: Rotation = 0): DropResult {
     const part = this.part(partId);
     if (!part) return { ok: false, reason: `Unknown part "${partId}"` };

@@ -363,3 +363,56 @@ function hexDistance(a: Hex, b: Hex): number {
   const by = -bx - bz;
   return Math.max(Math.abs(ax - bx), Math.abs(ay - by), Math.abs(az - bz));
 }
+
+/**
+ * Enter on a catalogue tile places a part. It used to synthesise a `pointerdown`
+ * instead, which started a drag that only a `pointerup` over the wall could
+ * finish — and there is no Enter-to-drop, so a keyboard user got a ghost they
+ * could only cancel with Escape while the tile promised "or press Enter".
+ *
+ * The search lives in the Store, not the shell, so it can be held to the same
+ * gate `addItem` applies without standing a browser up.
+ */
+describe('keyboard placement', () => {
+  it('finds the first free cell in reading order', () => {
+    expect(store.firstFittingCell('single')).toEqual({ q: 0, r: 0 });
+  });
+
+  it('is deterministic, so undo and redo stay a round trip', () => {
+    const a = store.firstFittingCell('pair');
+    const b = store.firstFittingCell('pair');
+    expect(a).toEqual(b);
+  });
+
+  it('steps over a cell an insert already occupies, since two cannot share one', () => {
+    expect(store.addItem('plug', { q: 0, r: 0 }).ok).toBe(true);
+    // Reading order is by row then column, so the next legal cell is one across.
+    expect(store.firstFittingCell('plug')).toEqual({ q: 1, r: 0 });
+  });
+
+  it('still offers an overlapping cell to an accessory, which may share freely', () => {
+    expect(store.addItem('single', { q: 0, r: 0 }).ok).toBe(true);
+    expect(store.firstFittingCell('single')).toEqual({ q: 0, r: 0 });
+  });
+
+  it('returns null rather than a wrong answer when there is no wall', () => {
+    const bare = new Store(emptyDoc(), catalog);
+    expect(bare.firstFittingCell('single')).toBeNull();
+  });
+
+  it('returns null for a part that is not in the catalogue', () => {
+    expect(store.firstFittingCell('no-such-part')).toBeNull();
+  });
+
+  /**
+   * The whole point: whatever the scan offers, `addItem` must accept. If these
+   * two ever disagree, Enter reports success and places nothing.
+   */
+  it('never offers a cell addItem then refuses', () => {
+    for (const id of ['single', 'pair', 'plug', 'plug2']) {
+      const at = store.firstFittingCell(id);
+      expect(at, `${id} found no cell`).not.toBeNull();
+      expect(store.addItem(id, at!, 0).ok, `${id} at ${hexKey(at!)}`).toBe(true);
+    }
+  });
+});
