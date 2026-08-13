@@ -62,12 +62,19 @@ the standard, not measurement noise.
 
 ### Axial coordinates
 
-The app's canonical frame is **pointy-top** — a corner points +Y, flats face left and right.
+The app's canonical frame is **flat-top** — a flat edge faces +Y, corners point left and right.
+This is the designer's own frame (§10, DECISIONS D31/D35): `23.6` vertical and
+`40.88 = 2 × ROW_STEP` horizontal are the two numbers dimensioned on the insert drawing.
 
 ```
-x = PITCH · (q + r/2)      = 23.600·q + 11.800·r
-y = ROW_STEP · r           = 20.438·r
+x = ROW_STEP · q                  = 20.438·q
+y = PITCH · (r + q/2)             = 23.600·r + 11.800·q
 ```
+
+Columns step 20.438 across; cells step 23.6 down a column; each column sits half a pitch below
+its neighbour. The app drew this turned 90° until 2026-08-13, which is why every panel used to
+measure transposed against its own drawing — `wall-honeycomb-part` came out 177 × 170.32 where
+the drawing says 170.32 × 177.
 
 ---
 
@@ -131,9 +138,11 @@ be computed **in cell space**, never by comparing pixel rectangles.
 ### Size formula
 
 ```
-pointy-drawn:  W = PITCH·(columns + 0.5)          H = (rows − 1)·20.438 + 27.25093
-flat-drawn:    W = (columns − 1)·20.438 + 27.25093  H = PITCH·(rows + 0.5)
+W = (columns − 1)·20.438 + 27.25093        H = PITCH·(rows + 0.5)
 ```
+
+(In the flat-top wall frame. The transpose of this is what a part DRAWN pointy measures in its
+own file, which is a different question — see `drawnOrientation`.)
 
 Reproduces every shipped panel to within **2.1 × 10⁻⁴ mm** (0.2 µm). The app nonetheless uses
 the *measured* bbox for the seven shipped panels, so drift is structurally impossible for
@@ -141,19 +150,19 @@ anything the user will actually print — see DECISIONS.md D5.
 
 ### The seven panels
 
-Wall columns × rows are in the **wall frame** (canonical pointy-top). Width × height are the
-**bed footprint as drawn**. Four panels are drawn flat-top and must be spun 90° to sit on a
-pointy-top wall, which is why their two frames are transposed.
+Wall columns × rows are in the **wall frame** (canonical flat-top). Width × height are the
+**bed footprint as drawn**. Three panels are drawn pointy-top and must be spun 90° to sit on a
+flat-top wall, which is why their two frames are transposed.
 
 | File | Drawn | Wall cols × rows | Cells | Bed W × H mm | Print¹ | Fits |
 |---|---|---|---|---|---|---|
 | `wall-honeycomb-106x89-fixed` | flat | 4 × 4 | 16 | 88.57 × 106.20 | 1 h 33 m, 14.6 g | everything from Prusa Mini up |
-| `wall-honeycomb-part` | pointy | 7 × 8 | **56** | 177.00 × 170.32 | 5 h 15 m, 49.1 g | Prusa Mini (180×180) |
-| `wall-honeycomb-k1-211x201` | flat | 8 × 10 | 80 | 211.19 × 200.60 | 7 h 24 m, 69.6 g | 220×220 and up |
+| `wall-honeycomb-part` | pointy | 8 × 7 | **56** | 177.00 × 170.32 | 5 h 15 m, 49.1 g | Prusa Mini (180×180) |
+| `wall-honeycomb-k1-211x201` | flat | 10 × 8 | 80 | 211.19 × 200.60 | 7 h 24 m, 69.6 g | 220×220 and up |
 | `wall-honeycomb-224x190size(mk3s)` | pointy | 9 × 9 | 81 | 224.20 × 190.75 | 7 h 31 m, 70.6 g | 235×235, MK3S and up |
 | `wall-honeycomb-bambu-211x248-fixed` | pointy | 10 × 10 | 100 | 247.80 × 211.19 | 9 h 15 m, 86.7 g | 256×256 and up |
-| `wall-honeycomb-293x271-(big-printer)` | flat | 11 × 14 | 154 | 292.95 × 271.40 | 14 h 08 m, 132.4 g | 300×300 and up |
-| `375x389-fixed` | flat | 16 × 18 | 288 | 374.70 × 389.40 | 26 h 10 m, 245.0 g | **400×400 only** |
+| `wall-honeycomb-293x271-(big-printer)` | flat | 14 × 11 | 154 | 292.95 × 271.40 | 14 h 08 m, 132.4 g | 300×300 and up |
+| `375x389-fixed` | flat | 18 × 16 | 288 | 374.70 × 389.40 | 26 h 10 m, 245.0 g | **400×400 only** |
 
 ¹ PrusaSlicer 2.9.6, profile `PLA-0.20mm-15pct-2perim-0.4nozzle` — see §7.
 

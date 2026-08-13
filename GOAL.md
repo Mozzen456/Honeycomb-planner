@@ -8,20 +8,20 @@ wall 90° from the designer's own drawings.
 
 ## Done when
 
-- [ ] The app draws the wall **flat-top**, matching every reference photograph — proof:
+- [x] The app draws the wall **flat-top**, matching every reference photograph — proof:
       `src/core/hex.ts` `hexCorners` starts at `60·i` (not `60·i − 90`), and
       `wall-honeycomb-part` measures **170.32 wide × 177 tall** (today: 177 × 170.3171, i.e. 90° out)
-- [ ] `FITTING_SEAT_RADIANS` no longer exists — it was only ever compensation for the wrong frame
+- [x] `FITTING_SEAT_RADIANS` no longer exists — it was only ever compensation for the wrong frame
       (D31/D33) — proof: `grep -c FITTING_SEAT_RADIANS src/ui/WallView3D.tsx` returns 0 (today: 5)
-- [ ] A full wall is planned in the running app — panels solved, accessories placed, inserts and
+- [x] A full wall is planned in the running app — panels solved, accessories placed, inserts and
       junctions drawn — and a screenshot shows cells, parts and seams all on the same lattice —
       proof: screenshot in this session + `npx vitest run tests/acceptance.test.ts`
-- [ ] Every part's orientation agrees across catalogue, both detectors, and the drawings — proof:
+- [x] Every part's orientation agrees across catalogue, both detectors, and the drawings — proof:
       `npx vitest run tests/detect.test.ts tests/panel-parity.test.ts tests/mounting.test.ts
       tests/fitting-seat.test.ts tests/customiser.test.ts`
-- [ ] The rundown is written: what each module does, what is measured vs assumed, what remains open
+- [x] The rundown is written: what each module does, what is measured vs assumed, what remains open
       — proof: `HSW-SPEC.md` §11 exists and every open item in it appears in `PARKED.md`
-- [ ] `npm test`, `npm run typecheck`, `npm run build` all clean, and `scan.py --verify` shows
+- [x] `npm test`, `npm run typecheck`, `npm run build` all clean, and `scan.py --verify` shows
       **zero geometry differences** (the slicer-hash lines are environmental — see Environment)
 
 ## Constraints
@@ -48,11 +48,15 @@ wall 90° from the designer's own drawings.
   geometry differences. "Geometry clean" is the passing bar.
 - The browser pane cannot drive drag-and-drop (synthetic pointer events fail `setPointerCapture`).
   Drive the app with dispatched `KeyboardEvent`s and the catalogue tile's Enter-to-place (D32).
+- **The scratchpad venv needs `networkx`** or trimesh's `section_polygons` throws, `detect()`
+  swallows it, and EVERY tier-2 part silently degrades to a tier-3 bounding-box bound. `scan.py
+  --verify` will not show it — it caches on the STL's sha256 and reads the cache. Installed
+  2026-08-13; `footprint.py` then agrees with the catalogue on 51 of 51.
 - Do not commit `build/` — its diffs are pre-existing CRLF and prior local runs.
 
 ## Worklist
 
-- [~] **P9a — turn the lattice. NEARLY DONE, 541/557. Do not start over.**
+- [x] **P9a — turn the lattice. DONE. 557/557.**
       **THE TRANSFORM IS PINNED BY DATA — do not re-derive it, and do not "simplify" it.**
 
       DONE: `constants.ts` margins swapped; `hex.ts` `hexToMm`/`mmToHex`/`hexCorners`/`panelCells`
@@ -185,3 +189,16 @@ wall 90° from the designer's own drawings.
   91.64%. That is honest — the app used to measure the plate at 177 × 170.32, which flattered a wide
   wall. And `mk3s` no longer needs its 180°: it never was an oddity in the plate, it was the
   pointy-top stagger parity disagreeing with how the panel is drawn.
+- 2026-08-13 — Pass 7, "keep going". **557/557, and all six Done-when criteria met and checked
+  this turn.** The wall draws flat-top; `wall-honeycomb-part` measures 170.32 × 177, its own
+  drawing's dimensions; `FITTING_SEAT_RADIANS` is gone; a 400 × 400 wall was solved in the running
+  app with an SD-card holder and a shelf placed on it and photographed; `tsc` and `build` clean.
+  Two bugs the tests could not have caught, both found by looking at the app. The plate came back
+  as a scatter of open wedges: `unionOutline` took edge k as running corner k+1 -> k+2, which is
+  forced by the corner angles and becomes k -> k+1 once the corners move to 0/60/...  And the
+  Python detector disagreed with the catalogue on 17 parts — not a code fault but a missing
+  `networkx` in the venv, which made `section_polygons` throw so every tier-2 part silently fell
+  back to a tier-3 bound. `scan.py --verify` had never shown it because it reads its sha256 cache.
+  With networkx installed, `footprint.py` agrees on 51 of 51, so both detectors agree with the
+  catalogue and with each other. HSW-SPEC §2 and §4 rewritten to the flat-top frame (they still
+  described the old one and contradicted §10), and §11 added as the rundown.
