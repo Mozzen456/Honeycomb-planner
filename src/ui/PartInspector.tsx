@@ -89,6 +89,7 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
     renderer: THREE.WebGLRenderer;
     camera: THREE.PerspectiveCamera;
     root: THREE.Scene;
+    key: THREE.DirectionalLight;
     part: THREE.Mesh | null;
     plate: THREE.Group | null;
     size: number;
@@ -107,13 +108,32 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
     renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     host.appendChild(renderer.domElement);
 
-    root.add(new THREE.AmbientLight(0xffffff, 0.75));
-    const key = new THREE.DirectionalLight(0xffffff, 0.9);
-    key.position.set(1, 1, 1);
+    /*
+     * Lighting for INSPECTION, which is a different job from looking pretty.
+     *
+     * It was ambient 0.75 plus one fixed key, and that is why the part read as a
+     * flat blue silhouette: at that much ambient every face receives nearly the
+     * same light, so a slot, a fillet and a flat panel all come out the same
+     * tone. Detail in a 3D view IS the tonal difference between faces, and
+     * ambient is precisely what destroys it.
+     *
+     * So: enough ambient to keep shadowed faces readable, and a KEY THAT FOLLOWS
+     * THE CAMERA. A fixed key is fine for a fixed view and useless here — the
+     * whole point is turning the part round, and half the orbit put the face you
+     * were looking at in shadow. The headlight is updated each frame in the
+     * render loop below.
+     */
+    root.add(new THREE.AmbientLight(0xffffff, 0.38));
+    const key = new THREE.DirectionalLight(0xffffff, 0.72);
     root.add(key);
+    // A fixed fill from below-left, so a face square to the headlight still has
+    // some gradient across it rather than reading as one flat wash.
+    const fill = new THREE.DirectionalLight(0xffffff, 0.26);
+    fill.position.set(-1, -0.6, 0.5);
+    root.add(fill);
 
     const state = {
-      renderer, camera, root,
+      renderer, camera, root, key,
       part: null as THREE.Mesh | null,
       plate: null as THREE.Group | null,
       size: 50,
@@ -134,6 +154,9 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
     };
     const tick = () => {
       resize();
+      // The headlight rides the camera, so whatever you have turned toward you
+      // is the thing that is lit.
+      key.position.copy(camera.position);
       renderer.render(root, camera);
       raf = requestAnimationFrame(tick);
     };
@@ -170,8 +193,29 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
 
       const body = new THREE.Mesh(
         geometry,
-        new THREE.MeshLambertMaterial({ color: 0x6ea8fe }),
+        // Phong, not Lambert. Lambert has no specular term at all, so a curved
+        // surface and a flat one at the same angle are indistinguishable. The
+        // highlight is what makes a fillet look like a fillet.
+        new THREE.MeshPhongMaterial({ color: 0x6ea8fe, shininess: 24, specular: 0x2a3a4a }),
       );
+
+      /*
+       * Edges over the surface.
+       *
+       * This is the single biggest thing for reading a part. Shading alone
+       * cannot separate two coplanar-ish faces meeting at a shallow angle, and
+       * these models are full of them — the slots in a card holder, the lip on a
+       * shelf, the step between a flange and a body. `EdgesGeometry`'s threshold
+       * keeps it to genuine creases rather than drawing every triangle.
+       *
+       * Parented to the body so it inherits the spin and depth transforms — an
+       * outline that did not follow the part would be worse than none.
+       */
+      const edges = new THREE.LineSegments(
+        new THREE.EdgesGeometry(geometry, 24),
+        new THREE.LineBasicMaterial({ color: 0x14202c, transparent: true, opacity: 0.55 }),
+      );
+      body.add(edges);
       s.root.add(body);
       s.part = body;
       s.size = Math.max(size.x, size.y, size.z);
