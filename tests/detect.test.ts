@@ -113,16 +113,20 @@ describe('envelopeBlock — the wall-interface gate', () => {
 });
 
 describe('toAxial', () => {
-  it('maps a pointy-drawn row onto consecutive q', () => {
-    const cells = toAxial([{ u: 0, v: 0 }, { u: PITCH, v: 0 }, { u: 2 * PITCH, v: 0 }], 'pointy');
-    expect(cells).toEqual([{ q: 0, r: 0 }, { q: 1, r: 0 }, { q: 2, r: 0 }]);
+  it('maps a flat-drawn column onto consecutive r', () => {
+    // The wall IS flat-top (D35), so a flat-drawn part needs no spin: a step of
+    // one PITCH along +v is one step down a column.
+    const cells = toAxial([{ u: 0, v: 0 }, { u: 0, v: PITCH }, { u: 0, v: 2 * PITCH }], 'flat');
+    expect(cells).toEqual([{ q: 0, r: 0 }, { q: 0, r: 1 }, { q: 0, r: 2 }]);
   });
 
-  it('spins a flat-drawn part 90° so it sits on a pointy-top wall', () => {
-    // Drawn flat, the lattice step along +v is one row; on the wall that has to
-    // become a step along the pointy-top row axis, or the part lands rotated.
-    const cells = toAxial([{ u: 0, v: 0 }, { u: 0, v: PITCH }], 'flat');
-    expect(cells).toEqual([{ q: 0, r: 0 }, { q: 1, r: 0 }]);
+  it('spins a POINTY-drawn part 90° so it sits on a flat-top wall', () => {
+    // The mirror image of the old rule, and it inverted for one reason only:
+    // the wall turned. Drawn pointy, the lattice step along +u is one row; on a
+    // flat-top wall that has to become a step down a column, or the part lands
+    // rotated. Before D35 it was the FLAT-drawn part that had to be spun.
+    const cells = toAxial([{ u: 0, v: 0 }, { u: PITCH, v: 0 }], 'pointy');
+    expect(cells).toEqual([{ q: 0, r: 0 }, { q: 0, r: 1 }]);
   });
 
   it('refuses points that are not on one lattice, rather than rounding them on', () => {

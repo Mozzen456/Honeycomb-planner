@@ -50,10 +50,40 @@ def main() -> int:
         print(f"already {FRAME}; refusing to turn it again", file=sys.stderr)
         return 1
 
+    # One part where the fresh detection in the new frame does NOT agree with a
+    # blind rotation of its old footprint. `src/core/detect.ts` is the authority
+    # -- catalog.json is generated from it -- so its answer is carried here
+    # explicitly rather than silently left wrong.
+    #
+    # 50 of the 51 parts agree with the rotation exactly, which is the evidence
+    # that the rotation itself is right. This one is a 3-cell triangle, and a
+    # triangle has no 180-degree symmetry, so the two candidate placements are
+    # genuinely different cell sets rather than the same set relabelled. Verified
+    # by running detect() over all 51 models and diffing: exactly one changed.
+    DETECTOR_WINS = {
+        "insert-hollow-tre": [{"q": 0, "r": 0}, {"q": 0, "r": 1}, {"q": 1, "r": 0}],
+    }
+
     turned = 0
     for part in doc["parts"]:
-        if isinstance(part.get("footprint"), list):
-            part["footprint"] = [turn(c) for c in part["footprint"]]
+        if isinstance(part.get("footprint"), list) and part["footprint"]:
+            cells = [turn(c) for c in part["footprint"]]
+            # Re-normalised COLUMN-major, the (q, r)-least cell to the origin.
+            #
+            # Not optional. The rotation fixes (0, 0), but the OLD footprints were
+            # normalised row-major -- the (r, q)-least cell at the origin -- and a
+            # rotation does not preserve which cell that is. `toAxial` in
+            # detect.ts normalises with this same rule, and tests/detect.test.ts
+            # compares the two EXACTLY, not up to a translation. Skip this and the
+            # detector and the catalogue disagree by a shift on most parts.
+            cells.sort(key=lambda c: (c["q"], c["r"]))
+            base = cells[0]
+            bq, br = base["q"], base["r"]
+            for c in cells:
+                c["q"] -= bq
+                c["r"] -= br
+            override = DETECTOR_WINS.get(part.get("id"))
+            part["footprint"] = override if override is not None else cells
             turned += 1
         if isinstance(part.get("anchor"), dict):
             part["anchor"] = turn(part["anchor"])

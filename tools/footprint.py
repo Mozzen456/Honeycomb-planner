@@ -196,19 +196,26 @@ def _to_axial(pts, drawn: str):
     if not pts:
         return None
     arr = np.asarray(pts, dtype=float)
-    if drawn == "flat":
-        # A flat-top-drawn part must be spun 90 degrees to sit on a pointy-top
-        # wall. Physical requirement, not bookkeeping.
+    if drawn == "pointy":
+        # A POINTY-drawn part must be spun 90 degrees to sit on a flat-top wall.
+        # Physical requirement, not bookkeeping. It was the flat-drawn part that
+        # needed spinning while the wall was pointy -- the rule did not change,
+        # the wall did (DECISIONS D35).
         arr = np.c_[-arr[:, 1], arr[:, 0]]
     arr = arr - arr[0]
-    r = arr[:, 1] / ROW
-    q = arr[:, 0] / PITCH - r / 2
+    # The inverse of hexToMm, flat-top: columns step ROW across, cells step PITCH
+    # down a column, each column half a PITCH off its neighbour. Must stay
+    # identical to `toAxial` in src/core/detect.ts -- tests/detect.test.ts holds
+    # the two to the same answer on all 51 shipped models.
+    q = arr[:, 0] / ROW
+    r = arr[:, 1] / PITCH - q / 2
     ri, qi = np.rint(r), np.rint(q)
     if len(arr) > 1 and (np.abs(r - ri).max() > 0.2 or np.abs(q - qi).max() > 0.2):
         return None
-    cells = sorted({(int(a), int(b)) for a, b in zip(qi, ri)}, key=lambda c: (c[1], c[0]))
+    # Normalised COLUMN-major, the (q, r)-least cell to the origin.
+    cells = sorted({(int(a), int(b)) for a, b in zip(qi, ri)}, key=lambda c: (c[0], c[1]))
     a0 = cells[0]
-    return sorted(((a - a0[0], b - a0[1]) for a, b in cells), key=lambda c: (c[1], c[0]))
+    return sorted(((a - a0[0], b - a0[1]) for a, b in cells), key=lambda c: (c[0], c[1]))
 
 
 # ---------------------------------------------------------------------------

@@ -455,7 +455,13 @@ export function envelopeBlock(
 // Lattice points <-> axial cells
 // ---------------------------------------------------------------------------
 
-/** Basis vectors of the lattice in the plane, for a given drawn orientation. */
+/**
+ * Basis vectors of the lattice in the plane, for a given drawn orientation.
+ *
+ * The FLAT basis is now the wall's own (D35) — `hexToMm` is exactly
+ * `[[ROW_STEP, PITCH/2], [0, PITCH]]`. That is the whole content of the frame
+ * turn as far as this module is concerned.
+ */
 function basis(drawn: 'pointy' | 'flat'): [[number, number], [number, number]] {
   return drawn === 'flat'
     ? [[ROW_STEP, PITCH / 2], [0, PITCH]]
@@ -472,16 +478,20 @@ export function toAxial(
   drawn: 'pointy' | 'flat',
 ): Hex[] | null {
   if (points.length === 0) return null;
-  // A flat-drawn part must be spun 90° to sit on a pointy-top wall. Physical
-  // requirement, not bookkeeping: the wall is pointy-top by definition.
-  const pts = points.map((p) => (drawn === 'flat' ? { u: -p.v, v: p.u } : { u: p.u, v: p.v }));
+  // A POINTY-drawn part must be spun 90° to sit on a flat-top wall. Physical
+  // requirement, not bookkeeping: the wall is flat-top by definition (D35).
+  // It was the flat-drawn part that needed spinning while the wall was pointy —
+  // the rule did not change, the wall did.
+  const pts = points.map((p) => (drawn === 'pointy' ? { u: -p.v, v: p.u } : { u: p.u, v: p.v }));
   const first = pts[0]!;
   const cells: Hex[] = [];
   for (const p of pts) {
     const du = p.u - first.u;
     const dv = p.v - first.v;
-    const rf = dv / ROW_STEP;
-    const qf = du / PITCH - rf / 2;
+    // The inverse of `hexToMm`, flat-top: columns step ROW_STEP across, cells
+    // step PITCH down a column, each column half a PITCH off its neighbour.
+    const qf = du / ROW_STEP;
+    const rf = dv / PITCH - qf / 2;
     const q = Math.round(qf);
     const r = Math.round(rf);
     if (Math.abs(qf - q) > 0.2 || Math.abs(rf - r) > 0.2) return null;
@@ -489,7 +499,12 @@ export function toAxial(
   }
   const unique = new Map<string, Hex>();
   for (const c of cells) unique.set(`${c.q},${c.r}`, c);
-  const list = [...unique.values()].sort((x, y) => x.r - y.r || x.q - y.q);
+  // Normalised COLUMN-major, matching the frame: the (q, r)-least cell becomes
+  // the origin. The old rule sorted (r, q) for a row-major wall. Whichever rule
+  // is used, `tools/turn_frame.py` must use the same one or the detector and the
+  // catalogue disagree about a translation — which `tests/detect.test.ts`
+  // compares exactly, not up to a shift.
+  const list = [...unique.values()].sort((x, y) => x.q - y.q || x.r - y.r);
   const base = list[0]!;
   return list.map((c) => ({ q: c.q - base.q, r: c.r - base.r }));
 }
@@ -583,15 +598,17 @@ function detectPanel(mesh: MeshData, axis: Axis, cellMm: number): Detection | nu
 function blockOf(
   cells: readonly Hex[],
 ): { columns: number; rows: number; hang180: boolean } | null {
-  const byRow = new Map<number, number[]>();
+  // Grouped by COLUMN since the wall turned flat-top (D35): `panelCells` builds
+  // along q, so it is q that indexes the block's long axis.
+  const byColumn = new Map<number, number[]>();
   for (const c of cells) {
-    const list = byRow.get(c.r);
-    if (list) list.push(c.q);
-    else byRow.set(c.r, [c.q]);
+    const list = byColumn.get(c.q);
+    if (list) list.push(c.r);
+    else byColumn.set(c.q, [c.r]);
   }
-  const rows = byRow.size;
-  if (rows === 0 || cells.length % rows !== 0) return null;
-  const columns = cells.length / rows;
+  const columns = byColumn.size;
+  if (columns === 0 || cells.length % columns !== 0) return null;
+  const rows = cells.length / columns;
 
   const want = normalise(cells);
   const flipped = normalise(cells.map((c) => ({ q: -c.q, r: -c.r })));
@@ -601,9 +618,13 @@ function blockOf(
   return null;
 }
 
-/** Cell set as a stable string, translated so its lowest cell is the origin. */
+/**
+ * Cell set as a stable string, translated so its lowest cell is the origin.
+ * Column-major, matching `toAxial` and `tools/turn_frame.py` — all three have to
+ * agree on which cell is "lowest" or they disagree by a translation.
+ */
 function normalise(cells: readonly Hex[]): string {
-  const sorted = [...cells].sort((a, b) => a.r - b.r || a.q - b.q);
+  const sorted = [...cells].sort((a, b) => a.q - b.q || a.r - b.r);
   const first = sorted[0];
   if (!first) return '';
   return sorted
@@ -934,8 +955,17 @@ function insertFed(mesh: MeshData, cellMm: number, forceAxis?: Axis): Detection 
     }
   }
 
+  // Laid along r, down a column. The bound is rotated with everything else by
+  // the frame turn (D35) rather than special-cased, so `turn_frame.py` could
+  // relabel all 51 parts with one rule and no knowledge of tier.
+  //
+  // The long-standing wart is preserved, not introduced: `span` is counted in
+  // ROW_STEP while the cells are laid at PITCH spacing. It was the same
+  // mismatch the other way round before the turn. It is a BOUND (PARKED P1),
+  // flagged `needsReview`, and never asserted — tightening it would mean
+  // claiming a measurement this function cannot make.
   const cells: Hex[] = [];
-  for (let i = 0; i < span; i++) cells.push({ q: i, r: 0 });
+  for (let i = 0; i < span; i++) cells.push({ q: 0, r: i });
 
   return {
     cells,
