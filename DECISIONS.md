@@ -824,3 +824,41 @@ place you will look — and this copy survived precisely by not mentioning the f
 
 Found by pointing at the wall and noticing the wrong hexagon lit. No test covers it: the suite
 never asks where a screen coordinate lands, and 557 of them passed throughout.
+
+---
+
+## D37 — The wall is drawn from the real panel STLs, and hovering lights the whole plate
+
+**Asked for: "the honeycomb should be a model of the ACTUAL honeycomb, so when I hover it I hover
+the whole part."**
+
+Two things, and the second is the one that was actually missing.
+
+**Panels are now drawn from their own STL**, the way accessories already were. They used to be
+generated — an extruded union outline with a hole per cell, built from the measured lattice. That
+is exact as far as it goes, and it is a *model* of the plate rather than the plate: it cannot show
+the entry flare, the lead-in chamfer, or anything the designer put there that the four numbers in
+`constants.ts` do not capture.
+
+Still instanced per panel type, so a 64-panel wall is one draw call per type, and loading stays
+lazy and cached per part id. The generated geometry remains the **fallback** — a planner that
+cannot fetch a model still plans.
+
+**A panel with `omit` keeps the generated geometry, and that is not an optimisation.** A cut panel
+is a CUSTOM panel from the OpenSCAD customiser, not the shipped STL any more. Drawing the stock
+mesh for one would show a plate with no hole where the light switch goes — exactly the thing the
+customiser exists to cut.
+
+**Alignment is centre-to-centre, and the assumption behind it was measured rather than asserted.**
+The mesh arrives centred on its own bounding box; the cell block is not centred on the *origin*
+cell. Lining the two up by their centres is only correct if a plate's cells really are centred
+within it, which the margin formula implies (HSW-SPEC §4) — and the meshes agree to **0.00002 mm**
+across the panels checked. So the alignment is exact, not lucky.
+
+**Hovering now lights the whole plate**, faintly, with the hovered cell brighter on top of it.
+Drawn from the panel's own `unionOutline`, so it follows the castellated zig-zag edge exactly
+rather than approximating it with a rectangle. A wall is not a continuous honeycomb — it is a set
+of printed plates, and which one you are pointing at is a real question: it is the thing you print,
+hang and count. The seams are zig-zags through the grid and are genuinely hard to read face-on.
+
+Both together answer the two questions at once: which plate, and which hole in it.

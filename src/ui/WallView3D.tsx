@@ -21,7 +21,9 @@ import * as THREE from 'three';
 import { itemCells } from '../core/bom';
 import { fixingsFor, JUNCTION_FIXING_ID } from '../core/fixings';
 import { CELL, PANEL_DEPTH, PITCH } from '../core/constants';
-import { hexKey, hexToMm, mmToHex, panelCells, placedPanelCells, placeFootprint } from '../core/hex';
+import {
+  cellsBoundsMm, hexKey, hexToMm, mmToHex, panelCells, placedPanelCells, placeFootprint,
+} from '../core/hex';
 import type { Catalog, CatalogPart, Hex, LayoutDoc, Rotation } from '../core/types';
 import { loadPartMesh, type PartMesh } from './meshLibrary';
 import './WallView3D.css';
@@ -306,6 +308,22 @@ export function WallView3D(props: WallView3DProps) {
   } | null>(null);
 
   const [ready, setReady] = useState(false);
+
+  /**
+   * The real STL for each panel type, by part id.
+   *
+   * A panel used to be drawn entirely from generated geometry — an extruded
+   * union outline with a hole per cell, built from the measured lattice. That is
+   * exact, but it is a MODEL of the plate rather than the plate: it cannot show
+   * the entry flare, the lead-in chamfer, or anything the designer put there
+   * that the four numbers in `constants.ts` do not capture.
+   *
+   * Loaded lazily and instanced per type, so a 64-panel wall is still one draw
+   * call per panel type. The generated geometry stays as the fallback and is
+   * still what a CUT panel uses — see the `omit` check where it is chosen.
+   */
+  const [panelMeshes, setPanelMeshes] = useState<ReadonlyMap<string, PartMesh>>(new Map());
+
   /**
    * Bumped on a theme change, purely to force the scene to be rebuilt.
    *
@@ -502,15 +520,18 @@ export function WallView3D(props: WallView3DProps) {
     // columns × rows alone drew the cut panels solid.
     const bySize = new Map<
       string,
-      { columns: number; rows: number; omit: Hex[]; origins: Hex[] }
+      { partId: string; columns: number; rows: number; omit: Hex[]; origins: Hex[] }
     >();
     for (const p of doc.panels) {
       const cut = (p.omit ?? [])
         .map((c) => hexKey({ q: c.q - p.origin.q, r: c.r - p.origin.r }))
         .sort()
         .join(' ');
-      const k = `${p.columns}x${p.rows}|${cut}`;
+      // Keyed on the PART as well as the shape: two panel types can share a
+      // cell block and still be different plates, and each has its own mesh.
+      const k = `${p.partId}|${p.columns}x${p.rows}|${cut}`;
       const e = bySize.get(k) ?? {
+        partId: p.partId,
         columns: p.columns,
         rows: p.rows,
         omit: (p.omit ?? []).map((c) => ({ q: c.q - p.origin.q, r: c.r - p.origin.r })),
@@ -534,7 +555,42 @@ export function WallView3D(props: WallView3DProps) {
       color: theme.panel.clone().lerp(new THREE.Color(0xffffff), 0.18),
     });
 
-    for (const { columns, rows, omit, origins } of bySize.values()) {
+    for (const { partId, columns, rows, omit, origins } of bySize.values()) {
+      /*
+       * The real plate, when there is one AND this is a stock plate.
+       *
+       * `omit` is the gate, and it is not an optimisation: a panel with cells
+       * left out is a CUSTOM panel generated from the OpenSCAD customiser, not
+       * the shipped STL any more (see `src/core/customiser.ts`). Drawing the
+       * stock mesh for it would show a plate with no hole where the light
+       * switch goes, which is precisely the thing the customiser exists to cut.
+       */
+      const real = omit.length === 0 ? panelMeshes.get(partId) : undefined;
+
+      if (real) {
+        // The mesh is centred on its own bounding box; the cell block is not
+        // centred on the ORIGIN cell. Line the two up by their centres, which
+        // works because a plate's margins are equal on opposite sides, so its
+        // cells really are centred within it (HSW-SPEC §4).
+        const block = cellsBoundsMm(panelCells({ q: 0, r: 0 }, columns, rows));
+        const cx = (block.minX + block.maxX) / 2;
+        const cy = (block.minY + block.maxY) / 2;
+        const mesh = new THREE.InstancedMesh(real.geometry, faceMat, origins.length);
+        const m4 = new THREE.Matrix4();
+        origins.forEach((o, i) => {
+          const p = hexToMm(o);
+          m4.makeTranslation(p.x + cx, p.y + cy, 0);
+          mesh.setMatrixAt(i, m4);
+        });
+        mesh.instanceMatrix.needsUpdate = true;
+        mesh.frustumCulled = false;
+        // Not ours to dispose on rebuild: the geometry is cached per part id by
+        // meshLibrary and shared with every other placement of that panel.
+        mesh.userData['ownGeometry'] = false;
+        s.panelGroup.add(mesh);
+        continue;
+      }
+
       const { back, front } = buildPanelGeometry(columns, rows, omit);
       for (const [geo, mat] of [[back, bodyMat], [front, faceMat]] as const) {
         const mesh = new THREE.InstancedMesh(geo, mat, origins.length);
@@ -549,7 +605,7 @@ export function WallView3D(props: WallView3DProps) {
         s.panelGroup.add(mesh);
       }
     }
-  }, [doc.panels, ready, readTheme, themeTick]);
+  }, [doc.panels, panelMeshes, ready, readTheme, themeTick]);
 
   // --- build the placed items --------------------------------------------
 
@@ -675,6 +731,29 @@ export function WallView3D(props: WallView3DProps) {
     });
     return () => { live = false; };
   }, [fixingPart]);
+
+  // Every panel type actually on the wall. Only the ones in use, so a catalogue
+  // of seven does not cost seven downloads to draw a wall built from one.
+  const panelPartIds = useMemo(
+    () => [...new Set(doc.panels.map((p) => p.partId))].sort().join('|'),
+    [doc.panels],
+  );
+
+  useEffect(() => {
+    if (panelPartIds.length === 0) return;
+    let live = true;
+    const ids = panelPartIds.split('|');
+    void Promise.all(ids.map(async (id) => {
+      const part = catalog.parts.find((x) => x.id === id);
+      return part ? [id, await loadPartMesh(part)] as const : [id, null] as const;
+    })).then((pairs) => {
+      if (!live) return;
+      const next = new Map<string, PartMesh>();
+      for (const [id, m] of pairs) if (m !== null) next.set(id, m);
+      if (next.size > 0) setPanelMeshes(next);
+    });
+    return () => { live = false; };
+  }, [panelPartIds, catalog]);
 
   useEffect(() => {
     if (!junctionPart) return;
@@ -847,29 +926,54 @@ export function WallView3D(props: WallView3DProps) {
     if (!hover || drag) return;
     // Only over the wall itself — lighting a cell in empty space would invite a
     // drop that `checkPlacement` then refuses.
-    const onWall = doc.panels.some((p) =>
+    const panel = doc.panels.find((p) =>
       placedPanelCells(p).some((c) => c.q === hover.q && c.r === hover.r));
-    if (!onWall) return;
+    if (!panel) return;
 
     const theme = readTheme();
+    const light = (opacity: number) => new THREE.MeshBasicMaterial({
+      color: theme.hover,
+      transparent: true,
+      opacity,
+      blending: THREE.AdditiveBlending,
+      // Never writes depth: the highlight is a light cast on the wall, not an
+      // object, and writing depth would let it occlude a part standing in the
+      // same cell.
+      depthWrite: false,
+    });
+
+    /*
+     * The whole PLATE, faintly.
+     *
+     * A wall is not a continuous honeycomb — it is a set of printed panels, and
+     * which one you are pointing at is a real question: it is the thing you
+     * print, hang, and count in the parts list. The seams between plates are
+     * zig-zags through the grid and are genuinely hard to read face-on, so
+     * without this you cannot tell where one plate ends and the next begins.
+     *
+     * Drawn from the panel's OWN outline — the same `unionOutline` that builds
+     * the plate — so it follows the castellated edge exactly rather than
+     * approximating it with a rectangle.
+     */
+    const outline = unionOutline(placedPanelCells(panel));
+    if (outline.length >= 3) {
+      const shape = new THREE.Shape(outline);
+      const plate = new THREE.Mesh(
+        new THREE.ExtrudeGeometry([shape], { depth: 0.4, bevelEnabled: false }),
+        light(0.16),
+      );
+      plate.position.set(0, 0, PANEL_DEPTH + 0.2);
+      s.hoverGroup.add(plate);
+    }
+
+    // ...and the individual cell, brighter, on top of it. Both together answer
+    // the two questions at once: which plate, and which hole in it.
     const p = hexToMm(hover);
-    const mesh = new THREE.Mesh(
-      cellPrism(PITCH / Math.sqrt(3), 0.6),
-      new THREE.MeshBasicMaterial({
-        color: theme.hover,
-        transparent: true,
-        opacity: 0.5,
-        blending: THREE.AdditiveBlending,
-        // Never writes depth: the highlight is a light cast on the wall, not an
-        // object, and writing depth would let it occlude a part standing in the
-        // same cell.
-        depthWrite: false,
-      }),
-    );
+    const cell = new THREE.Mesh(cellPrism(PITCH / Math.sqrt(3), 0.6), light(0.5));
     // Just proud of the plate's front face, so it reads as the cell lighting up
     // rather than as an object standing on the wall.
-    mesh.position.set(p.x, p.y, PANEL_DEPTH + 0.3);
-    s.hoverGroup.add(mesh);
+    cell.position.set(p.x, p.y, PANEL_DEPTH + 0.6);
+    s.hoverGroup.add(cell);
   }, [hover, drag, doc.panels, ready, readTheme, themeTick]);
 
   // --- render loop --------------------------------------------------------
