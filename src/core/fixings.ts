@@ -70,7 +70,7 @@ export function clampSpacing(mm: number | undefined): number {
  */
 export const JUNCTION_FIXING_ID = 'insert-for-countersunk-hole-3';
 export const JUNCTION_FOOTPRINT: readonly Hex[] = [
-  { q: 0, r: 0 }, { q: 0, r: 1 }, { q: -1, r: 1 }, { q: -1, r: 2 },
+  { q: 0, r: 0 }, { q: 1, r: -1 }, { q: 1, r: 0 }, { q: 2, r: -1 },
 ];
 
 /** A fixing that straddles a seam, holding several plates at once. */

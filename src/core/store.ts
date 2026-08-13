@@ -408,6 +408,11 @@ export class Store {
    * Reading order rather than nearest-to-centre because it has to be
    * deterministic — the same part on the same wall must always land in the same
    * place, or an undo/redo pair stops being a round trip.
+   *
+   * COLUMN-major since the wall turned flat-top (D35), matching `panelCells`,
+   * `toAxial` and `normalise`. Row-major here would start from whichever cell
+   * happens to have the least `r`, which on a staggered block is somewhere up
+   * the right-hand edge rather than the corner a person would call first.
    */
   firstFittingCell(partId: string): Hex | null {
     const part = this.part(partId);
@@ -422,7 +427,7 @@ export class Store {
         cells.push(cell);
       }
     }
-    cells.sort((a, b) => a.r - b.r || a.q - b.q);
+    cells.sort((a, b) => a.q - b.q || a.r - b.r);
     for (const at of cells) {
       const covered = partCells(part, at, 0);
       if (covered.length === 0) return null;

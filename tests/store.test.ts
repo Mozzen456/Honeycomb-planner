@@ -386,8 +386,9 @@ describe('keyboard placement', () => {
 
   it('steps over a cell an insert already occupies, since two cannot share one', () => {
     expect(store.addItem('plug', { q: 0, r: 0 }).ok).toBe(true);
-    // Reading order is by row then column, so the next legal cell is one across.
-    expect(store.firstFittingCell('plug')).toEqual({ q: 1, r: 0 });
+    // Reading order is by COLUMN then row on a flat-top wall (D35), so the next
+    // legal cell is one DOWN, not one across.
+    expect(store.firstFittingCell('plug')).toEqual({ q: 0, r: 1 });
   });
 
   it('still offers an overlapping cell to an accessory, which may share freely', () => {

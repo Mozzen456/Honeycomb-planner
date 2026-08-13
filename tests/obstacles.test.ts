@@ -182,11 +182,16 @@ describe('junctions where panels meet', () => {
     // multi-cell insert straddling the join is what holds them to each other
     // as well as to the wall. Four single-cell fixings, one per plate, fix each
     // plate and leave the join itself unsupported.
+    // A real 2x2 of the shipped plate in the flat-top frame (D35): 8 columns of
+    // 7, at the origins `solveTiling` itself produces for a 400 x 400 wall.
+    // Taken from the tiler rather than written by hand, because the band stagger
+    // decides these and a hand-written origin is how the old version of this
+    // test stopped describing a junction at all.
     const tiled = [
-      { id: 'a', partId: 'wall-honeycomb-part', origin: { q: 0, r: 0 }, columns: 7, rows: 8 },
-      { id: 'b', partId: 'wall-honeycomb-part', origin: { q: 7, r: 0 }, columns: 7, rows: 8 },
-      { id: 'c', partId: 'wall-honeycomb-part', origin: { q: -4, r: 8 }, columns: 7, rows: 8 },
-      { id: 'd', partId: 'wall-honeycomb-part', origin: { q: 3, r: 8 }, columns: 7, rows: 8 },
+      { id: 'a', partId: 'wall-honeycomb-part', origin: { q: 0, r: 1 }, columns: 8, rows: 7 },
+      { id: 'b', partId: 'wall-honeycomb-part', origin: { q: 0, r: 8 }, columns: 8, rows: 7 },
+      { id: 'c', partId: 'wall-honeycomb-part', origin: { q: 8, r: -3 }, columns: 8, rows: 7 },
+      { id: 'd', partId: 'wall-honeycomb-part', origin: { q: 8, r: 4 }, columns: 8, rows: 7 },
     ];
     const plan = planFixings(tiled);
     expect(plan.junctions.length).toBeGreaterThan(0);
@@ -212,11 +217,21 @@ describe('junctions where panels meet', () => {
   it('counts a junction towards the spacing rather than on top of it', () => {
     // Planned independently, 64 panels produced 56 junction inserts on top of
     // 74 single ones: 128 holes in a wall that needs about 70.
-    const tiled = Array.from({ length: 9 }, (_, i) => ({
-      id: `p${i}`, partId: 'wall-honeycomb-part',
-      origin: { q: (i % 3) * 7 - Math.floor(i / 3) * 4, r: Math.floor(i / 3) * 8 },
-      columns: 7, rows: 8,
-    }));
+    // 3 x 3 of the shipped plate in the flat-top frame: bands step 8 columns
+    // across, panels step 7 rows up within a band, and each band's own origin
+    // carries the half-pitch stagger `panelCells` applies (-floor(q/2), plus the
+    // bump that keeps the band on the wall). Same arithmetic `fillBand` uses.
+    const tiled = Array.from({ length: 9 }, (_, i) => {
+      const band = i % 3;
+      const up = Math.floor(i / 3);
+      return {
+        id: `p${i}`,
+        partId: 'wall-honeycomb-part',
+        origin: { q: band * 8, r: 1 - band * 4 + up * 7 },
+        columns: 8,
+        rows: 7,
+      };
+    });
     const plan = planFixings(tiled);
     const total = plan.cells.length + plan.junctions.length;
     // Independent planning gave a junction at every meeting point PLUS a full
