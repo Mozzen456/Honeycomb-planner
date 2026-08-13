@@ -185,19 +185,22 @@ describe('constants and the forward map match HSW-SPEC §2/§4', () => {
   });
 
   it('margins match their closed forms in §4', () => {
-    expect(MARGIN_X).toBe(PITCH / 2);
+    // The two values are unchanged; which axis carries which swapped with the
+    // frame (D35). On a flat-top wall the left/right boundary sits at a hexagon
+    // CORNER and the top/bottom at a FLAT — the opposite of pointy-top.
+    expect(MARGIN_Y).toBe(PITCH / 2);
     // PITCH/√3 = 13.62546637... ; the constant is the 7-dp value from the scan.
-    expect(MARGIN_Y).toBeCloseTo(PITCH / Math.sqrt(3), 6);
-    // §4's height constant 27.25093 is 2·MARGIN_Y.
-    expect(2 * MARGIN_Y).toBeCloseTo(27.25093, 5);
+    expect(MARGIN_X).toBeCloseTo(PITCH / Math.sqrt(3), 6);
+    // §4's width constant 27.25093 is 2·MARGIN_X.
+    expect(2 * MARGIN_X).toBeCloseTo(27.25093, 5);
   });
 
-  it('hexToMm is exactly x = PITCH·(q + r/2), y = ROW_STEP·r', () => {
+  it('hexToMm is exactly x = ROW_STEP·q, y = PITCH·(r + q/2)', () => {
     for (let q = -50; q <= 50; q++) {
       for (let r = -50; r <= 50; r++) {
         const p = hexToMm({ q, r });
-        expect(p.x).toBeCloseTo(PITCH * q + STAGGER * r, 9);
-        expect(p.y).toBeCloseTo(ROW_STEP * r, 9);
+        expect(p.x).toBeCloseTo(ROW_STEP * q, 9);
+        expect(p.y).toBeCloseTo(PITCH * r + STAGGER * q, 9);
       }
     }
   });
@@ -615,9 +618,10 @@ describe('rotateFootprint', () => {
     // Direct consequence of D4: the lattice is not equilateral, so a rigid
     // rotation in cell space is not quite a rigid rotation in millimetres.
     // A 3-cell horizontal span is 70.80000 mm; rotated 60° it is 70.79948 mm.
+    // Down a column: (0,1) is the exact-PITCH direction in the flat-top frame.
     const span: Hex[] = [
       { q: 0, r: 0 },
-      { q: 3, r: 0 },
+      { q: 0, r: 3 },
     ];
     const flat = mmDist(hexToMm(span[0]!), hexToMm(span[1]!));
     const spun = rotateFootprint(span, 1);
@@ -847,11 +851,12 @@ describe('neighbours', () => {
 // ---------------------------------------------------------------------------
 
 describe('physical neighbour distances (HSW-SPEC §2, DECISIONS D4)', () => {
-  it('horizontal neighbours are EXACTLY 23.6 mm apart, everywhere on the wall', () => {
+  /** VERTICAL now — the distance is the same 23.6, the axis turned (D35). */
+  it('vertical neighbours are EXACTLY 23.6 mm apart, everywhere on the wall', () => {
     let worst = 0;
     for (let q = -60; q <= 60; q++) {
       for (let r = -60; r <= 60; r++) {
-        const d = mmDist(hexToMm({ q, r }), hexToMm({ q: q + 1, r }));
+        const d = mmDist(hexToMm({ q, r }), hexToMm({ q, r: r + 1 }));
         worst = Math.max(worst, Math.abs(d - PITCH));
       }
     }
@@ -859,7 +864,9 @@ describe('physical neighbour distances (HSW-SPEC §2, DECISIONS D4)', () => {
   });
 
   it('diagonal neighbours are 23.59983 mm apart — NOT 23.6', () => {
-    const diagonals = [dir(1), dir(2), dir(4), dir(5)]; // (0,1) (-1,1) (0,-1) (1,-1)
+    // The four that are NOT the exact-PITCH pair. In the flat-top frame that
+    // exact pair is ±(0,1), so the diagonals are the other four directions.
+    const diagonals = [dir(0), dir(2), dir(3), dir(5)]; // (1,0) (-1,1) (-1,0) (1,-1)
     let worst = 0;
     for (let q = -40; q <= 40; q++) {
       for (let r = -40; r <= 40; r++) {
@@ -894,10 +901,10 @@ describe('physical neighbour distances (HSW-SPEC §2, DECISIONS D4)', () => {
     expect(ds.filter((d) => Math.abs(d - DIAGONAL_NEIGHBOUR) < EPS)).toHaveLength(4);
   });
 
-  it('rows are exactly ROW_STEP apart and staggered by exactly PITCH/2', () => {
-    for (let r = -50; r <= 50; r++) {
-      expect(hexToMm({ q: 0, r: r + 1 }).y - hexToMm({ q: 0, r }).y).toBeCloseTo(ROW_STEP, 9);
-      expect(hexToMm({ q: 0, r: r + 1 }).x - hexToMm({ q: 0, r }).x).toBeCloseTo(STAGGER, 9);
+  it('columns are exactly ROW_STEP apart and staggered by exactly PITCH/2', () => {
+    for (let q = -50; q <= 50; q++) {
+      expect(hexToMm({ q: q + 1, r: 0 }).x - hexToMm({ q, r: 0 }).x).toBeCloseTo(ROW_STEP, 9);
+      expect(hexToMm({ q: q + 1, r: 0 }).y - hexToMm({ q, r: 0 }).y).toBeCloseTo(STAGGER, 9);
     }
   });
 
@@ -909,15 +916,17 @@ describe('physical neighbour distances (HSW-SPEC §2, DECISIONS D4)', () => {
         const cs = hexCorners({ q, r });
         expect(cs).toHaveLength(6);
         for (const p of cs) expect(mmDist(c, p)).toBeCloseTo(R, 9);
-        // First corner is the top one (screen y grows downward).
-        expect(cs[0]!.x).toBeCloseTo(c.x, 9);
-        expect(cs[0]!.y).toBeCloseTo(c.y - R, 9);
-        // Across-flats width really is PITCH.
-        const xs = cs.map((p) => p.x);
-        expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(PITCH, 9);
-        // Side length equals the circumradius, and equals MARGIN_Y (§4).
+        // First corner is the right-hand one: flat-top puts a corner at 0°.
+        expect(cs[0]!.x).toBeCloseTo(c.x + R, 9);
+        expect(cs[0]!.y).toBeCloseTo(c.y, 9);
+        // Across-flats really is PITCH, and on a flat-top cell that is the
+        // VERTICAL measurement — the flats are top and bottom.
+        const ys = cs.map((p) => p.y);
+        expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(PITCH, 9);
+        // Side length equals the circumradius, and equals MARGIN_X (§4) — the
+        // corner-side margin, which is the X one on a flat-top wall.
         expect(mmDist(cs[0]!, cs[1]!)).toBeCloseTo(R, 9);
-        expect(R).toBeCloseTo(MARGIN_Y, 6);
+        expect(R).toBeCloseTo(MARGIN_X, 6);
       }
     }
   });
@@ -977,44 +986,49 @@ describe('panelCells', () => {
   });
 
   it('the mm bounding box matches the §4 size formula exactly', () => {
-    // W = PITCH·(columns + 0.5) and H = (rows − 1)·ROW_STEP + 2·MARGIN_Y.
-    for (let columns = 1; columns <= 20; columns++) {
-      for (let rows = 2; rows <= 20; rows++) {
+    // Transposed with the frame (D35): the block now runs ROW_STEP across its
+    // columns and PITCH down its rows.
+    // W = (columns − 1)·ROW_STEP + 2·MARGIN_X and H = PITCH·(rows + 0.5).
+    for (let columns = 2; columns <= 20; columns++) {
+      for (let rows = 1; rows <= 20; rows++) {
         const b = cellsBoundsMm(panelCells({ q: -5, r: 4 }, columns, rows));
-        expect(b.maxX - b.minX).toBeCloseTo(PITCH * (columns + 0.5), 9);
-        expect(b.maxY - b.minY).toBeCloseTo((rows - 1) * ROW_STEP + 2 * MARGIN_Y, 9);
+        expect(b.maxX - b.minX).toBeCloseTo((columns - 1) * ROW_STEP + 2 * MARGIN_X, 9);
+        expect(b.maxY - b.minY).toBeCloseTo(PITCH * (rows + 0.5), 9);
       }
     }
   });
 
-  it('reproduces the measured size of the 7 × 8 shipped panel (177.00 mm wide)', () => {
-    // wall-honeycomb-part.stl, HSW-SPEC §4: 7 wall columns × 8 rows, 177.00 mm wide.
-    const b = cellsBoundsMm(panelCells(ORIGIN, 7, 8));
-    expect(b.maxX - b.minX).toBeCloseTo(177.0, 9);
-    expect(b.maxY - b.minY).toBeCloseTo(170.31693, 4);
-    expect(panelCells(ORIGIN, 7, 8)).toHaveLength(56); // D8: 56 cells, not 28
+  it('reproduces the shipped panel at the DESIGNER\'s dimensions: 170.32 wide × 177 tall', () => {
+    // wall-honeycomb-part.stl. The block is 8 columns of 7 in the flat-top frame
+    // (it was 7 × 8 pointy-top), and this is the whole point of D35: the app now
+    // measures this plate the way its own drawing dimensions it — 170.32 wide by
+    // 177 tall — where it used to come out transposed at 177 × 170.32.
+    const b = cellsBoundsMm(panelCells(ORIGIN, 8, 7));
+    expect(b.maxX - b.minX).toBeCloseTo(170.31693, 4);
+    expect(b.maxY - b.minY).toBeCloseTo(177.0, 9);
+    expect(panelCells(ORIGIN, 8, 7)).toHaveLength(56); // D8: 56 cells, not 28
   });
 
-  it('rows alternate between offset 0 and offset STAGGER — and never drift further', () => {
-    const columns = 9;
-    const rows = 20;
+  it('columns alternate between offset 0 and offset STAGGER — and never drift further', () => {
+    const columns = 20;
+    const rows = 9;
     const cells = panelCells(ORIGIN, columns, rows);
-    const originX = hexToMm(ORIGIN).x;
-    for (let r = 0; r < rows; r++) {
-      const rowCells = cells.filter((c) => c.r === r);
-      expect(rowCells).toHaveLength(columns);
-      const xs = rowCells.map((c) => hexToMm(c).x);
-      const minX = Math.min(...xs);
-      // Odd rows sit half a pitch to the LEFT, not the right: panelCells
-      // staggers by -ceil(r/2), which is the parity the meshes actually use.
-      // See tests/panel-parity.test.ts, which checks the generated cell map
-      // against the footprints measured from the STLs.
-      const expected = originX + (r % 2 === 0 ? 0 : -STAGGER);
-      expect(minX).toBeCloseTo(expected, 9);
-      // each row is a contiguous run of `columns` cells at exactly PITCH spacing
-      xs.sort((a, b) => a - b);
-      for (let i = 1; i < xs.length; i++) {
-        expect(xs[i]! - xs[i - 1]!).toBeCloseTo(PITCH, 9);
+    const originY = hexToMm(ORIGIN).y;
+    for (let q = 0; q < columns; q++) {
+      const colCells = cells.filter((c) => c.q === q);
+      expect(colCells).toHaveLength(rows);
+      const ys = colCells.map((c) => hexToMm(c).y);
+      const minY = Math.min(...ys);
+      // Odd columns sit half a pitch UP: panelCells staggers by -floor(q/2),
+      // which is the parity the meshes actually use in the flat-top frame. See
+      // tests/panel-parity.test.ts, which checks the generated cell map against
+      // the footprints measured from the STLs.
+      const expected = originY + (q % 2 === 0 ? 0 : STAGGER);
+      expect(minY).toBeCloseTo(expected, 9);
+      // each column is a contiguous run of `rows` cells at exactly PITCH spacing
+      ys.sort((a, b) => a - b);
+      for (let i = 1; i < ys.length; i++) {
+        expect(ys[i]! - ys[i - 1]!).toBeCloseTo(PITCH, 9);
       }
     }
   });
@@ -1313,7 +1327,7 @@ describe('hexKey / keyToHex', () => {
 });
 
 describe('hostile input', () => {
-  it('mmToHex does not throw on NaN or ±Infinity, and propagates NaN rather than lying', () => {
+  it('mmToHex does not throw on NaN or ±Infinity, and never invents a finite cell', () => {
     const hostile: Point[] = [
       { x: NaN, y: 0 },
       { x: 0, y: NaN },
@@ -1327,10 +1341,16 @@ describe('hostile input', () => {
     for (const p of hostile) {
       expect(() => mmToHex(p)).not.toThrow();
       const h = mmToHex(p);
-      // Every one of these degenerates to NaN. That is honest — a caller can
-      // test Number.isFinite — but note it is NOT clamped, so a NaN pointer
-      // position will produce a NaN cell rather than being rejected at source.
-      expect(Number.isNaN(h.q) || Number.isNaN(h.r)).toBe(true);
+      // Every one of these degenerates to NaN or ±Infinity. That is honest — a
+      // caller can test Number.isFinite, which is what the comment always said
+      // to do — but note it is NOT clamped, so a hostile pointer position
+      // produces a non-finite cell rather than being rejected at source.
+      //
+      // Asserted as "not finite" rather than "NaN" since D35. The turn changed
+      // the ORDER of the divide and the subtract, so `{x: 0, y: Infinity}` now
+      // yields r = Infinity where it used to yield NaN. Both are non-finite and
+      // neither is a plausible cell, which is the property that matters.
+      expect(!Number.isFinite(h.q) || !Number.isFinite(h.r)).toBe(true);
     }
   });
 
