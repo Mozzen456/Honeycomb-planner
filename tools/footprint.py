@@ -404,6 +404,10 @@ def detect(mesh: trimesh.Trimesh) -> Footprint:
                      "an insert via an M3/M4/M5 hole")
     notes.append("FLAGGED: cell footprint is a bound from the bounding box, not a "
                  "measurement. Confirm before relying on it.")
-    cells = [(i, 0) for i in range(n)]
+    # Laid down a COLUMN, matching insertFed in src/core/detect.ts. The bound is
+    # rotated with everything else by the frame turn (D35) rather than
+    # special-cased, so tools/turn_frame.py could relabel all 51 parts with one
+    # rule and no knowledge of tier.
+    cells = [(0, i) for i in range(n)]
     return Footprint(cells, "n/a", "n/a", "insert-fed", method, 0.35,
                      needs_review=True, notes=notes, socket_widths=sockets)

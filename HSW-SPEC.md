@@ -534,3 +534,41 @@ it.** The designer's insert drawing dimensions its four-cell part `40.88` one wa
 other. The app's `insert-for-countersunk-hole-3` and `insert-countersunk-with-m3x3` — cells
 `(0,0) (−1,1) (0,1) (−1,2)` — span **23.60 × 40.88**: the same two numbers, transposed. Same part,
 same geometry, frame turned 90°. Nothing is wrong with the footprint; it is the frame.
+
+---
+
+## 11. Rundown — what each module owns, and what is measured versus assumed
+
+Written 2026-08-13, after the frame turn (DECISIONS D35). Every "measured" below traces to an STL
+in `./models/`; every "assumed" is a decision or a bound, and each names where it is recorded.
+
+### The geometry
+
+| module | owns | measured or assumed |
+|---|---|---|
+| `core/constants.ts` | `PITCH` 23.6, `ROW_STEP` 20.438, `STAGGER` 11.8, `PANEL_DEPTH` 8, margins, cell profiles | **Measured.** `ROW_STEP` is the designer's typed constant, NOT `PITCH·√3/2` (D4) |
+| `core/hex.ts` | the flat-top embedding, corners, rotation, `panelCells` | **Measured** — `panelCells`' `−floor(q/2)` parity is the one that reproduces all 7 panel footprints |
+| `core/tiling.ts` | vertical-band panel solver, seams | **Assumed**: the band chooser is greedy (see below) |
+| `core/detect.ts` / `tools/footprint.py` | which cells a mesh occupies | Tier 1–2 **measured**; tier 3 is a **bound** (PARKED P1) |
+| `core/bom.ts` | aggregation, `validate()` | Arithmetic only |
+| `core/fixings.ts` | where wall fixings and junctions go | **Assumed**: ~74 at a spacing, junctions replacing rather than adding |
+| `core/customiser.ts` | a cut panel as OpenSCAD parameters | **Measured**, pinned by round-trip |
+
+### What is still assumed, and where it is written down
+
+- **27 of 51 parts carry a bounding-box bound, not a footprint** — `drawnOrientation: "n/a"`,
+  `needsReview: true`. PARKED P1. The D34 inspector lets a person set the mounting face by hand;
+  the *cells* still need a source, and picking a face does not clear the flag.
+- **Fixing spacing** is a rule, not a measurement — `fixings.ts`, PARKED.
+- **The tiler's band chooser is greedy.** It compares total cells per band across bands of
+  different widths, so it can pick a wider band that covers more cells while covering fewer cells
+  *per column*. Unmasked by the frame turn, not caused by it. `allowRotation` is `false` in the app.
+- **Print estimates for imported parts are modelled, not sliced** — ±30 %, marked `est.` in the UI.
+
+### Two traps this frame turn created, both now pinned
+
+1. **The seat correction inverted.** A mesh from a file seats unturned; geometry the *view* builds
+   needs 30°, because `CylinderGeometry(…,6).rotateX(90°)` lands on a *pointy*-top cell. One helper,
+   `cellPrism`. `tests/fitting-seat.test.ts`.
+2. **Edge k runs corner k → k+1**, not k+1 → k+2. Forced by the corner angles, and getting it wrong
+   leaves the plate outline as open fragments — visible instantly in 3D and invisible to every test.
