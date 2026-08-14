@@ -224,6 +224,20 @@ scanline there crosses the perpendicular band and measures both at once.
 where no plate reaches. `borderPieces` drops every outward position, because the outside is cut and a
 piece beyond the plate would stand outside its own edge.
 
+**`assemblyIndex.occupied` means PRINTED, not mountable — the cut ring is IN it.** A border piece is
+raised where a position is EMPTY, and the ring leaves `placedPanelCells` through `omit`, so read off
+that the whole rim looks like a hole and every plate fills it back in with solid hexagons landing on
+the cut cells' missing halves: 30 spurious pieces on a four-plate wall, reported as "half of the
+honeycomb is filled at the corners", which is where two runs of it meet. A ZONE's cells stay out of
+`occupied` — a zone is a genuine hole, which is what `holes` is for.
+
+**Point-in-section on this lattice needs a GENERIC ray, tested per plate.** Two ways it lies. An
+axis-aligned scanline through a vertex registers a crossing twice or not at all — one plate gave 17
+crossings, an odd count, and open cells read as solid — so cast at a slant with a half-open interval
+along the segment. And even-odd parity holds only within ONE solid: plates INTERLOCK, so pooling
+their sections makes a ray cross a shared stretch twice at one x and the parity never flips. Test
+each plate's section separately and OR the answers.
+
 **`meshIsClosed` does not mean one solid, and for a long time it was not.** A closed mesh can be
 several closed shells; every detachment above kept it at zero unmatched edges. `honeycomb-frame.test.ts`
 asserts ONE connected component of the top face, joined by shared EDGES and never by shared vertices —

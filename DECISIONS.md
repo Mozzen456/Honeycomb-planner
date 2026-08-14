@@ -2877,6 +2877,26 @@ that had already gone. Bounds now come from the whole BLOCK while `occupied` sti
 survives it: they answer different questions — "how far does the plate reach" against "is this
 position filled" — and an omitted cell still PRINTS.
 
+*And the ring read as a HOLE, so every plate filled it back in.* Reported as "a small defect at the
+corners where half of the honeycomb is filled", and it was the whole perimeter — the corners are
+where two runs of it meet and you see it first. A border piece is raised where a lattice position is
+EMPTY, and `assemblyIndex.occupied` was read off `placedPanelCells`, which no longer contains the
+ring. So each plate looked at the wall's rim, saw a hole, and raised solid hexagons landing exactly
+on the missing halves of the cut cells: 30 of them on a four-plate wall, eight on one plate.
+`occupied` now means PRINTED rather than mountable, and the cells a ZONE ate are deliberately still
+excluded — a zone is a genuine hole, which is what the `holes` switch is for.
+
+**Measuring that one needed a third correction to the probe, and the lesson generalises.** Point-in-
+section by an axis-aligned ray is not safe on this lattice: the probes are centroids of clipped
+bores, so their y lands on lattice-derived values, and a scanline through a vertex registers a
+crossing twice or not at all — measured, one plate gave **17 crossings**, an odd count, with three x
+values duplicated, and open cells came back solid. Pooling the four plates' sections was wrong for a
+second reason: even-odd parity holds only within ONE solid, and plates INTERLOCK, so a ray crossing a
+shared stretch of boundary counts twice at one x and the parity never flips. The probe now tests each
+plate separately with a ray in a generic direction and a half-open interval along the segment. Three
+readings of "is this point solid", three different wrong answers, before the geometry was ever in
+question.
+
 **The plan had to be taught, because the edge is no longer something the border walk can describe.**
 `borderPolygons` returns nothing for the outside now, so the plan drew a wall a ring smaller than the
 file. `plateEdgeShapes` gives it the cut cells and what is left of their mouths, off the same

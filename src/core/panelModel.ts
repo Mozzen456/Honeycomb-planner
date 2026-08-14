@@ -72,10 +72,32 @@ export function assemblyBlockCells(panels: readonly PlacedPanel[]): Hex[] {
  *
  * Built by every border question, so it is built in one place.
  */
-function assemblyIndex(panels: readonly PlacedPanel[]) {
+function assemblyIndex(panels: readonly PlacedPanel[], frame?: WallFrame) {
   const occupied = new Set<string>();
   const ownerOf = new Map<string, string>();
+  /*
+   * The ring the EDGE cuts is OCCUPIED, even though it is not in
+   * `placedPanelCells` (D87).
+   *
+   * `omit` is how those cells leave the planner, and `occupied` answers a
+   * different question: is this position PRINTED. A border piece is raised only
+   * where a position is empty, so with the ring reading as empty the whole
+   * perimeter looked like a hole and every plate filled it back in with solid
+   * hexagons — sitting exactly where the cut cells' missing halves are, which is
+   * a honeycomb half filled in all the way round. Reported as "a small defect at
+   * the corners", where two runs of them meet and it is most obvious.
+   *
+   * A zone's cells are NOT added: a zone is a genuine hole in the wall, the
+   * thing the `holes` switch exists for.
+   */
+  const edge = borderCutCells(panels, frame);
   for (const p of panels) {
+    for (const c of panelCells(p.origin, p.columns, p.rows)) {
+      const k = hexKey(c);
+      if (!edge.has(k)) continue;
+      occupied.add(k);
+      ownerOf.set(k, p.id);
+    }
     for (const c of placedPanelCells(p)) {
       const k = hexKey(c);
       occupied.add(k);
@@ -193,7 +215,7 @@ function ownedBorder(
   frame: WallFrame | undefined,
 ): { sides: FrameSide[]; holes: boolean } {
   if (!frameIsOn(frame) || frame === undefined) return { sides: [], holes: false };
-  const index = assemblyIndex(panels);
+  const index = assemblyIndex(panels, frame);
   const sides = new Set<FrameSide>();
   let holes = false;
   const seen = new Set<string>();
@@ -241,7 +263,9 @@ export function borderCutCells(
 ): Set<string> {
   const out = new Set<string>();
   if (!frameIsOn(frame) || frame === undefined) return out;
-  const index = assemblyIndex(panels);
+  // The plate's own lines, straight from the blocks — never through
+  // `assemblyIndex`, which now asks THIS function which positions are occupied.
+  const bounds = cellCentreBounds(assemblyBlockCells(panels));
   const eps = 1e-6;
   for (const p of panels) {
     // The whole block, not `placedPanelCells`. `cutAroundObstacles` rebuilds
@@ -250,10 +274,10 @@ export function borderCutCells(
     for (const c of panelCells(p.origin, p.columns, p.rows)) {
       const m = hexToMm(c);
       if (
-        (frame.left && m.x <= index.bounds.minX + eps) ||
-        (frame.right && m.x >= index.bounds.maxX - eps) ||
-        (frame.bottom && m.y <= index.bounds.minY + eps) ||
-        (frame.top && m.y >= index.bounds.maxY - eps)
+        (frame.left && m.x <= bounds.minX + eps) ||
+        (frame.right && m.x >= bounds.maxX - eps) ||
+        (frame.bottom && m.y <= bounds.minY + eps) ||
+        (frame.top && m.y >= bounds.maxY - eps)
       ) out.add(hexKey(c));
     }
   }
@@ -282,7 +306,7 @@ export function borderSpecFor(
   obstacles?: readonly Obstacle[],
 ): BorderSpec | undefined {
   if (!frameIsOn(frame) || frame === undefined) return undefined;
-  const index = assemblyIndex(panels);
+  const index = assemblyIndex(panels, frame);
   // Grown by the clearance, so the border keeps off exactly what the CELLS keep
   // off. Two rules for one zone would put the rail inside the gap the cells
   // were cut to leave.

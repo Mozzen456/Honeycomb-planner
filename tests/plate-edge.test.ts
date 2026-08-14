@@ -23,14 +23,19 @@
 
 import { describe, expect, it } from 'vitest';
 
+import catalogJson from '../src/catalog/catalog.json';
 import { MARGIN_X, MARGIN_Y } from '../src/core/constants';
 import { hexKey, hexToMm, panelCells } from '../src/core/hex';
 import {
   buildHoneycombMesh, cellCentreBounds, DEFAULT_BORDER_MM, MAX_BORDER_MM,
-  meshBoundsMm, MIN_BORDER_MM,
+  borderPolygons, meshBoundsMm, MIN_BORDER_MM, plateEdgeShapes,
   type BorderSpec, type FrameSides,
 } from '../src/core/honeycomb';
-import type { Hex } from '../src/core/types';
+import {
+  assemblyBlockCells, borderSpecFor, panelModelSpecFor,
+} from '../src/core/panelModel';
+import { emptyDoc, Store } from '../src/core/store';
+import type { Catalog, Hex, PlacedPanel, WallFrame } from '../src/core/types';
 
 const ALL: FrameSides = { left: true, right: true, bottom: true, top: true };
 
@@ -224,5 +229,118 @@ describe('the band round the plate', () => {
         expect(box.max[1]!, `top ${at}`).toBeCloseTo(b.maxY, 9);
       }
     }
+  });
+
+  it('leaves every cell it cuts OPEN, on a wall of several plates', () => {
+    /*
+     * Reported as "a small defect at the corners where half of the honeycomb is
+     * filled", and it was the whole perimeter — the corners are just where two
+     * runs of it meet and you see it first.
+     *
+     * A border piece is raised where a lattice position is EMPTY, and `occupied`
+     * was read off `placedPanelCells` — which no longer contains the ring, because
+     * the edge cuts it and it leaves the planner through `omit`. So every plate
+     * looked at the wall's rim, saw a hole, and filled it back in with solid
+     * hexagons landing exactly on the missing halves of the cut cells. Measured on
+     * a four-plate wall: 30 spurious pieces, eight of them on one plate.
+     *
+     * `occupied` now means PRINTED rather than mountable. Held on the mesh — the
+     * piece that fills a cell in is raised by a DIFFERENT plate from the one that
+     * prints the cell, so nothing about either plate on its own can show it.
+     */
+    const panels: PlacedPanel[] = [
+      { id: 'a', partId: 'x', origin: { q: 0, r: 0 }, columns: 6, rows: 5 },
+      { id: 'b', partId: 'x', origin: { q: 6, r: -3 }, columns: 6, rows: 5 },
+      { id: 'c', partId: 'x', origin: { q: 0, r: 5 }, columns: 6, rows: 5 },
+      { id: 'd', partId: 'x', origin: { q: 6, r: 2 }, columns: 6, rows: 5 },
+    ];
+    const frame: WallFrame = {
+      left: true, right: true, bottom: true, top: true, holes: true, thicknessMm: DEFAULT_BORDER_MM,
+    };
+    const store = new Store(
+      { ...emptyDoc(), wall: { widthMm: 300, heightMm: 300 }, panels },
+      catalogJson as unknown as Catalog,
+    );
+    store.setFrame(frame);
+    const doc = store.getState().doc;
+
+    /*
+     * Each plate's material at one height, kept SEPARATE and OR-ed.
+     *
+     * Sliced in the MOUTH band (z 6.0–8.0), because `plateEdgeShapes` returns the
+     * mouth; at the throat the mouth's own 0.8 mm wall is solid and every probe
+     * near a rim is a false positive.
+     *
+     * Separate because even-odd parity is only valid within one solid. Plates
+     * INTERLOCK — their outlines share stretches of boundary — so a ray crossing
+     * a shared stretch counts two crossings at one x, the parity does not flip,
+     * and open cells read as solid. Pooling the four sections reported three
+     * filled cells on a plate that has none.
+     */
+    const sections = doc.panels.map((p) =>
+      sliceAt(buildHoneycombMesh({ ...panelModelSpecFor(p, doc), originAtZero: false }).positions, 7));
+    /*
+     * Point-in-section by a ray in a GENERIC direction, with the segment's far
+     * endpoint excluded.
+     *
+     * An axis-aligned ray is not safe here. The probes are centroids of clipped
+     * bores, so their y lands on lattice-derived values, and a scanline through a
+     * vertex registers the crossing twice or not at all: measured, one plate gave
+     * 17 crossings — an odd count is the giveaway — with three x values
+     * duplicated, and open cells came back solid. A slanted ray plus a half-open
+     * `u` interval fixes both, because a shared endpoint is then counted once.
+     */
+    const DIR = { x: 1, y: 0.3170157 };
+    const inside = (segs: readonly Seg[], x: number, y: number): boolean => {
+      let hits = 0;
+      for (const s of segs) {
+        const sx = s.bx - s.ax;
+        const sy = s.by - s.ay;
+        const denom = DIR.x * sy - DIR.y * sx;
+        if (Math.abs(denom) < 1e-12) continue;
+        const qx = s.ax - x;
+        const qy = s.ay - y;
+        const t = (qx * sy - qy * sx) / denom;
+        const u = (qx * DIR.y - qy * DIR.x) / denom;
+        if (t > 0 && u >= 0 && u < 1) hits++;
+      }
+      return hits % 2 === 1;
+    };
+    const solid = (x: number, y: number): boolean =>
+      sections.some((segs) => inside(segs, x, y));
+
+    const spec = borderSpecFor(doc.panels, doc.frame, undefined, doc.obstacles)!;
+
+    // The invariant underneath, stated where it is cheap: a solid rectangular
+    // wall has no holes in it, so it raises no border pieces AT ALL. Every
+    // position it does not print is outside it, and the outside is cut. Before
+    // the fix this wall raised 30 of them, eight on one plate.
+    for (const p of doc.panels) {
+      const own = borderSpecFor(doc.panels, doc.frame, p, doc.obstacles)!;
+      expect(borderPolygons(panelModelSpecFor(p, doc).cells, own), p.id).toEqual([]);
+    }
+
+    const cut = plateEdgeShapes(assemblyBlockCells(doc.panels), spec);
+    expect(cut.length).toBeGreaterThan(20);
+    const filled: string[] = [];
+    for (const c of cut) {
+      if (c.bore.length < 3) continue;
+      let cx = 0, cy = 0;
+      for (const q of c.bore) { cx += q.x; cy += q.y; }
+      cx /= c.bore.length;
+      cy /= c.bore.length;
+      // The centroid and each vertex pulled a little towards it: a piece filling
+      // a cell in need not cover the whole hole, and a corner of it is where it
+      // starts.
+      const probes = [{ x: cx, y: cy }, ...c.bore.map((q) => ({
+        x: q.x + (cx - q.x) * 0.3, y: q.y + (cy - q.y) * 0.3,
+      }))];
+      for (const q of probes) {
+        if (solid(q.x, q.y)) {
+          filled.push(`${q.x.toFixed(1)}, ${q.y.toFixed(1)}`); break;
+        }
+      }
+    }
+    expect(filled.slice(0, 6)).toEqual([]);
   });
 });

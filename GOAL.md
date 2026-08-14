@@ -616,3 +616,23 @@ must both come out that way, judged by looking at the running app.
   Verified in the running app on a 420 × 380 wall with a double socket through it: straight rim on
   all four sides, straight aperture, honeycomb cut flush to both, and the plan and the 3D view
   showing the same plate.
+- 2026-08-14 — "just a small defect at the corners where half of the honeycomb is filled". It was the
+  whole perimeter; the corners are where two runs of it meet. **966/966, typecheck and build clean.**
+  A border piece is raised where a lattice position is EMPTY, and `occupied` was read off
+  `placedPanelCells` — which no longer holds the ring, because the edge cuts it and it leaves through
+  `omit`. So every plate looked at the wall's rim, saw a hole, and filled it back in with solid
+  hexagons landing exactly on the cut cells' missing halves: **30 spurious pieces on a four-plate
+  wall, eight on one plate.** `occupied` means PRINTED now, not mountable; a zone's cells stay out of
+  it, because a zone is a genuine hole and that is what `holes` is for.
+  **It took three goes to measure, and none of the three failures was in the geometry.** Pooling the
+  four plates' sections is wrong because even-odd parity holds only within ONE solid and plates
+  interlock — a ray crossing a shared stretch counts twice at one x and never flips. Slicing at the
+  throat is wrong because the mouth's own 0.8 mm wall is solid there, so every probe near a rim is a
+  false positive. And an axis-aligned ray is wrong because the probes are centroids of clipped bores,
+  whose y lands on lattice values: one plate gave **17 crossings**, an odd count with three x values
+  duplicated, and open cells read as solid. Generic direction, half-open interval, one plate at a
+  time.
+  The guard states both halves: a solid rectangular wall raises NO border pieces at all, and every
+  cell the edge cuts still has a hole in it — checked on the meshes, because the piece that fills a
+  cell in is raised by a different plate from the one printing the cell.
+
