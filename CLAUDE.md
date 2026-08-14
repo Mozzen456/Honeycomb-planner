@@ -267,7 +267,10 @@ wall. **The OUTLINE cut is a function of the ZONE alone**, never of which cell i
 what keeps two clipped neighbours truncating identically so their shared edge still cancels and the
 mesh stays watertight. Bores are private to a cell and may differ. The inner skin can no longer pair
 rings by index (a clip changes the vertex count between levels): `addSkirt` merges by bearing. A bore
-cut past its own cell centre prints SOLID. A cell whose CENTRE falls inside the zone keeps its sliver
+the cut leaves ANY of stays OPEN (D86). It used to print solid once the cut passed the cell's own
+centre, which paved a ring of hexagons behind every aperture wall — D81's apron, put back by D81's
+own guard. The merge never needed that point: `addSkirt` and `addAnnulus` both work by bearing around
+the INNER RING's centroid, which a convex sliver always contains. A cell whose CENTRE falls inside the zone keeps its sliver
 on the nearest side rather than being dropped — dropped, it took its own wall with it and bit up to
 10 mm out of a "straight" aperture. At a zone CORNER a cell keeps the whole side facing the zone's
 edge and its arm is filled by a second SOLID piece at the same position — a cell cannot be split like

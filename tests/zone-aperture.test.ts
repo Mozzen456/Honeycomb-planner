@@ -222,6 +222,31 @@ describe('the cells a zone eats are printed, cut', () => {
     expect(thinnest).toBeCloseTo(t, 6);
   });
 
+  it('leaves the honeycomb round the aperture HOLLOW, not paved over', () => {
+    /*
+     * The apron, one last time. D81 removed it by printing the eaten cells cut
+     * instead of dropping them, and then put a band of it back through its own
+     * guard: a cell whose bore the cut passed the centre of printed SOLID, and
+     * every cell whose centre fell inside the zone's rail is such a cell. The
+     * result was a ring of filled hexagons round the switch where the printed
+     * reference has open ones running right up to the wall.
+     *
+     * Stated as: most of the way along each side of the aperture, the plate
+     * stops within a rail and a cell wall of it. Paved, the wall runs out to
+     * whole cells and this collapses — with the guard put back, the right-hand
+     * side measures ZERO scanlines that thin.
+     */
+    const { spec } = plate();
+    const t = FRAME.thicknessMm;
+    const mesh = buildHoneycombMesh({ ...spec, originAtZero: false });
+    const { sides } = apertureWall(mesh.positions, ZONE, 0.2);
+    for (const side of ['left', 'right', 'bottom', 'top'] as const) {
+      const walls = sides[side]!.map((s) => s.wall);
+      const thin = walls.filter((w) => w <= t + 1.6).length / walls.length;
+      expect(thin, `${side}`).toBeGreaterThan(0.4);
+    }
+  });
+
   it('is the same rail the OUTSIDE of the plate gets', () => {
     /*
      * Stated as a comparison rather than a second copy of 3.6, because that is

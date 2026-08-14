@@ -2776,3 +2776,53 @@ empty.
 `tests/honeycomb-frame.test.ts` measures the silhouette off the finished mesh — sliced at the plate's
 own face and scanned, so a step of any depth anywhere along a side comes out as a number — over six
 block sizes, and requires zero drift on every edged side. Reverted, it reports 30.7 mm.
+
+---
+
+## D86 — A cut bore is still a hole
+
+Reported as "make the outside of the inner border hollow and not fill in the honeycombs". Round a
+blocked zone the plate came out with a ring of PAVED hexagons behind the aperture wall, where the
+printed reference (`inner box.jpeg`) has open ones running right up to it.
+
+It was D81's own guard. Having gone to the trouble of printing the eaten cells cut rather than
+dropping them — precisely to remove an apron — it then printed any cell SOLID as soon as the cut
+passed that cell's centre, on the reasoning that the inner-skin merge "needs both rings to wrap that
+point". Every cell whose centre falls inside a zone's rail is such a cell, so the apron came back one
+ring thinner and nobody noticed, because the tests asked about the WALL and the wall was correct.
+
+The reasoning was about the wrong point. `addSkirt` and `addAnnulus` both merge their two rings by
+bearing around the INNER RING's own centroid, not the cell's centre — and a convex sliver always
+contains its own centroid, while the levels are all cut by the same planes so the smaller ring stays
+inside the larger. Nothing ever needed the cell centre. The guard is gone; a ring with fewer than
+three points is still solid, because there the cut really did take all of it.
+
+`tests/zone-aperture.test.ts` states it as a fraction: most of the way along each side of the
+aperture the plate must stop within a rail and a cell wall. Paved, it collapses — with the guard put
+back the right-hand side measures ZERO scanlines that thin, against 0.4 required.
+
+---
+
+## OPEN — the corner of the band balloons, and none of the three rules tried is right
+
+Visible on any bordered plate: along its runs the band is `t`, and at each corner it swells into a
+lump about a cell across, with the neighbouring cells cut into wedges around it.
+
+A corner position is outward on two sides at once, and three rules have been tried for it:
+
+1. **Both rails, intersected** — keeps only the `t × t` square where they cross, touching neither
+   run. Two of the four corners printed as loose blocks (D84).
+2. **Neither rail** — fixed that, and is what ships. The piece keeps its whole hexagon, so the
+   top/bottom rail swells from `t` to a half cell at its ends. This is the balloon.
+3. **The union, as an L** split along the side band's own line, each arm at its own width. Correct
+   in width, and it DETACHES on small plates: a 2 × 2 comes out as three solids.
+
+What the measurements do and do not cover is the lesson here. `has a STRAIGHT outline` and `is ONE
+solid` both pass on rule 2 — a ballooned corner is straight-edged and connected — so the suite was
+green while the plate was visibly wrong. **There is no test of the band's WIDTH near a corner**, and
+that is the missing guard: measure the band along all four sides INCLUDING the last cell at each end,
+and require `t` throughout. Write that first; it fails on rule 2 and on rule 1, and it is what will
+tell rule 3's successor from another near miss.
+
+The left and right bands being filled (D84) makes the corner worse than it reads on paper, because
+the two bands meeting there are different widths to begin with.

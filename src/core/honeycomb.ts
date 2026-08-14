@@ -451,9 +451,14 @@ function borderPieces(cells: readonly Hex[], border: BorderSpec): BorderPiece[] 
      */
     for (const side of outward) {
       // A CORNER position is outward on two sides at once, and it is solid out
-      // to both lines: intersecting two rails there leaves a `t × t` square
+      // to both lines: intersecting two rails there leaves a `t x t` square
       // touching neither run, which is how two of the four corners of every
       // bordered plate came off as loose 3.6 mm blocks (D84).
+      //
+      // KNOWN DEFECT (see the note in DECISIONS.md): given neither clip it keeps
+      // its whole hexagon, so the top/bottom rail swells from `t` to a half cell
+      // at each end. The L-split that fixes the width detaches on small plates —
+      // it is the third rule tried here and none of the three is right yet.
       if (outward.length > 1) break;
       if (side === 'top') planes.push({ nx: 0, ny: -1, d: -r.maxY });
       else if (side === 'bottom') planes.push({ nx: 0, ny: 1, d: r.minY });
@@ -820,17 +825,6 @@ export function buildHoneycombMesh(spec: HoneycombSpec): SolidMesh {
     return { planes, bore, corner };
   };
 
-  /** Is the cell's own centre still inside a clipped ring? */
-  const holds = (ring: readonly Point[], at: Point): boolean => {
-    if (ring.length < 3) return false;
-    for (let i = 0; i < ring.length; i++) {
-      const a = ring[i]!;
-      const b = ring[(i + 1) % ring.length]!;
-      if ((b.x - a.x) * (at.y - a.y) - (b.y - a.y) * (at.x - a.x) < -1e-9) return false;
-    }
-    return true;
-  };
-
   const clippedOuter = new Map<string, Point[]>();
   const clippedInner = new Map<string, Point[][]>();
   const clippedKeys = new Set<string>();
@@ -860,17 +854,29 @@ export function buildHoneycombMesh(spec: HoneycombSpec): SolidMesh {
     }
     const outer = clipConvex(corners.ringOf(c), planes);
     if (outer.length < 3) continue;
-    const at = hexToMm(c);
     // The bore stops a rail short of where the outline reaches, which IS the
     // wall round the aperture. Never `planes`: that opens the bore onto it.
     const bores = levels.map((lv) => clipConvex(hexCorners(c, lv.acrossFlats), clip.bore));
     /*
-     * A bore cut past the cell's own centre is not a hole any more, it is a
-     * notch — and it would break the strip merge below, which needs both rings
-     * to wrap that point. Those cells print SOLID, which is what the material
-     * beside an aperture is anyway.
+     * A cut bore is still a HOLE, however little of it is left (D86).
+     *
+     * It used to print SOLID once the cut passed the cell's own centre, on the
+     * reasoning that the skirt merge below needs both rings to wrap that point.
+     * That reasoning was about the wrong point: `addSkirt` and `addAnnulus` both
+     * merge by bearing around the INNER RING's own centroid, which a convex
+     * sliver always contains, and the levels are all cut by the same planes so
+     * the smaller ring stays inside the larger. Nothing needed the cell centre.
+     *
+     * What the rule cost was visible on the plate. Every cell whose centre fell
+     * within the rail of a zone came out paved over, so the honeycomb round a
+     * switch was a band of filled hexagons where the printed reference has open
+     * ones right up to the wall — the apron D81 set out to remove, put back by
+     * its own guard.
+     *
+     * A ring with fewer than three points is a different thing: the cut took all
+     * of it, and that cell really is solid plate.
      */
-    const open = bores.every((r) => holds(r, at));
+    const open = bores.every((r) => r.length >= 3);
     clippedOuter.set(key, outer);
     clippedInner.set(key, open ? bores : levels.map(() => [] as Point[]));
   }
