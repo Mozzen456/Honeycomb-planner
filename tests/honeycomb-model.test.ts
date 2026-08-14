@@ -15,10 +15,12 @@
  *   - it survives the trip through a binary STL and back.
  */
 
+import { readFileSync } from 'node:fs';
+
 import { describe, expect, it } from 'vitest';
 
 import catalogJson from '../src/catalog/catalog.json';
-import { PANEL_DEPTH, PITCH, ROW_STEP } from '../src/core/constants';
+import { CELL, INSERT, PANEL_DEPTH, PITCH, ROW_STEP } from '../src/core/constants';
 import { hexKey, panelCells } from '../src/core/hex';
 import {
   BORE_PROFILE,
@@ -45,11 +47,82 @@ describe('the bore profile', () => {
     for (const level of BORE_PROFILE) expect(level.acrossFlatsMm).toBeLessThan(PITCH);
   });
 
-  it('puts the 22 mm mouth at the top and the 20.8 flare on the printed bottom', () => {
-    // HSW-SPEC §3 measures from the printed bottom face, and the insert's 22.5
-    // flange cannot enter a 22.0 mouth — so the mouth is the room side.
-    expect(BORE_PROFILE[0]!.acrossFlatsMm).toBeCloseTo(20.8, 9);
-    expect(BORE_PROFILE[BORE_PROFILE.length - 1]!.acrossFlatsMm).toBeCloseTo(22.0, 9);
+  it('puts the 22 mm mouth against the WALL and the 20.8 flare on the room side', () => {
+    expect(BORE_PROFILE[0]!.acrossFlatsMm).toBeCloseTo(22.0, 9);
+    expect(BORE_PROFILE[BORE_PROFILE.length - 1]!.acrossFlatsMm).toBeCloseTo(20.8, 9);
+  });
+
+  it('gives a real insert’s barbs room to spring out where they actually sit', () => {
+    /*
+     * Which way round a plate goes is decided by the INSERT, not by the plate,
+     * and this measures it on the shipped insert rather than restating a number.
+     *
+     * An insert enters from the room, its flange stops on the face, and its
+     * snap barbs — wider than the 20.0 throat — have to reach a part of the bore
+     * that is wider still, or they stay compressed and the insert falls out.
+     * Measured on `insert-empty.stl`: the barbs are 5.7 to 6.1 mm past the
+     * seating face. From the ROOM side that is where the 48° lead-in opens into
+     * the 22.0 mouth, so the mouth is the WALL side. Turn the plate over and the
+     * same barbs sit inside the 20.0 throat, which is the state this asserts
+     * against — it fails on the profile the app shipped before D97.
+     */
+    const insert = catalog.parts.find((x) => x.id === 'insert-empty')!;
+    const bytes = readFileSync(insert.file);
+    const mesh = parseStl(
+      bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+    );
+    const p = mesh.positions;
+    // The insert's own axis is the short one (10 mm against 22.5 / 25.98).
+    const ext = [0, 1, 2].map((a) => {
+      let lo = Infinity, hi = -Infinity;
+      for (let i = a; i < p.length; i += 3) { lo = Math.min(lo, p[i]!); hi = Math.max(hi, p[i]!); }
+      return { a, lo, hi, span: hi - lo };
+    }).sort((x, y) => x.span - y.span);
+    const axis = ext[0]!;
+    const [o1, o2] = [ext[1]!.a, ext[2]!.a];
+
+    /** Across FLATS at height h above the flange face: the narrower bbox side. */
+    const widthAt = (h: number): number => {
+      const z = axis.lo + h;
+      let lo1 = Infinity, hi1 = -Infinity, lo2 = Infinity, hi2 = -Infinity;
+      for (let i = 0; i < p.length; i += 3) {
+        if (Math.abs(p[i + axis.a]! - z) > 0.15) continue;
+        lo1 = Math.min(lo1, p[i + o1]!); hi1 = Math.max(hi1, p[i + o1]!);
+        lo2 = Math.min(lo2, p[i + o2]!); hi2 = Math.max(hi2, p[i + o2]!);
+      }
+      return Math.min(hi1 - lo1, hi2 - lo2);
+    };
+    // Flange end first: it is the widest.
+    const flangeAtLow = widthAt(1) > widthAt(axis.span - 1);
+    const fromFlange = (h: number): number => widthAt(flangeAtLow ? h : axis.span - h);
+
+    // Everything past the flange that is wider than the throat is a barb.
+    const barbDepths: number[] = [];
+    for (let h = INSERT.flangeThickness + 0.5; h < axis.span; h += 0.1) {
+      if (fromFlange(h) > CELL.throatAcrossFlats + 0.05) {
+        barbDepths.push(h - INSERT.flangeThickness); // depth into the plate
+      }
+    }
+    expect(barbDepths.length, 'found no barbs on insert-empty').toBeGreaterThan(0);
+
+    /** The plate's bore at `d` mm in from the ROOM face. */
+    const boreAt = (d: number): number => {
+      const z = PANEL_DEPTH - d;
+      for (let i = 1; i < BORE_PROFILE.length; i++) {
+        const a = BORE_PROFILE[i - 1]!, b = BORE_PROFILE[i]!;
+        if (z >= a.zMm && z <= b.zMm) {
+          const t = b.zMm === a.zMm ? 0 : (z - a.zMm) / (b.zMm - a.zMm);
+          return a.acrossFlatsMm + t * (b.acrossFlatsMm - a.acrossFlatsMm);
+        }
+      }
+      return NaN;
+    };
+
+    const deepest = Math.max(...barbDepths);
+    expect(deepest, 'the barbs must stay inside an 8 mm plate').toBeLessThan(PANEL_DEPTH);
+    // At its widest the barb must have somewhere to go.
+    const widest = Math.max(...barbDepths.map(boreAt));
+    expect(widest).toBeGreaterThan(INSERT.barbAcrossFlats);
   });
 });
 

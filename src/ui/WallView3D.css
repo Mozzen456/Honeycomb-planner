@@ -1,11 +1,27 @@
 /* 3D wall surface. Tokens only — no colour, size or duration literals. */
 
+/* The backdrop the wall stands on.
+   -----------------------------------------------------------------------------
+   A studio ground rather than a swatch: `--canvas-wall` at the edges, lifted
+   toward the plate's own tint under the subject. The renderer is created with
+   `alpha: true` and the scene sets no background of its own, so this IS the
+   background of the 3D view — one definition, in tokens, following the theme.
+
+   Both stops are existing canvas tokens. The lighter one is the PLATE's tint,
+   which is the right relationship in both themes: the ground behind the wall
+   reads as the same material, further away and out of the light. */
 .wall3d {
   position: relative;
   inline-size: 100%;
   block-size: 100%;
   overflow: hidden;
-  background: var(--canvas-wall);
+  background:
+    radial-gradient(
+      130% 100% at 50% 36%,
+      color-mix(in srgb, var(--canvas-panel-tint) 60%, var(--canvas-wall)) 0%,
+      var(--canvas-wall) 78%
+    ),
+    var(--canvas-wall);
   /* Load-bearing on tablets: without it a one-finger drag scrolls the page
      instead of moving the part under the finger. */
   touch-action: none;
@@ -31,8 +47,11 @@
   box-shadow: var(--shadow-sm);
 }
 
+/* Same metrics as the plan view's tool strip, so the three floating clusters in
+   the product — the plan's tools, its zoom, and these — read as one component
+   seen three times rather than as three near-misses. */
 .wall3d__tools button {
-  min-block-size: var(--control-height-sm);
+  min-block-size: var(--control-height-md);
   padding-inline: var(--space-3);
   border: none;
   border-radius: var(--radius-sm);
@@ -40,6 +59,7 @@
   color: var(--text-secondary);
   font-family: var(--font-sans);
   font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
   line-height: var(--line-height-none);
   cursor: pointer;
   transition: background var(--duration-fast) var(--ease-standard),
@@ -53,10 +73,17 @@
   outline-offset: var(--focus-ring-offset);
 }
 
+/* On its own backdrop, because it is 11px of grey text lying directly over a
+   honeycomb — the busiest texture in the product — and the lattice ran straight
+   through the words. `pointer-events: none` is kept: the wall underneath is a
+   drop target, and a part dropped on the crib sheet still has to land. */
 .wall3d__hint {
   position: absolute;
   inset-block-end: var(--space-4);
   inset-inline-start: var(--space-4);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface-1) 78%, transparent);
   color: var(--text-tertiary);
   font-family: var(--font-mono);
   font-size: var(--font-size-2xs);

@@ -119,8 +119,22 @@ Depth reads *inward*: wall (darkest, the void) < panel tint < cell (the open
 hexagon). That is the reverse of chrome elevation on purpose — the canvas is a
 hole in the app, not a card on top of it.
 
-`--canvas-grid` is intentionally the same value in both themes: that rung of the
-neutral ramp clears 3:1 against the canvas colours of light *and* dark.
+**That ordering is a contract, and dark broke it for a long time.** Measured, the
+dark theme ran wall `L=0.0042` < **cell** `0.0132` < **plate** `0.0196` — the
+opening darker than the material it is cut through, the two swapped and only
+0.006 of luminance apart. A solved wall therefore drew in the plan as one flat
+texture: 3,472 hexagons you could not see, on the view where you measure, block
+out a light switch and line up a photograph. The dark cell is `--neutral-800`
+now, so both themes run the same progression (light 0.69 < 0.80 < 0.89, dark
+0.0042 < 0.0196 < 0.041), and "cell vs wall (field separation)" in the table
+below went from 1.17:1 to 1.68:1. **If you move one of these three, measure the
+other two** — the numbers, not the ramp names, are the check.
+
+`--canvas-grid` **was** the same value in both themes, on the reasoning that the
+rung cleared 3:1 against the canvas colours of light *and* dark. Moving the dark
+cell two rungs lighter retired that premise: against the new cell, `--neutral-550`
+measures 2.48:1. Dark takes `--neutral-450`, which restores the margin on every
+pair in the table and is the second reason a solved wall is now visible.
 
 The grid carries real information (it is the lattice you place parts on), so it
 is held to 3:1 like any other meaningful graphic. **When 5,900 cells makes that
@@ -199,9 +213,17 @@ covered automatically. `base.css` adds a global override as a backstop.
 ### Size and layout
 
 `--tap-target-min` (44px), `--control-height-sm | md | lg`, `--icon-size-sm | md`,
-`--topbar-height`, `--panel-width-left | right | min`, `--statusbar-height`, and
-the `--z-*` stacking scale (`canvas` → `tooltip`). Every z-index in the app comes
-from that scale; no component invents one.
+`--titlebar-height | --toolbar-height` (`--topbar-height` is an alias for the
+first), `--panel-width-left | right | min`, `--statusbar-height`, and the `--z-*`
+stacking scale (`canvas` → `tooltip`). Every z-index in the app comes from that
+scale; no component invents one.
+
+**Why two header heights.** The shell's chrome is two tiers, and they answer
+different questions: the title bar says what this DOCUMENT is (name, size, how
+many plates), the toolbar carries the parameters the next solve reads. They were
+one row of twenty controls at one weight, which is a list rather than a
+hierarchy. The title bar is the taller of the two because it stacks a name over
+the document's figures.
 
 **Touch.** On a coarse pointer `base.css` grows buttons, selects, summaries and
 inputs to `--tap-target-min`. On a mouse the dense heights stand — a trackpad
@@ -394,22 +416,22 @@ canvas layering is a measured decision rather than a hope.
 | dark | success-fg on surface-1 | `#5FC98A` on `#14181B` | **8.68:1** | 4.5:1 | pass |
 | dark | success-fg on success-bg (composited) | `#5FC98A` on `#20342D` | **6.42:1** | 4.5:1 | pass |
 | dark | text-primary on success-bg (composited) | `#E5E8EB` on `#20342D` | **10.73:1** | 4.5:1 | pass |
-| dark | canvas-grid on canvas-cell | `#6E767E` on `#1A1F23` | **3.60:1** | 3:1 | pass |
-| dark | canvas-grid on canvas-cell-hover | `#6E767E` on `#202D37` | **3.05:1** | 3:1 | pass |
-| dark | canvas-grid on canvas-wall | `#6E767E` on `#0B0E10` | **4.20:1** | 3:1 | pass |
-| dark | canvas-grid on canvas-panel-tint | `#6E767E` on `#21272C` | **3.27:1** | 3:1 | pass |
-| dark | canvas-seam on canvas-cell | `#9CA4AC` on `#1A1F23` | **6.58:1** | 3:1 | pass |
+| dark | canvas-grid on canvas-cell | `#8B939B` on `#333A41` | **3.70:1** | 3:1 | pass |
+| dark | canvas-grid on canvas-cell-hover | `#8B939B` on `#374652` | **3.12:1** | 3:1 | pass |
+| dark | canvas-grid on canvas-wall | `#8B939B` on `#0B0E10` | **6.22:1** | 3:1 | pass |
+| dark | canvas-grid on canvas-panel-tint | `#8B939B` on `#21272C` | **4.85:1** | 3:1 | pass |
+| dark | canvas-seam on canvas-cell | `#9CA4AC` on `#333A41` | **4.57:1** | 3:1 | pass |
 | dark | canvas-seam on canvas-panel-tint | `#9CA4AC` on `#21272C` | **5.98:1** | 3:1 | pass |
-| dark | canvas-selection on canvas-cell | `#57AEE8` on `#1A1F23` | **6.82:1** | 3:1 | pass |
+| dark | canvas-selection on canvas-cell | `#57AEE8` on `#333A41` | **4.73:1** | 3:1 | pass |
 | dark | canvas-selection on canvas-wall | `#57AEE8` on `#0B0E10` | **7.95:1** | 3:1 | pass |
 | dark | canvas-selection on canvas-panel-tint | `#57AEE8` on `#21272C` | **6.20:1** | 3:1 | pass |
-| dark | canvas-ghost-valid on canvas-cell | `#57AEE8` on `#1A1F23` | **6.82:1** | 3:1 | pass |
-| dark | canvas-ghost-invalid on canvas-cell | `#F0867B` on `#1A1F23` | **6.65:1** | 3:1 | pass |
+| dark | canvas-ghost-valid on canvas-cell | `#57AEE8` on `#333A41` | **4.73:1** | 3:1 | pass |
+| dark | canvas-ghost-invalid on canvas-cell | `#F0867B` on `#333A41` | **4.61:1** | 3:1 | pass |
 | dark | canvas-ghost-invalid on canvas-panel-tint | `#F0867B` on `#21272C` | **6.04:1** | 3:1 | pass |
-| dark | canvas-cell vs canvas-wall (field separation) | `#1A1F23` on `#0B0E10` | **1.17:1** | 1.15:1 | pass |
-| dark | canvas-cell-hover vs canvas-cell (state change) | `#202D37` on `#1A1F23` | **1.18:1** | 1.05:1 | pass |
+| dark | canvas-cell vs canvas-wall (field separation) | `#333A41` on `#0B0E10` | **1.68:1** | 1.15:1 | pass |
+| dark | canvas-cell-hover vs canvas-cell (state change) | `#374652` on `#333A41` | **1.19:1** | 1.05:1 | pass |
 | dark | canvas-panel-tint vs canvas-wall | `#21272C` on `#0B0E10` | **1.28:1** | 1.08:1 | pass |
-| dark | text-primary on canvas-cell (in-canvas label) | `#E5E8EB` on `#1A1F23` | **13.51:1** | 4.5:1 | pass |
+| dark | text-primary on canvas-cell (in-canvas label) | `#E5E8EB` on `#333A41` | **9.37:1** | 4.5:1 | pass |
 | dark | text-primary on canvas-wall (in-canvas label) | `#E5E8EB` on `#0B0E10` | **15.74:1** | 4.5:1 | pass |
 
 ### If you add a colour

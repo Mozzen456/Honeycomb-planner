@@ -115,10 +115,25 @@ function loadImage(file: Blob): Promise<HTMLImageElement> {
  * A photo already smaller than the ceiling is still re-encoded, on purpose: a
  * 300 px PNG screenshot is often larger than the 640 px WebP of the same thing,
  * and this way exactly one format reaches storage.
+ *
+ * The SIZE comes back with the bytes because the caller often needs it and
+ * asking afterwards means decoding the image a second time. A part photo throws
+ * it away; the wall photograph cannot — its pixel count is half of the scale
+ * calibration, and reading it back off a decode that may not have happened yet
+ * is how a photo ends up drawn at the wrong size on the first frame.
  */
-export async function preparePhoto(file: Blob): Promise<Blob> {
+export interface PreparedImage {
+  blob: Blob;
+  width: number;
+  height: number;
+}
+
+export async function prepareImage(
+  file: Blob,
+  max: number = PHOTO_MAX_PX,
+): Promise<PreparedImage> {
   const img = await loadImage(file);
-  const { width, height } = fitWithin(img.naturalWidth, img.naturalHeight);
+  const { width, height } = fitWithin(img.naturalWidth, img.naturalHeight, max);
   if (width === 0) throw new Error('that image has no size');
 
   const canvas = document.createElement('canvas');
@@ -134,8 +149,14 @@ export async function preparePhoto(file: Blob): Promise<Blob> {
   );
   // `toBlob` is allowed to hand back null, and a browser that does has still
   // given us the pixels — the original is worse than the resize but better
-  // than losing the picture.
-  return blob ?? file;
+  // than losing the picture. The SIZE still stands: it is the size we drew, and
+  // the fallback bytes are the original, whose own size we report instead.
+  if (blob === null) return { blob: file, width: img.naturalWidth, height: img.naturalHeight };
+  return { blob, width, height };
+}
+
+export async function preparePhoto(file: Blob): Promise<Blob> {
+  return (await prepareImage(file)).blob;
 }
 
 // ---------------------------------------------------------------------------

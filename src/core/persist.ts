@@ -12,11 +12,14 @@
  * Pure functions. No DOM, no fetch, no storage: callers own the I/O.
  */
 
-import { BEDS } from './constants';
+import { BEDS, clampBedMm, CUSTOM_BED_ID, MAX_BED_MM, MIN_BED_MM } from './constants';
+import { hasColors, readColors } from './colors';
 import { DEFAULT_BORDER_MM, MAX_BORDER_MM } from './honeycomb';
 import { MAX_PROJECT_PARTS } from './projectParts';
+import { clampMmPerPixel, clampPhotoOpacity, DEFAULT_PHOTO_OPACITY } from './wallPhoto';
 import type {
-  Group, Hex, LayoutDoc, Obstacle, PlacedItem, PlacedPanel, Rotation, WallFrame, WallSpec, ZoneRect,
+  FixingEdits, Group, Hex, LayoutDoc, Obstacle, PlacedItem, PlacedPanel, Rotation, WallColors,
+  WallFrame, WallPhoto, WallSpec, ZoneRect,
 } from './types';
 
 /** Schema version this build writes. Bumped whenever the document shape changes. */
@@ -47,6 +50,21 @@ const MAX_ARRAY = 200_000;
 /** Ceiling on a single panel's cell count — see the check in `migrate`. */
 const MAX_PANEL_CELLS = 20_000;
 
+/**
+ * Bounds on the printed counts. Lines: a wall of a few hundred distinct parts is
+ * already extraordinary. Per line: 100k of one part is not a build, it is a file
+ * trying to make a number field render forever.
+ */
+const MAX_PRINTED_KEYS = 5_000;
+
+/** Hand edits to the fixing plan. A wall of a few hundred fixings is a big one. */
+const MAX_FIXING_EDITS = 5_000;
+
+const MAX_PRINTED_COUNT = 100_000;
+
+/** Coloured lines or items. Past this the file is not a layout any more. */
+const MAX_COLOR_KEYS = 20_000;
+
 /** Keys that must never reach an object we build. Prototype pollution vector. */
 const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
@@ -56,6 +74,65 @@ const DEFAULT_BED = BEDS[0]?.id ?? 'bed220';
 // ---------------------------------------------------------------------------
 // serialize — stable, pretty, diff-friendly
 // ---------------------------------------------------------------------------
+
+/**
+ * The printed counts as a canonical `{printed: …}` fragment, or nothing at all.
+ *
+ * Only whole positive counts survive: a zero is the absence of progress and has
+ * no business taking up a line in the file, and the reader would drop it again
+ * on the way back in — which would make a saved document differ from its reload.
+ */
+function canonicalPrinted(counts: LayoutDoc['printed']): Record<string, unknown> {
+  if (!counts) return {};
+  const out: Record<string, number> = {};
+  for (const key of Object.keys(counts).sort()) {
+    const value = counts[key];
+    if (typeof value !== 'number' || !Number.isFinite(value)) continue;
+    const whole = Math.floor(value);
+    if (whole > 0) out[key] = whole;
+  }
+  return Object.keys(out).length > 0 ? { printed: out } : {};
+}
+
+/**
+ * The wall's colours, canonically — or nothing at all when nothing is coloured.
+ *
+ * Every value goes through `normaliseColor` on the way OUT as well as on the way
+ * in: the document is the thing that gets shared, and a colour that reached it
+ * before this reader existed must not leave in a shape the reader would refuse.
+ */
+function canonicalColors(colors: LayoutDoc['colors']): Record<string, unknown> {
+  const read = readColors(colors);
+  if (!hasColors(read)) return {};
+  const out: Record<string, unknown> = {};
+  if (read.panels !== undefined) out['panels'] = read.panels;
+  if (read.parts !== undefined) out['parts'] = read.parts;
+  for (const field of ['lines', 'items'] as const) {
+    const source = read[field];
+    if (!source) continue;
+    const sorted: Record<string, string> = {};
+    for (const key of Object.keys(source).sort()) sorted[key] = source[key]!;
+    out[field] = sorted;
+  }
+  return { colors: out };
+}
+
+/**
+ * The hand edits to the fixing plan, or nothing at all. An empty list is the
+ * absence of an edit and must not be written: `{"fixingEdits":{}}` in a file is
+ * a document that differs from its own reload.
+ */
+function canonicalFixingEdits(edits: LayoutDoc['fixingEdits']): Record<string, unknown> {
+  if (!edits) return {};
+  const cells = (list: Hex[] | undefined): Record<string, number>[] =>
+    (list ?? []).map((c) => ({ q: c.q, r: c.r }));
+  const out: Record<string, unknown> = {};
+  const removed = cells(edits.removed);
+  const added = cells(edits.added);
+  if (removed.length > 0) out['removed'] = removed;
+  if (added.length > 0) out['added'] = added;
+  return Object.keys(out).length > 0 ? { fixingEdits: out } : {};
+}
 
 /**
  * Canonical form: keys always emitted in declaration order, never in whatever
@@ -70,6 +147,11 @@ function canonicalDoc(doc: LayoutDoc): Record<string, unknown> {
     name: doc.name,
     wall: { widthMm: doc.wall.widthMm, heightMm: doc.wall.heightMm },
     bedId: doc.bedId,
+    // Only when there is one. A layout on a preset printer must round-trip to
+    // the same bytes it always did.
+    ...(doc.customBed
+      ? { customBed: { widthMm: doc.customBed.widthMm, depthMm: doc.customBed.depthMm } }
+      : {}),
     panels: doc.panels.map((p) => {
       const out: Record<string, unknown> = {
         id: p.id,
@@ -119,6 +201,19 @@ function canonicalDoc(doc: LayoutDoc): Record<string, unknown> {
     // The parts shopped for this wall. Same rule again: only when there are
     // any, so a layout saved before the library existed round-trips unchanged.
     ...(doc.library && doc.library.length > 0 ? { library: [...doc.library] } : {}),
+    // The colours things get printed in. Keys SORTED, for the same reason the
+    // printed counts are: the canonical form is a function of the content, not
+    // of the order somebody happened to click the swatches in.
+    ...canonicalColors(doc.colors),
+    // Wall fixings a person moved or took out. Order is kept as edited — these
+    // are a log of decisions, not a set, and re-sorting them would churn the
+    // file for no reason. Same absent-key rule as everything above.
+    ...canonicalFixingEdits(doc.fixingEdits),
+    // How far through the printing you are. Keys SORTED, because the canonical
+    // form has to be a function of the content and not of the order the counts
+    // happened to be typed in — otherwise "is this file dirty?" answers yes for
+    // two identical builds. Same absent-key rule as everything above.
+    ...canonicalPrinted(doc.printed),
     ...(doc.obstacles && doc.obstacles.length > 0
       ? {
           obstacles: doc.obstacles.map((o) => {
@@ -142,6 +237,27 @@ function canonicalDoc(doc: LayoutDoc): Record<string, unknown> {
           }),
         }
       : {}),
+    // The wall photograph — its ALIGNMENT, not its pixels. Same absent-key rule
+    // as everything above. The image itself is in IndexedDB under `photo.id`,
+    // for the reason given on `WallPhoto`: this file has to stay small enough to
+    // paste into a message, and a photograph is not.
+    ...(doc.photo
+      ? {
+          photo: {
+            id: doc.photo.id,
+            name: doc.photo.name,
+            pixelWidth: doc.photo.pixelWidth,
+            pixelHeight: doc.photo.pixelHeight,
+            mmPerPixel: doc.photo.mmPerPixel,
+            calibrated: doc.photo.calibrated,
+            xMm: doc.photo.xMm,
+            yMm: doc.photo.yMm,
+            opacity: doc.photo.opacity,
+            depth: doc.photo.depth,
+            visible: doc.photo.visible,
+          },
+        }
+      : {}),
   };
 }
 
@@ -157,6 +273,38 @@ export function serialize(doc: LayoutDoc): string {
 /** Strips pollution keys during parsing: returning undefined deletes the key. */
 function safeReviver(key: string, value: unknown): unknown {
   return DANGEROUS_KEYS.has(key) ? undefined : value;
+}
+
+/**
+ * A `{key: value}` map out of a stored document, bounded and shallow.
+ *
+ * The values are not checked here — `readColors` refuses anything that is not a
+ * colour — but the SIZE is, before that runs: a map of a million keys is not a
+ * layout, and validating it one entry at a time is exactly what a hostile file
+ * would want.
+ */
+function boundedMap(
+  value: unknown,
+  path: string,
+  errors: string[],
+): Record<string, string> | undefined {
+  if (!isPlainObject(value)) {
+    if (value !== undefined) errors.push(`${path} is ${describe(value)}; dropped.`);
+    return undefined;
+  }
+  const out: Record<string, string> = {};
+  let kept = 0;
+  for (const [key, v] of Object.entries(value)) {
+    if (kept >= MAX_COLOR_KEYS) {
+      errors.push(`${path} has more than ${MAX_COLOR_KEYS} entries; the rest were dropped.`);
+      break;
+    }
+    if (key.length === 0 || key.length > MAX_STRING) continue;
+    if (typeof v !== 'string') continue;
+    out[key] = v;
+    kept += 1;
+  }
+  return out;
 }
 
 function errorText(e: unknown): string {
@@ -455,6 +603,40 @@ export function migrate(raw: unknown): LoadResult {
     bedId = DEFAULT_BED;
   }
 
+  /*
+   * The typed build plate.
+   *
+   * Read field by field and CLAMPED rather than rejected: a stored document is
+   * user input by the time it comes back, and a bed of 1e9 mm would have the
+   * solver offering half a million plate sizes. A `custom` bed with no size at
+   * all cannot be honoured, so it falls back to a real printer and says so —
+   * `bedFor` would otherwise return undefined and the wall would come back with
+   * "unknown bed" and no panels.
+   */
+  let customBed: { widthMm: number; depthMm: number } | undefined;
+  const rawBed = value['customBed'];
+  if (rawBed !== undefined && rawBed !== null) {
+    if (isPlainObject(rawBed)) {
+      const w = readSize(rawBed['widthMm'], 'customBed.widthMm', errors);
+      const d = readSize(rawBed['depthMm'], 'customBed.depthMm', errors);
+      if (w !== null && d !== null) {
+        customBed = { widthMm: clampBedMm(w), depthMm: clampBedMm(d) };
+        if (customBed.widthMm !== w || customBed.depthMm !== d) {
+          errors.push(
+            `customBed ${w} × ${d} mm is outside ${MIN_BED_MM}–${MAX_BED_MM}; ` +
+              `brought to ${customBed.widthMm} × ${customBed.depthMm}.`,
+          );
+        }
+      }
+    } else {
+      errors.push(`customBed should be a {widthMm, depthMm} object but is ${describe(rawBed)}; ignored.`);
+    }
+  }
+  if (bedId === CUSTOM_BED_ID && customBed === undefined) {
+    errors.push(`bedId is "${CUSTOM_BED_ID}" with no customBed size; defaulted the printer to "${DEFAULT_BED}".`);
+    bedId = DEFAULT_BED;
+  }
+
   // --- wall ---------------------------------------------------------------
   let wall: WallSpec;
   const rawWall = value['wall'];
@@ -728,21 +910,192 @@ export function migrate(raw: unknown): LoadResult {
     }
   }
 
+  // --- colours ------------------------------------------------------------------
+  // What things get printed in. `readColors` drops anything that is not a hex
+  // colour, key by key — the values end up in a canvas `fillStyle` and a
+  // `THREE.Color`, both of which accept arbitrary strings and do something
+  // unhelpful with the ones they cannot parse.
+  let colors: WallColors | undefined;
+  const rawColors = value['colors'];
+  if (rawColors !== undefined) {
+    if (!isPlainObject(rawColors)) {
+      errors.push(`colors is ${describe(rawColors)}, not a set of colours; dropped.`);
+    } else {
+      const bounded: WallColors = {
+        panels: rawColors['panels'] as string | undefined,
+        parts: rawColors['parts'] as string | undefined,
+        lines: boundedMap(rawColors['lines'], 'colors.lines', errors),
+        items: boundedMap(rawColors['items'], 'colors.items', errors),
+      };
+      const read = readColors(bounded);
+      if (hasColors(read)) colors = read;
+    }
+  }
+
+  // --- fixing edits -----------------------------------------------------------
+  // Where a person overruled the wall-fixing plan. Cell by cell through the same
+  // reader every other coordinate uses, and NOT reconciled against the plan: a
+  // removal for a cell the planner no longer chooses is a decision about this
+  // wall, and re-solving may well bring that cell back.
+  let fixingEdits: FixingEdits | undefined;
+  const rawEdits = value['fixingEdits'];
+  if (rawEdits !== undefined) {
+    if (!isPlainObject(rawEdits)) {
+      errors.push(`fixingEdits is ${describe(rawEdits)}, not a set of edits; dropped.`);
+    } else {
+      const readCells = (field: 'removed' | 'added'): Hex[] => {
+        const out: Hex[] = [];
+        const raw = rawEdits[field];
+        if (raw === undefined) return out;
+        const list = readArray(raw, `fixingEdits.${field}`, errors);
+        const seen = new Set<string>();
+        for (let i = 0; i < list.length && out.length < MAX_FIXING_EDITS; i++) {
+          const cell = readHex(list[i], `fixingEdits.${field}[${i}]`, errors);
+          if (cell === null) continue;
+          const key = `${cell.q},${cell.r}`;
+          // Twice is once: the plan reads these as a set, so a duplicate would
+          // survive a round trip while changing nothing.
+          if (seen.has(key)) continue;
+          seen.add(key);
+          out.push(cell);
+        }
+        if (list.length > MAX_FIXING_EDITS) {
+          errors.push(
+            `fixingEdits.${field} lists more than ${MAX_FIXING_EDITS} cells; the rest were dropped.`,
+          );
+        }
+        return out;
+      };
+      const removed = readCells('removed');
+      const added = readCells('added');
+      if (removed.length > 0 || added.length > 0) {
+        fixingEdits = {
+          ...(removed.length > 0 ? { removed } : {}),
+          ...(added.length > 0 ? { added } : {}),
+        };
+      }
+    }
+  }
+
+  // --- printed counts ---------------------------------------------------------
+  // How many of each line have come off the printer. Read key by key like
+  // everything else out of a stored document, and NOT reconciled against the
+  // parts list: a count for a part this layout no longer uses is a fact about
+  // what has been printed, and `bom.ts` caps it when it builds the line. Zero
+  // and rubbish are dropped rather than kept as noise, which is also what keeps
+  // a saved file identical to its own reload.
+  const printedCounts: Record<string, number> = {};
+  const rawPrinted = value['printed'];
+  if (rawPrinted !== undefined) {
+    if (!isPlainObject(rawPrinted)) {
+      errors.push(`printed is ${describe(rawPrinted)}, not a set of counts; dropped.`);
+    } else {
+      let kept = 0;
+      for (const key of Object.keys(rawPrinted)) {
+        if (key.length === 0 || key.length > MAX_STRING) {
+          errors.push(`printed has a key that is not a part id; dropped.`);
+          continue;
+        }
+        if (kept >= MAX_PRINTED_KEYS) {
+          errors.push(
+            `printed lists more than ${MAX_PRINTED_KEYS} parts; the rest were dropped.`,
+          );
+          break;
+        }
+        const raw = rawPrinted[key];
+        if (typeof raw !== 'number' || !Number.isFinite(raw)) {
+          errors.push(`printed["${key}"] is ${describe(raw)}, not a count; dropped.`);
+          continue;
+        }
+        const count = Math.floor(raw);
+        if (count <= 0) continue;
+        if (count > MAX_PRINTED_COUNT) {
+          errors.push(
+            `printed["${key}"] is ${String(raw)}, which is more than anyone has printed; ` +
+              `kept at ${MAX_PRINTED_COUNT}.`,
+          );
+        }
+        printedCounts[key] = Math.min(count, MAX_PRINTED_COUNT);
+        kept += 1;
+      }
+    }
+  }
+
+  // --- photo -----------------------------------------------------------------
+  // The wall photograph's alignment. Field by field like the frame above, and
+  // for the same reason: a field nobody reads back is a setting that survives
+  // one session. Nothing here is reconciled against storage — whether the image
+  // bytes are on THIS machine is not a fact about the layout, and the panel
+  // reports the absence rather than the loader quietly deleting the alignment.
+  let photo: WallPhoto | undefined;
+  const rawPhoto = value['photo'];
+  if (rawPhoto !== undefined) {
+    if (!isPlainObject(rawPhoto)) {
+      errors.push(`photo is ${describe(rawPhoto)}, not a photo; dropped.`);
+    } else {
+      const photoId = readString(rawPhoto['id'], 'photo.id', errors);
+      const pixelWidth = readPositiveInt(rawPhoto['pixelWidth'], 'photo.pixelWidth', errors);
+      const pixelHeight = readPositiveInt(rawPhoto['pixelHeight'], 'photo.pixelHeight', errors);
+      const xMm = readCoordMm(rawPhoto['xMm'], 'photo.xMm', errors);
+      const yMm = readCoordMm(rawPhoto['yMm'], 'photo.yMm', errors);
+      const rawScale = rawPhoto['mmPerPixel'];
+      // NOT through `readCoordMm`: that rounds to a tenth of a millimetre, which
+      // is right for a position on the wall and ruinous for a scale — a photo at
+      // 0.5859 mm per pixel would come back at 0.6, a 2.4 % error, so a 2 m wall
+      // would be drawn 49 mm wide of itself.
+      const scale =
+        typeof rawScale === 'number' && Number.isFinite(rawScale) && rawScale > 0
+          ? rawScale
+          : null;
+      if (scale === null) {
+        errors.push(`photo.mmPerPixel is ${describe(rawScale)}; the photo was dropped.`);
+      }
+      if (photoId !== null && photoId !== '' && pixelWidth !== null && pixelHeight !== null &&
+          scale !== null && xMm !== null && yMm !== null) {
+        const rawOpacity = rawPhoto['opacity'];
+        photo = {
+          id: photoId,
+          name: readString(rawPhoto['name'], 'photo.name', errors) ?? photoId,
+          pixelWidth,
+          pixelHeight,
+          mmPerPixel: clampMmPerPixel(scale, pixelWidth, pixelHeight),
+          calibrated: rawPhoto['calibrated'] === true,
+          xMm,
+          yMm,
+          opacity: clampPhotoOpacity(
+            typeof rawOpacity === 'number' ? rawOpacity : DEFAULT_PHOTO_OPACITY,
+          ),
+          depth: rawPhoto['depth'] === 'front' ? 'front' : 'behind',
+          // Absent means shown: a photo that is in the document at all was put
+          // there to be looked at, and a missing flag must not hide it.
+          visible: rawPhoto['visible'] !== false,
+        };
+      } else {
+        errors.push('photo was dropped because it is not a usable photo.');
+      }
+    }
+  }
+
   const doc: LayoutDoc = {
     schemaVersion: CURRENT_SCHEMA,
     id,
     name,
     wall,
     bedId,
+    ...(customBed ? { customBed } : {}),
     panels,
     items,
     groups,
     ...(library.length > 0 ? { library } : {}),
+    ...(colors ? { colors } : {}),
+    ...(fixingEdits ? { fixingEdits } : {}),
+    ...(Object.keys(printedCounts).length > 0 ? { printed: printedCounts } : {}),
     // Only when there are any. An absent key must round-trip to an absent key,
     // or every layout saved before obstacles existed fails an equality check
     // against its own reload.
     ...(obstacles.length > 0 ? { obstacles } : {}),
     ...(frame ? { frame } : {}),
+    ...(photo ? { photo } : {}),
   };
   return { doc, errors };
 }

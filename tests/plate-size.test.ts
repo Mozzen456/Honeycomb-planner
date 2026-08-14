@@ -14,15 +14,26 @@
 import { describe, expect, it } from 'vitest';
 
 import catalogJson from '../src/catalog/catalog.json';
-import { BEDS, MARGIN_X, PITCH, ROW_STEP } from '../src/core/constants';
-import { cellsBoundsMm, placedPanelCells } from '../src/core/hex';
+import { BEDS, MARGIN_X, MARGIN_Y, PITCH, ROW_STEP } from '../src/core/constants';
+import { cellsBoundsMm, hexToMm, panelCells, placedPanelCells } from '../src/core/hex';
 import {
   generatedPlateSizes, generatedSizeId, maxPlateForBed, plateFootprintMm, solveTiling,
+  type PanelSize,
 } from '../src/core/tiling';
 import type { Catalog } from '../src/core/types';
 
 const catalog = catalogJson as unknown as Catalog;
 const panels = catalog.parts.filter((p) => p.type === 'panel' && p.panel);
+
+/** The seven shipped plates as the solver takes them. */
+const shippedSizes = (): PanelSize[] =>
+  panels.map((p) => ({
+    partId: p.id,
+    columns: p.panel!.columns,
+    rows: p.panel!.rows,
+    widthMm: p.panel!.widthMm,
+    heightMm: p.panel!.heightMm,
+  }));
 
 describe('the printed size of a block', () => {
   it('reproduces every shipped plate from its cell count alone', () => {
@@ -126,8 +137,29 @@ describe('the candidate sizes it offers the solver', () => {
     expect(generatedPlateSizes('no-such-bed')).toEqual([]);
   });
 
+  it('offers every height for every width, or a band cannot finish at the top', () => {
+    // The list used to be truncated to the 120 largest, which on a 350 mm bed
+    // left the shortest 5-column plate at 9 rows — so a band with 7 rows of room
+    // simply stopped, 165 mm below the rest of the wall. A band's WIDTH is
+    // chosen once; its heights have to stack to the top exactly.
+    for (const bed of BEDS) {
+      const max = maxPlateForBed(bed);
+      const sizes = generatedPlateSizes(bed.id);
+      expect(sizes.length, bed.id).toBe(max.columns * max.rows);
+      for (let c = 1; c <= max.columns; c++) {
+        const heights = sizes.filter((s) => s.columns === c).map((s) => s.rows).sort((a, b) => a - b);
+        expect(heights, `${bed.id} width ${c}`).toEqual(
+          Array.from({ length: max.rows }, (_, i) => i + 1),
+        );
+      }
+    }
+  });
+
   it('stays bounded, so the solver does not choke on a big bed', () => {
-    for (const bed of BEDS) expect(generatedPlateSizes(bed.id).length).toBeLessThanOrEqual(120);
+    // The bound is the grid itself: the biggest bed the app knows about makes
+    // 19 × 16. Kept as a number so a bed that somehow offered thousands of
+    // plates would be caught here rather than in a slow solve.
+    for (const bed of BEDS) expect(generatedPlateSizes(bed.id).length).toBeLessThanOrEqual(400);
   });
 });
 
@@ -183,11 +215,21 @@ describe('solving a real wall with plates sized to the printer', () => {
     for (const bed of BEDS) expect(solveOn(bed.id).coverage, bed.id).toBeGreaterThan(0.9);
   });
 
-  it('uses the biggest plate the bed can hold', () => {
+  it('uses the biggest plate the bed can hold that keeps the wall in one phase', () => {
+    // A band starting on an ODD column carries the other phase of the lattice —
+    // its odd columns hang half a pitch down where every other band's reach half
+    // a pitch up — so the honeycomb steps a whole PITCH at that seam, top and
+    // bottom, for the full height of the wall. Bands therefore start on even
+    // columns, which on a bed whose widest plate is an ODD number of columns
+    // costs exactly one of them: 11 → 10 on a 235 mm bed, 19 → 18 on a 400.
+    //
+    // Stated as arithmetic on the bed rather than as the seven numbers it comes
+    // out as, so it still means something if a bed is added.
     for (const bed of BEDS) {
       const max = maxPlateForBed(bed);
+      const usable = max.columns % 2 === 0 ? max.columns : max.columns - 1;
       const biggest = Math.max(0, ...solveOn(bed.id).panels.map((p) => p.columns * p.rows));
-      expect(biggest, bed.id).toBe(max.columns * max.rows);
+      expect(biggest, bed.id).toBe(usable * max.rows);
     }
   });
 
@@ -268,6 +310,99 @@ describe('where the honeycomb sits in the wall', () => {
     for (const [w, h] of walls) {
       const { bounds } = solvedBounds(w, h, generatedPlateSizes('bed256'));
       expect(bounds.minX, `${w}×${h}`).toBeLessThan(2 * MARGIN_X);
+    }
+  });
+});
+
+describe('the honeycomb is ONE honeycomb, top and bottom', () => {
+  /**
+   * The wall's top and bottom edges must be the lattice's own zig-zag and
+   * nothing more.
+   *
+   * A column's lowest cell centre can only sit at a whole number of pitches
+   * (even q) or a half (odd q), so across a wall there are exactly TWO heights
+   * available and they are half a pitch apart. Anything else is a band out of
+   * phase with its neighbours: `panelCells` staggers by −floor(dq/2), so a band
+   * starting on an ODD column leans its odd columns DOWN where every even-origin
+   * band leans them UP, and no whole-row nudge repairs a half-row error. The wall
+   * then steps a full PITCH at that seam, top and bottom, for its whole height —
+   * reported as "the hexagons go one over for a few, then one under for a few",
+   * and reproduced on a 1200 × 900 wall with an MK3S bed, whose widest plate is
+   * 11 columns so every second band started odd.
+   *
+   * Asserted on the extremes of the SILHOUETTE rather than on the band origins,
+   * because that is the thing you look at; a fix that keeps the phase some other
+   * way should pass this unchanged.
+   */
+  const beds = BEDS.map((b) => b.id);
+  const walls: ReadonlyArray<readonly [number, number]> = [
+    [360, 400], [700, 500], [1200, 900], [2400, 1200], [3000, 2000],
+  ];
+
+  const silhouette = (w: number, h: number, bedId: string, available: PanelSize[]) => {
+    const res = solveTiling({
+      wall: { widthMm: w, heightMm: h }, bedId, available, allowRotation: false,
+    });
+    const low = new Map<number, number>();
+    const high = new Map<number, number>();
+    for (const p of res.panels) {
+      for (const c of panelCells(p.origin, p.columns, p.rows)) {
+        const { y } = hexToMm(c);
+        low.set(c.q, Math.min(low.get(c.q) ?? Infinity, y));
+        high.set(c.q, Math.max(high.get(c.q) ?? -Infinity, y));
+      }
+    }
+    return { panels: res.panels.length, low: [...low.values()], high: [...high.values()] };
+  };
+
+  const spread = (ys: readonly number[]): number => Math.max(...ys) - Math.min(...ys);
+
+  for (const [what, sizesFor] of [
+    ['fit to printer', (bedId: string) => generatedPlateSizes(bedId)],
+    ['shipped', () => shippedSizes()],
+  ] as const) {
+    it(`sits every column of the bottom edge on the lattice — ${what}`, () => {
+      for (const bedId of beds) {
+        for (const [w, h] of walls) {
+          const { panels: n, low } = silhouette(w, h, bedId, sizesFor(bedId));
+          if (n === 0) continue; // too small for this bed: a different complaint
+          expect(spread(low), `${bedId} ${w}×${h} bottom`).toBeLessThanOrEqual(PITCH / 2 + 1e-9);
+        }
+      }
+    });
+  }
+
+  it('finishes every band at the same height, with plates sized to the printer', () => {
+    // The top says the same thing about phase AND about whether a band could
+    // reach the wall's top edge at all. Both were broken: the candidate list was
+    // truncated to its 120 largest, so on a 350 mm bed no 5-column plate shorter
+    // than 9 rows existed and the last band stopped 165 mm low.
+    //
+    // Only the generated plates, and that is not a get-out. Seven printed plates
+    // are seven heights (4, 7, 8, 9, 10, 11, 16), which cannot stack to every
+    // wall: a Mini offers 4 and 7 only, so a 4-wide band on a 1200 mm wall
+    // reaches 48 rows where an 8-wide reaches 49. That is the plate set, not the
+    // solver, and `unusedMm.top` is what reports it.
+    for (const bedId of beds) {
+      for (const [w, h] of walls) {
+        const { panels: n, high } = silhouette(w, h, bedId, generatedPlateSizes(bedId));
+        if (n === 0) continue;
+        expect(spread(high), `${bedId} ${w}×${h} top`).toBeLessThanOrEqual(PITCH / 2 + 1e-9);
+      }
+    }
+  });
+
+  it('never hangs a cell below the wall, one-column bands included', () => {
+    // `bandBump` used to ask for `bandColumns >= 2`, reasoning about the odd
+    // columns at the TOP — so a single-column band was left with its cells
+    // centred on y = 0 and half of every one of them off the bottom of the wall.
+    // 360 mm on a Mini is 17 columns: two bands of 8 and one of 1.
+    for (const bedId of beds) {
+      for (const [w, h] of walls) {
+        const { panels: n, low } = silhouette(w, h, bedId, generatedPlateSizes(bedId));
+        if (n === 0) continue;
+        expect(Math.min(...low) - MARGIN_Y, `${bedId} ${w}×${h}`).toBeGreaterThanOrEqual(-1e-9);
+      }
     }
   });
 });

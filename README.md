@@ -21,7 +21,7 @@ Then: set your wall size, pick your printer, hit **Solve panels**, press **Brows
 what you want on the wall, and drag it on from the rail.
 
 ```bash
-npm test          # 893 tests over the pure engines
+npm test          # 1078 tests over the pure engines
 npm run typecheck
 npm run build
 ```
@@ -110,7 +110,7 @@ The UI is a thin shell on top.
 | `src/core/constants.ts` | the measured geometry, and nothing else | — |
 | `src/core/hex.ts` | axial hex math, rotation, occupancy | `tests/hex.test.ts` |
 | `src/core/tiling.ts` | panel tiling solver, seam detection | `tests/tiling.test.ts` |
-| `src/core/bom.ts` | parts-list aggregation and validation | `tests/bom.test.ts` |
+| `src/core/bom.ts` | parts-list aggregation, printed counts, validation | `tests/bom.test.ts` |
 | `src/core/store.ts` | commands, placement rules, undo/redo | `tests/store.test.ts` |
 | `src/core/persist.ts` | save/load/share, hostile-input tolerant | `tests/persist.test.ts` |
 | `src/core/exporters.ts` | CSV, markdown, print page | `tests/exporters.test.ts` |
@@ -151,6 +151,83 @@ are listed separately and each comes with a block of parameters for the OpenSCAD
 customiser in `Customiser/`, which generates the plate. It runs on the same 23.6 mm lattice, so what
 it prints drops straight into the wall.
 
+## A photograph of your wall
+
+A switch is not "about 1200 up" — it is where it is, and the way you find out is to stand in front
+of the wall with a camera. So you can lay a photograph under the plan and drag the blocked zones
+onto the things they represent.
+
+Press `P` for the **Photo** tool and add a picture. Then **Set scale**, and drag between two points
+whose real distance apart you know — the ends of a tape laid against the wall, the width of a door
+frame — and type that distance. The photo scales about the *first* point you clicked, so a corner
+you can name stays exactly where you put it. Until you do this the photo is only *fitted* to the
+wall, which is a guess, and the panel says so.
+
+It shows in both views, at an opacity you set, either **behind** the honeycomb — where the room
+shows through the open cells, which is what you want while placing zones — or **in front** of it,
+for checking a finished plan against the wall it was drawn from.
+
+The alignment is part of the layout: it undoes, it saves, and it travels down a share link. The
+image itself cannot — it lives in this browser. Open the layout somewhere else and it knows exactly
+where the photograph goes and asks you for the picture by name; attach it again and the scale you
+measured is kept.
+
+## Tick off what you have printed
+
+A wall is not printed in one go, so the parts list keeps count. Each line has a **printed** stepper —
+`−`, a number you can type, `+`, and **all** for a whole batch — and the number on the left is what is
+**still to print**. The footer leads with the same figure for the whole wall: *still to print, 130 of
+142*. **Reset printed** starts the count again.
+
+The counts are saved with the layout and travel down a share link, and every export carries them: the
+CSV gains `printed` and `to_print`, the markdown checklist counts down and ticks its own boxes, and
+the printable sheet puts what is left in the quantity column with the finished lines already ticked.
+
+There is deliberately **no print time**. The estimate belongs to whichever machine and profile the
+catalogue was sliced with, so it is wrong for anyone else's printer, and "19 h 15 min" for a garage
+wall is not a number you can act on. Filament is still there — it is what you buy — as a figure for
+the whole job.
+
+## Colour it in
+
+Two swatches at the top set the defaults — one colour for the panels, one for everything that clips
+into them — and the wall repaints in both views. From there:
+
+- **a whole line**: the swatch beside any parts-list line colours everything it counts, so the k1
+  plates can be blue while the rest stay white;
+- **one particular thing**: select parts on the wall and the top bar grows a **Selected** swatch that
+  paints just those.
+
+Clicking a swatch opens a small picker — twelve filament colours, your own through **Custom…**, or a
+hex you type — and **nothing changes until you press OK**; Cancel and Escape throw the choice away.
+The Parts colour covers everything that clips into the wall, including the inserts and wall fixings
+the planner puts in itself, and anything you drop in afterwards arrives in it. Each swatch shows the colour that thing will actually be — its own, or the one it inherits —
+so the parts list doubles as a key to the wall. The × beside a swatch gives it back to the default, and the
+footer lists the colours the build actually uses (a default nothing falls back to is not a spool you
+have to buy). The colours are saved with the layout, travel down a share link, and appear on every
+export, so the sheet at the printer says which filament to load.
+
+## Find a part on the wall
+
+Click any line in the parts list and the wall lights up what it is talking about: a panel line lights
+those plates — in 3D and in the plan — and an accessory line selects its placements. Click the same
+line again, or press Escape, to turn it off.
+
+A plate cut round a light switch or carrying a border is counted on its own line, so it lights up
+from that line and not from the shipped one. What lights up is exactly what the line counts.
+
+## Move the wall fixings
+
+The planner works out where the wall fixings go — spread across the whole assembly at a spacing,
+with a four-cell insert wherever three or four plates meet — and in 3D you can argue with it. Click
+one to pick it, drag it to another cell, or press Delete to take it out; `Ctrl+Z` undoes any of it.
+A junction fastener can be removed but not moved, because its job is to straddle the corner where
+the plates meet.
+
+Your changes ride on the layout, so they survive a re-solve, a save and a share link, and the parts
+list says how many you overruled with a **Reset fixings** button beside it. Take the last fixing off
+a plate and the list warns you that nothing is holding it.
+
 ## What the app enforces
 
 - **Things may overlap, freely and silently.** Accessories bolt onto an insert and stand proud of
@@ -181,11 +258,23 @@ it prints drops straight into the wall.
 | `Alt`+drag, middle-drag | pan |
 | wheel / pinch | zoom |
 
+On the plan, the tools are modal — most of them are drags on empty wall, and a marquee, a
+measurement, a new zone and a photograph being slid about cannot all be that at once. `Esc` always
+returns to Select.
+
+| | |
+|---|---|
+| `V` | select — move parts, and zones by their handles |
+| `M` | measure between two points, snapping (`Shift` turns snapping off) |
+| `B` | drag a blocked zone (`Shift` adds a rectangle to the selected one, making an L) |
+| `P` | the wall photograph — drag it, set its scale, `Delete` takes it off |
+| `E` | border on or off, all four sides |
+
 ---
 
 ## Known limits
 
-- **29 of 51 parts are second-tier** — they bolt or plug into an *insert* rather than clipping to
+- **27 of 51 parts are second-tier** — they bolt or plug into an *insert* rather than clipping to
   the wall. Geometry can measure how wide such a part is but cannot know which cells its
   installer will use, so their footprints are bounding-box estimates, flagged in the UI and in
   `UNKNOWN.md`. Correct them via `overrides.json`, or draw the real footprint in the import dialog.

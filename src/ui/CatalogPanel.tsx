@@ -20,6 +20,7 @@
 import { useMemo, useState } from 'react';
 
 import { isImported } from '../core/userCatalog';
+import { Icon } from './Icon';
 import { PartImage } from './PartImage';
 import type { CatalogPart, PartType } from '../core/types';
 
@@ -94,16 +95,6 @@ const GROUPS: readonly { type: PartType; label: string; note: string }[] = [
 
 function finite(value: number | undefined | null): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
-}
-
-function formatMinutes(value: number | undefined | null): string {
-  const total = Math.round(finite(value));
-  if (total <= 0) return '0 m';
-  const hours = Math.floor(total / 60);
-  const minutes = total % 60;
-  if (hours === 0) return `${minutes} m`;
-  if (minutes === 0) return `${hours} h`;
-  return `${hours} h ${minutes} m`;
 }
 
 function formatGrams(value: number | undefined | null): string {
@@ -207,10 +198,6 @@ function CatalogTile(
               marker is on the tile as well as in the parts list, because this
               is where the choice between two parts is actually made. */}
           {estimated ? <span className="catalog-tile__est">est.</span> : null}
-          {formatMinutes(part.print?.minutes)}
-          <span className="catalog-tile__dot" aria-hidden="true">
-            ·
-          </span>
           {formatGrams(part.print?.grams)}
         </span>
       </div>
@@ -293,14 +280,32 @@ export function CatalogPanel(props: CatalogPanelProps): JSX.Element {
   return (
     <aside className="catalog-panel" aria-label="Parts in this project">
       <header className="catalog-panel__head">
-        <h2 className="catalog-panel__title">This project</h2>
+        {/* Title and count on ONE line. The count used to be a third line under
+            the browse button, which put two numbers ("4 parts", "Browse 47
+            parts") at opposite ends of the header saying different things. */}
+        <div className="catalog-panel__titlerow">
+          <h2 className="catalog-panel__title">This project</h2>
+          {!empty && (
+            <span className="catalog-panel__count tabular-nums">
+              {filtering ? `${matches.length}/${parts.length}` : parts.length}
+            </span>
+          )}
+        </div>
 
+        {/*
+          * Secondary, not primary. This is the way into the library and it is
+          * always here — but a full-width filled blue bar at the top of the rail
+          * put a second primary action on screen beside "Solve panels", and two
+          * primaries mean neither is. The empty state below keeps the filled
+          * button, because there it IS the only thing to do.
+          */}
         <button
           type="button"
-          className="button button--primary catalog-panel__browse"
+          className="button button--subtle catalog-panel__browse"
           onClick={onBrowse}
           title={`Browse all ${catalogSize} parts and add the ones you want`}
         >
+          <Icon name="search" />
           Browse parts…
         </button>
 
@@ -327,35 +332,30 @@ export function CatalogPanel(props: CatalogPanelProps): JSX.Element {
                 title="Clear the filter"
                 onClick={() => onFilterChange('')}
               >
-                ×
+                <Icon name="close" />
               </button>
             ) : null}
           </div>
-        )}
-
-        {!empty && (
-          <p className="catalog-panel__count tabular-nums">
-            {filtering
-              ? `${matches.length} of ${parts.length} parts`
-              : `${parts.length} part${parts.length === 1 ? '' : 's'}`}
-          </p>
         )}
       </header>
 
       <div className="catalog-panel__scroll">
         {empty ? (
           <div className="catalog-panel__start">
+            <span className="catalog-panel__starticon" aria-hidden="true">
+              <Icon name="wall" size="md" />
+            </span>
             <p className="catalog-panel__starttitle">Nothing here yet</p>
             <p className="catalog-panel__startbody">
-              Go shopping: pick the hooks, shelves and bins you want on this wall, and they
-              land here ready to drag on.
+              Pick the hooks, shelves and bins you want on this wall. They land here, ready to
+              drag on.
             </p>
             <button type="button" className="button button--primary" onClick={onBrowse}>
               Browse {catalogSize} parts
             </button>
             <p className="catalog-panel__startnote">
-              Got your own model? Drop an STL or 3MF anywhere on this window — you measure it, give it
-              a photo and line it up, and it joins your library.
+              Got your own model? Drop an STL or 3MF anywhere on this window — you measure it, give
+              it a photo and line it up, and it joins your library.
             </p>
           </div>
         ) : groups.length === 0 ? (

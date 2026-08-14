@@ -20,7 +20,7 @@
 
 import { useMemo, useState } from 'react';
 
-import { BEDS } from '../core/constants';
+import { bedFor } from '../core/constants';
 import {
   customPanelGroups, toCustomiserScad,
 } from '../core/customiser';
@@ -99,7 +99,7 @@ export function ObstaclePanel({ doc, onChange, onFrameChange, onCopy, onDownload
     [groups, doc.panels, doc.frame],
   );
 
-  const bed = BEDS.find((b) => b.id === doc.bedId);
+  const bed = bedFor(doc.bedId, doc.customBed);
 
   const add = (): void => {
     const chosen = OBSTACLE_PRESETS[preset] ?? OBSTACLE_PRESETS[0]!;

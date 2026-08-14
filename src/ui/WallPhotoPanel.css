@@ -1,0 +1,150 @@
+/* The wall photograph's controls, in the parts-list rail beside the zones it
+   exists to help place. Same visual language as `ObstaclePanel`. */
+
+.wallphoto {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-block: var(--space-4);
+  border-block-start: var(--border-width-hair) solid var(--border-subtle);
+}
+
+.wallphoto__title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* "scale not set" — a fitted photo presented as a measured one is the dishonesty
+   this flag exists to prevent, so it is coloured like a warning, not a hint. */
+.wallphoto__flag {
+  padding-inline: var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--warning-bg, var(--surface-3));
+  color: var(--warning-fg, var(--text-secondary));
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-normal);
+}
+
+.wallphoto__hint,
+.wallphoto__meta {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-snug);
+}
+
+.wallphoto__missing {
+  margin: 0;
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--warning-bg, var(--surface-3));
+  color: var(--warning-fg, var(--text-secondary));
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-snug);
+}
+
+.wallphoto__frame {
+  display: block;
+  overflow: hidden;
+  border: var(--border-width-hair) solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.wallphoto__frame img {
+  display: block;
+  inline-size: 100%;
+  /* Capped so a portrait photograph cannot push the zones off the rail. */
+  max-block-size: 9rem;
+  object-fit: cover;
+}
+
+.wallphoto__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.wallphoto__row > span:first-child { min-inline-size: 4.5rem; }
+.wallphoto__row input[type='range'] { flex: 1; min-inline-size: 0; }
+.wallphoto__row output {
+  min-inline-size: 3.5ch;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  text-align: end;
+}
+
+.wallphoto__depth {
+  display: inline-flex;
+  gap: var(--border-width-hair);
+  padding: var(--border-width-hair);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.wallphoto__depth button {
+  min-block-size: var(--control-height-sm);
+  padding-inline: var(--space-3);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+}
+
+.wallphoto__depth button[aria-pressed='true'] {
+  background: var(--accent-bg);
+  color: var(--accent);
+  box-shadow: inset 0 0 0 var(--border-width-hair) var(--accent-border);
+}
+
+.wallphoto__fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.wallphoto__fields label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+}
+
+.wallphoto__fields input {
+  inline-size: 100%;
+  min-inline-size: 0;
+  padding: var(--space-1);
+  border: var(--border-width-hair) solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  text-align: end;
+}
+
+.wallphoto__actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* The file input itself is never shown — the label is the button. */
+.wallphoto__pick { position: relative; overflow: hidden; cursor: pointer; }
+.wallphoto__pick input[type='file'] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}

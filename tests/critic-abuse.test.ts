@@ -992,7 +992,6 @@ describe('catalogue abuse', () => {
     }).not.toThrow();
     const b = bom!;
     for (const line of [...b.printed, ...b.fasteners]) {
-      expect(Number.isFinite(line.minutes), `${line.partId}.minutes = ${line.minutes}`).toBe(true);
       expect(Number.isFinite(line.grams), `${line.partId}.grams = ${line.grams}`).toBe(true);
       expect(Number.isFinite(line.metres), `${line.partId}.metres = ${line.metres}`).toBe(true);
       expect(line.quantity).toBeGreaterThan(0);
@@ -1050,7 +1049,7 @@ describe('catalogue abuse', () => {
       expect(() => computeBom(doc, c as Catalog), JSON.stringify(c)).not.toThrow();
       expect(() => validate(doc, c as Catalog), JSON.stringify(c)).not.toThrow();
       const b = computeBom(doc, c as Catalog);
-      expect(Number.isFinite(b.totals.minutes)).toBe(true);
+      expect(Number.isFinite(b.totals.toPrint)).toBe(true);
       expect(b.issues.length).toBeGreaterThan(0);
     }
   });

@@ -70,7 +70,7 @@
   --neutral-650: #545C64;
   --neutral-700: #4B535B;
   --neutral-750: #3F4652;
-  --neutral-800: #333A41;  /* reserved: dark-theme dividers on raised surfaces */
+  --neutral-800: #333A41;  /* dark-theme cell interior; dividers on raised surfaces */
   --neutral-850: #262C31;
   --neutral-875: #21272C;
   --neutral-900: #1A1F23;
@@ -98,7 +98,7 @@
      fill is two. These are exactly accent @ 10% over the theme's cell colour.
      Recompute them if the accent or the cell colour ever changes. */
   --blue-tint-light: #DAE4EA;  /* = blue-600 @10% over neutral-100 */
-  --blue-tint-dark:  #202D37;  /* = blue-500 @10% over neutral-900 */
+  --blue-tint-dark:  #374652;  /* = blue-500 @10% over neutral-800 */
 
   /* --- Status ramps -------------------------------------------------------
      Three hues, two rungs each: a dark rung for light surfaces, a light rung
@@ -117,6 +117,20 @@
      reads as dirt); dark theme casts true black, because anything else glows. */
   --ink-cool-rgb:  15 20 25;
   --ink-black-rgb:  0  0  0;
+
+  /* --- Third-party brand ---------------------------------------------------
+     Buy Me a Coffee's own colours, for the support link in the title bar and
+     for NOTHING else. They are not part of this product's palette: they belong
+     to somebody else, they are fixed by that owner, and — unlike every other
+     colour in this file — they do NOT respond to the theme, because a brand
+     mark that changes colour with the page stops being the brand mark. Their
+     one legitimate consumer is `.app__coffee` in App.css.
+
+     They live here rather than in that rule for the same reason everything else
+     does: this is the only file allowed to contain a colour literal, and an
+     exception smuggled into a component is how a palette starts to leak. */
+  --bmc-yellow: #FFDD00;
+  --bmc-ink:    #0D0C0C;
 
   /* ===========================================================================
      2. SEMANTIC — the public API. LIGHT THEME (the default).
@@ -210,9 +224,14 @@
   --canvas-panel-tint: var(--neutral-150);  /* the plate between cells */
   --canvas-cell:       var(--neutral-100);  /* a hexagonal cell interior */
   --canvas-cell-hover: var(--blue-tint-light);
-  --canvas-grid:       var(--neutral-550);  /* lattice lines. Theme-invariant:
-                                               this rung clears 3:1 against the
-                                               canvas colours of BOTH themes. */
+  /* Lattice lines. NOT theme-invariant any more, and the reason is worth the
+     line: this rung was chosen because it cleared 3:1 against the canvas
+     colours of both themes, and dark's cell has since moved two rungs lighter
+     (see the note there) to fix an inverted depth ordering. Against the new
+     cell, neutral-550 measures 2.48:1. The premise for sharing the value is
+     gone, so dark takes neutral-450 — which restores the margin on every pair
+     AND is the second thing making a solved wall visible in the plan. */
+  --canvas-grid:       var(--neutral-550);
   --canvas-seam:       var(--neutral-750);  /* boundary between two panels —
                                                heavier than grid because
                                                crossing it is an error (D6) */
@@ -386,7 +405,21 @@
   --icon-size-sm: 1rem;     /* 16px */
   --icon-size-md: 1.25rem;  /* 20px */
 
-  --topbar-height:      2.75rem;  /* 44px — slim, and already a tap target */
+  /* The shell's chrome, in two tiers. The bar used to be ONE row carrying two
+     unrelated kinds of thing at one weight — what this document IS, and the
+     parameters that decide what the next solve produces — so it is split, and
+     each tier gets its own height rather than both sharing a name that fits
+     neither. The title bar is taller because it stacks a name over the wall's
+     own figures; the toolbar holds one row of 32px controls plus its padding. */
+  /* 56px: the logo in the middle of this tier is 48 and the tier carries
+     --space-1 of padding each side. It was 48 while the tier held only text,
+     and leaving it there would not have cropped anything — `min-block-size`
+     would simply have been overrun, and the token would have been describing a
+     bar that no longer existed. */
+  --titlebar-height:    3.5rem;   /* 56px — logo, layout name, document figures */
+  --toolbar-height:     2.75rem;  /* 44px — the wall/printer/solve row */
+  --topbar-height:      var(--titlebar-height);  /* alias: "the bar", for anything
+                                                    that only needs the first tier */
   --panel-width-left:   15rem;    /* 240px — catalogue */
   --panel-width-right:  20rem;    /* 320px — parts list needs room for numbers */
   --panel-width-min:    12rem;
@@ -445,10 +478,21 @@
 
     --canvas-wall:       var(--neutral-975);
     --canvas-panel-tint: var(--neutral-875);
-    --canvas-cell:       var(--neutral-900);
+    /* neutral-800, NOT neutral-900. The ordering above is the point of these
+       three, and dark had two of them the wrong way round: measured, the wall
+       sat at L=0.0042, the CELL at 0.0132 and the plate at 0.0196 — so the
+       opening was darker than the material it is cut through, the reverse of
+       light, and the pair differed by 0.006 in luminance. A solved wall
+       therefore drew as one flat texture: 3472 hexagons you could not see. The
+       light theme runs 0.69 < 0.80 < 0.89; dark now runs 0.0042 < 0.0196 <
+       0.043, which is the same progression with the larger steps a dark ground
+       needs. */
+    --canvas-cell:       var(--neutral-800);
     --canvas-cell-hover: var(--blue-tint-dark);
     --canvas-seam:       var(--neutral-400);
-    /* --canvas-grid is neutral-550 in both themes — see :root. */
+    /* Two rungs lighter than light's, because the cell above moved: neutral-550
+       measures 2.48:1 against it, neutral-450 measures 3.70:1. */
+    --canvas-grid:       var(--neutral-450);
 
     --shadow-rgb: var(--ink-black-rgb);
     --shadow-a1: 0.34;
@@ -493,10 +537,14 @@
 
   --canvas-wall:       var(--neutral-975);
   --canvas-panel-tint: var(--neutral-875);
-  --canvas-cell:       var(--neutral-900);
+  /* neutral-800, not neutral-900 — see the note in the media-query block above:
+     the cell and the plate were the wrong way round in dark, and 0.006 of
+     luminance apart. */
+  --canvas-cell:       var(--neutral-800);
   --canvas-cell-hover: var(--blue-tint-dark);
   --canvas-seam:       var(--neutral-400);
-  /* --canvas-grid is neutral-550 in both themes — see :root. */
+  /* See the note in the media-query block above. */
+  --canvas-grid:       var(--neutral-450);
 
   --shadow-rgb: var(--ink-black-rgb);
   --shadow-a1: 0.34;

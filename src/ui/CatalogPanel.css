@@ -32,13 +32,24 @@
   border-block-end: var(--border-width-hair) solid var(--border-subtle);
 }
 
+.catalog-panel__titlerow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-block-size: var(--control-height-sm);
+}
+
+/* Sized to match the parts list's own title on the other side of the wall — the
+   two panels frame the subject and are peers, so their headings are one size. */
 .catalog-panel__title {
   font-size: var(--font-size-lg);
   font-weight: var(--font-weight-semibold);
   line-height: var(--line-height-tight);
 }
 
-/* The way into the library, and the rail's primary action while it is empty. */
+/* The way into the library. Always here; secondary, because the rail's own
+   primary action is whatever is on the wall. */
 .catalog-panel__browse {
   justify-content: center;
   inline-size: 100%;
@@ -81,11 +92,17 @@
   color: var(--text-primary);
 }
 
+/* A count badge, which is the one thing the pill radius exists for. */
 .catalog-panel__count {
-  color: var(--text-tertiary);
+  flex: none;
+  min-inline-size: var(--space-5);
+  padding-inline: var(--space-2);
+  border-radius: var(--radius-pill);
+  background-color: var(--surface-2);
+  color: var(--text-secondary);
   font-size: var(--font-size-2xs);
-  letter-spacing: var(--letter-spacing-wide);
-  line-height: var(--line-height-snug);
+  line-height: var(--space-4);
+  text-align: center;
 }
 
 /* -----------------------------------------------------------------------------
@@ -130,13 +147,27 @@
   display: grid;
   gap: var(--space-2);
   justify-items: start;
-  padding: var(--space-3) var(--space-1);
+  padding: var(--space-4) var(--space-1);
+}
+
+/* A mark, so the empty rail opens with something to look at rather than with
+   two paragraphs of grey text. The wall's own three cells, at the accent — the
+   rail is where the things that go ON that wall arrive. */
+.catalog-panel__starticon {
+  display: grid;
+  place-items: center;
+  inline-size: var(--space-7);
+  block-size: var(--space-7);
+  margin-block-end: var(--space-1);
+  border-radius: var(--radius-md);
+  background-color: var(--accent-bg);
+  color: var(--accent);
 }
 
 .catalog-panel__starttitle {
-  color: var(--text-secondary);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
 }
 
 .catalog-panel__startbody,

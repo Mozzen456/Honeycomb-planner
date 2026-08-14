@@ -197,6 +197,55 @@ export interface WallSpec {
 }
 
 /**
+ * What colour to print things in.
+ *
+ * Four levels, most specific first: one placed item, everything on a parts-list
+ * line, then the two defaults — one for the plates, one for everything that
+ * clips into them. `colorOfItem` and `colorOfPanel` are the only readers, so
+ * the order lives in one place rather than in each view.
+ *
+ * These are the USER'S colours and are document data, not design tokens: the
+ * rule that `tokens.css` owns every colour governs the app's own chrome, and a
+ * filament choice is a fact about this build. Absent at every level means "as
+ * the theme draws it", which is what an untouched layout has always looked like.
+ *
+ * Stored as `#rrggbb`, validated on the way in — a stored document is user input
+ * by the time it comes back, and an arbitrary string here reaches a canvas
+ * `fillStyle` and a `THREE.Color`.
+ */
+export interface WallColors {
+  /** Every plate, unless a line says otherwise. */
+  panels?: string;
+  /** Every accessory, insert and fastener, unless a line or an item does. */
+  parts?: string;
+  /**
+   * By parts-list LINE — a catalogue part id, or `custom/<shape>|<frame>` for a
+   * generated plate. Keyed that way because the list is where you choose it, and
+   * because a line is exactly the set of things that get printed together.
+   */
+  lines?: Record<string, string>;
+  /** One placed item, by item id: this hook, not every hook. */
+  items?: Record<string, string>;
+}
+
+/**
+ * Where a person overruled the wall-fixing plan.
+ *
+ * `removed` names positions the planner chose and the user took out: a cell for
+ * a single countersunk fixing, or a junction fastener's ANCHOR for the four-cell
+ * one. `added` names cells the user put a fixing in. A move is a removal and an
+ * addition, committed together.
+ *
+ * Removing something the plan no longer proposes is harmless and is KEPT: the
+ * plan moves when the wall is re-solved, and a cell that comes back should come
+ * back removed. The same reasoning as a printed count outliving its line.
+ */
+export interface FixingEdits {
+  removed?: Hex[];
+  added?: Hex[];
+}
+
+/**
  * A straight, closed edge round the honeycomb — the frame the community's builds
  * have, and something no shipped plate can give you.
  *
@@ -226,17 +275,88 @@ export interface WallFrame {
   thicknessMm: number;
 }
 
+/**
+ * A photograph of the real wall, laid under (or over) the plan to line the
+ * blocked zones up against what is actually there.
+ *
+ * A light switch is not at "about 1200 up" — it is where it is, and the way you
+ * find out is to stand in front of the wall with a camera. So the picture is
+ * brought in and SCALED against a length the user measured with a tape: two
+ * points on the photo, one number, and every pixel is then worth a known number
+ * of millimetres. From there a zone can be dragged onto the thing it is meant
+ * to represent instead of onto a coordinate somebody wrote down.
+ *
+ * **The METADATA is on the document; the IMAGE is not.** Everything here is a
+ * few dozen bytes and belongs with the layout — it undoes, it saves, it travels
+ * down a share link. The pixels are megabytes and live in IndexedDB under `id`,
+ * exactly as an imported part's STL does. A layout opened on another machine
+ * therefore arrives with the alignment intact and no picture, which is a state
+ * the app has to be able to say out loud rather than one it should pretend
+ * cannot happen.
+ */
+export interface WallPhoto {
+  /** Key for the stored image bytes, and nothing else. */
+  id: string;
+  /** The file it came from, so a missing image can be asked for by name. */
+  name: string;
+  /** Natural size of the STORED image, which is the downscaled one. */
+  pixelWidth: number;
+  pixelHeight: number;
+  /**
+   * Wall millimetres per image pixel — the whole point of the calibration.
+   *
+   * Set by fitting the photo across the wall to begin with, so it is visible
+   * and draggable straight away, and replaced by a real measurement as soon as
+   * two points and a distance are given.
+   */
+  mmPerPixel: number;
+  /**
+   * Has that measurement actually been taken?
+   *
+   * A fitted photo and a measured one are the same field with very different
+   * standing, and presenting the first as the second is the same dishonesty
+   * `needsReview` exists to prevent in the catalogue.
+   */
+  calibrated: boolean;
+  /** Lower-left corner in wall millimetres, the same frame an `Obstacle` uses. */
+  xMm: number;
+  yMm: number;
+  /** 0–1. Drawn over the wall in both views at exactly this. */
+  opacity: number;
+  /**
+   * In front of the honeycomb or behind it.
+   *
+   * Behind, the photo shows THROUGH the cells and the plate reads as a mask
+   * over the room — which is what you want while placing zones. In front it
+   * covers the plate, for checking a plan against the wall it was drawn from.
+   */
+  depth: 'front' | 'behind';
+  /** Off without losing the alignment — the state you toggle constantly. */
+  visible: boolean;
+}
+
 export interface LayoutDoc {
   schemaVersion: number;
   id: string;
   name: string;
   wall: WallSpec;
   bedId: string;
+  /**
+   * The build plate, when `bedId` is `custom`. Absent for a preset printer.
+   *
+   * On the document rather than beside "Fit to printer" in the shell, because it
+   * is a property of the wall that was PLANNED: a saved layout's plates were cut
+   * to this bed, so a reload that forgot it would show plates it could no longer
+   * explain. Resolve it through `bedFor` and nowhere else.
+   */
+  customBed?: { widthMm: number; depthMm: number };
   panels: PlacedPanel[];
   items: PlacedItem[];
   groups: Group[];
   /** Switches, sockets and pipes the wall has to go round. */
   obstacles?: Obstacle[];
+  /** A photograph of the real wall, scaled and positioned. Absent means none. */
+  photo?: WallPhoto;
   /** Which outer edges carry a frame. Absent means none, which is the default. */
   frame?: WallFrame;
   /**
@@ -246,6 +366,37 @@ export interface LayoutDoc {
    * `projectParts.ts`, which is the only module that reads this field.
    */
   library?: string[];
+  /**
+   * Changes made BY HAND to the wall fixings the planner works out.
+   *
+   * The fixings stay derived — `planFixings` still spreads them across the
+   * assembly at a spacing, which is the whole point of D48 — and this records
+   * only where a person disagreed: positions taken out, and positions put in.
+   * A fixing dragged from one cell to another is one of each.
+   *
+   * Kept as edits rather than as a materialised list because the plan has to
+   * keep answering to the wall: resize it, cut it round a switch, re-solve it,
+   * and the untouched fixings follow, while the three you moved stay moved.
+   * Absent means the plan is exactly as planned.
+   */
+  fixingEdits?: FixingEdits;
+  /**
+   * What colour to print things in. Absent means every colour comes from the
+   * theme, which is what a layout has always looked like. See `WallColors`.
+   */
+  colors?: WallColors;
+  /**
+   * How many of each parts-list line have come off the printer, keyed by
+   * `BomLine.partId` — the build's progress, so the list can say what is LEFT.
+   *
+   * On the document rather than in the browser, for the same reason the wall
+   * photo's alignment is: it belongs to this wall, it travels down a share link,
+   * and it undoes. A count is kept even when it exceeds what the layout now
+   * needs — delete a shelf and put it back and the four you printed are still
+   * printed — so the ceiling is applied when the line is READ, never here.
+   * Absent means nothing has been printed yet.
+   */
+  printed?: Record<string, number>;
 }
 
 // ---------------------------------------------------------------------------
@@ -264,7 +415,9 @@ export interface Issue {
     | 'unknown-part'
     | 'panel-overlap'
     /** Accessories have taken the cells the panel's own wall mounts need. */
-    | 'no-room-for-mounts';
+    | 'no-room-for-mounts'
+    /** Its fixing was removed by hand, so nothing holds this plate to the wall. */
+    | 'panel-unfixed';
   message: string;
   itemIds: string[];
   cells?: Hex[];
@@ -276,20 +429,27 @@ export interface BomLine {
   file: string;
   type: PartType;
   quantity: number;
+  /**
+   * How many of this line are already printed, and how many are still to go.
+   *
+   * `printed` is `doc.printed[partId]` CAPPED at `quantity`, so a line never
+   * reads "8 of 3 printed" after an edit shrank the wall; the document keeps the
+   * larger number in case the parts come back. `toPrint` is what is left, and is
+   * the number the whole feature exists to state.
+   */
+  printed: number;
+  toPrint: number;
   /** LINE TOTALS: the per-unit estimate already multiplied by `quantity`. */
-  minutes: number;
   grams: number;
   metres: number;
   /**
    * Per-unit figures, straight from the catalogue.
    *
    * Present because an exporter that computes them as `total / quantity` is
-   * dividing an already-rounded number: 54.63 minutes each × 6 rounds to 328,
-   * and 328 / 6 prints as 54.6. The sheet you carry to the printer then
-   * disagrees with the catalogue in its last digit for no reason a reader can
-   * see.
+   * dividing an already-rounded number: 4.63 g each × 6 rounds to 27.8, and
+   * 27.8 / 6 prints as 4.6. The sheet you carry to the printer then disagrees
+   * with the catalogue in its last digit for no reason a reader can see.
    */
-  minutesEach: number;
   gramsEach: number;
   metresEach: number;
   supports: boolean;
@@ -308,6 +468,13 @@ export interface BomLine {
    * instead.
    */
   fastenersUnknown: boolean;
+  /**
+   * What to print it in, when somebody has said — `#rrggbb`, resolved through
+   * the four levels in `colors.ts`. Absent means no colour was chosen, which is
+   * not the same as "any colour": one is a decision, the other is its absence,
+   * and the sheet says so.
+   */
+  color?: string;
   /**
    * How many of this insert the WALL already provides, and so are not printed.
    *
@@ -341,7 +508,13 @@ export interface Bom {
   shopping: { item: string; count: number }[];
   totals: {
     parts: number;
-    minutes: number;
+    /**
+     * The build's progress, summed over every printed line: how many of the
+     * `parts` above are done, and how many are still to print. Both are capped
+     * per line before they are added up, so `printed + toPrint === parts`.
+     */
+    printed: number;
+    toPrint: number;
     grams: number;
     metres: number;
     distinctParts: number;

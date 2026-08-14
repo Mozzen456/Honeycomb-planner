@@ -79,27 +79,41 @@ function parseCsv(text: string): string[][] {
   return rows;
 }
 
+/**
+ * One field of a parsed row, BY COLUMN NAME.
+ *
+ * These assertions used to index by position — `row[11]` for grams each — so
+ * adding a column to the sheet moved every expectation in the file silently:
+ * the test still passed on the columns it had not reached and compared the
+ * wrong two afterwards. The header row is the contract, so read through it.
+ */
+function field(rows: string[][], row: string[], column: string): string | undefined {
+  const at = (rows[0] ?? []).indexOf(column);
+  if (at < 0) throw new Error(`no such CSV column: ${column}`);
+  return row[at];
+}
+
 // ---------------------------------------------------------------------------
 // Fixtures
 // ---------------------------------------------------------------------------
 
 /**
- * `bom.ts` writes line *totals* into minutes/grams/metres, so the fixture does
- * too: 4 hooks at 12.5 min / 4.25 g / 1.4 m each.
+ * `bom.ts` writes line *totals* into grams/metres, so the fixture does too:
+ * 4 hooks at 4.25 g / 1.4 m each. Nothing printed yet unless a case says so.
  */
 function line(over: Partial<BomLine> = {}): BomLine {
-  return {
+  const base: BomLine = {
     partId: 'hook-25',
     name: 'Hook 25 mm',
     file: 'models/accessories/hook-25.stl',
     type: 'accessory',
     quantity: 4,
-    minutes: 50,
+    printed: 0,
+    toPrint: 4,
     grams: 17,
     metres: 5.6,
     // Per-unit figures come from the catalogue, not from total / quantity:
-    // 4 hooks at 12.5 min / 4.25 g / 1.4 m each.
-    minutesEach: 12.5,
+    // 4 hooks at 4.25 g / 1.4 m each.
     gramsEach: 4.25,
     metresEach: 1.4,
     supports: false,
@@ -107,8 +121,14 @@ function line(over: Partial<BomLine> = {}): BomLine {
     estimated: false,
     fastenersUnknown: false,
     providedBySockets: 0,
-    ...over,
   };
+  const merged = { ...base, ...over };
+  // `toPrint` follows the quantity and the printed count the way `bom.ts` makes
+  // it, unless the case states one — otherwise every fixture that overrides the
+  // quantity would silently describe an impossible line.
+  return over.toPrint === undefined
+    ? { ...merged, toPrint: Math.max(0, merged.quantity - merged.printed) }
+    : merged;
 }
 
 const NASTY_NAME = 'Hook, 25mm "long"';
@@ -116,19 +136,19 @@ const NASTY_NAME = 'Hook, 25mm "long"';
 function makeBom(over: Partial<Bom> = {}): Bom {
   return {
     printed: [
-      line({ partId: 'panel-7x8', name: 'Panel 7 × 8', type: 'panel', quantity: 2, minutes: 480, grams: 210, metres: 70, file: 'models/panels/panel-7x8.stl' }),
+      line({ partId: 'panel-7x8', name: 'Panel 7 × 8', type: 'panel', quantity: 2, grams: 210, metres: 70, file: 'models/panels/panel-7x8.stl' }),
       line(),
       line({ partId: 'bin-s', name: NASTY_NAME, quantity: 4, file: 'models/bins/bin, small.stl' }),
     ],
     fasteners: [
-      line({ partId: 'insert-std', name: 'Standard insert', type: 'insert', quantity: 24, minutes: 3, grams: 1.2, metres: 0.4, file: 'models/hardware/insert.stl' }),
+      line({ partId: 'insert-std', name: 'Standard insert', type: 'insert', quantity: 24, grams: 1.2, metres: 0.4, file: 'models/hardware/insert.stl' }),
     ],
     shopping: [
       { item: 'M4 × 30 screw', count: 12 },
       { item: 'Wall plug, 8 mm "brown"', count: 12 },
     ],
     fixings: { count: 0, junctions: 0, spacingMm: 220, perSquareMetre: 0, starvedPanelIds: [] },
-    totals: { parts: 33, minutes: 1155, grams: 470.5, metres: 158.4, distinctParts: 4 },
+    totals: { parts: 33, printed: 0, toPrint: 33, grams: 470.5, metres: 158.4, distinctParts: 4 },
     issues: [],
     ...over,
   };
@@ -158,6 +178,10 @@ describe('toCsv', () => {
     expect(rows[0]).toEqual([
       'section',
       'quantity',
+      // How far through the build you are, so the spreadsheet answers the same
+      // question the panel does: what is still to print.
+      'printed',
+      'to_print',
       'part_id',
       'part',
       'type',
@@ -168,10 +192,10 @@ describe('toCsv', () => {
       'fastener_count_unknown',
       // Why a fastener line is not higher: the wall's own sockets do that job.
       'already_in_the_wall',
-      'minutes_each',
+      // What to load in the printer, when somebody has said.
+      'color',
       'grams_each',
       'metres_each',
-      'minutes_total',
       'grams_total',
       'metres_total',
     ]);
@@ -191,7 +215,7 @@ describe('toCsv', () => {
 
   it('round-trips a part named `Hook, 25mm "long"` through a CSV parser', () => {
     const rows = parseCsv(toCsv(makeBom()));
-    const names = rows.map((r) => r[3]);
+    const names = rows.map((r) => field(rows, r, 'part'));
     expect(names).toContain(NASTY_NAME);
   });
 
@@ -204,13 +228,13 @@ describe('toCsv', () => {
   it('round-trips a name containing a newline', () => {
     const weird = 'Two\nlines';
     const rows = parseCsv(toCsv(makeBom({ printed: [line({ name: weird })], fasteners: [], shopping: [] })));
-    expect(rows[1]![3]).toBe(weird);
+    expect(field(rows, rows[1]!, 'part')).toBe(weird);
   });
 
   it('round-trips a name that is only a comma, and a name that is only a quote', () => {
     for (const name of [',', '"', '""', 'a,b,c', '"quoted"', ',,,\r\n,,,']) {
       const rows = parseCsv(toCsv(makeBom({ printed: [line({ name })], fasteners: [], shopping: [] })));
-      expect(rows[1]![3], JSON.stringify(name)).toBe(name);
+      expect(field(rows, rows[1]!, 'part'), JSON.stringify(name)).toBe(name);
     }
   });
 
@@ -222,13 +246,33 @@ describe('toCsv', () => {
   it('carries per-unit and total figures, and they are consistent', () => {
     const rows = parseCsv(toCsv(makeBom({ printed: [line()], fasteners: [], shopping: [] })));
     const row = rows[1]!;
-    expect(row[1]).toBe('4'); // quantity
-    expect(row[11]).toBe('12.5'); // minutes each, from the catalogue
-    expect(row[14]).toBe('50'); // minutes total, straight from the BOM line
-    expect(row[12]).toBe('4.25'); // grams each
-    expect(row[15]).toBe('17');
-    expect(row[13]).toBe('1.4'); // metres each
-    expect(row[16]).toBe('5.6');
+    const get = (name: string): string | undefined => field(rows, row, name);
+    expect(get('quantity')).toBe('4');
+    expect(get('grams_each')).toBe('4.25'); // from the catalogue
+    expect(get('grams_total')).toBe('17');
+    expect(get('metres_each')).toBe('1.4');
+    expect(get('metres_total')).toBe('5.6');
+  });
+
+  it('carries the colour a line is to be printed in, and leaves it empty otherwise', () => {
+    const painted = parseCsv(
+      toCsv(makeBom({ printed: [line({ color: '#ff8800' })], fasteners: [], shopping: [] })),
+    );
+    expect(field(painted, painted[1]!, 'color')).toBe('#ff8800');
+
+    const plain = parseCsv(toCsv(makeBom({ printed: [line()], fasteners: [], shopping: [] })));
+    // Not "#000000", and not "none": no colour chosen is the absence of a
+    // decision, and a spreadsheet column that invents one would be a lie.
+    expect(field(plain, plain[1]!, 'color')).toBe('');
+  });
+
+  it('carries the printed count and what is left of the line', () => {
+    const rows = parseCsv(
+      toCsv(makeBom({ printed: [line({ printed: 3 })], fasteners: [], shopping: [] })),
+    );
+    expect(field(rows, rows[1]!, 'quantity')).toBe('4');
+    expect(field(rows, rows[1]!, 'printed')).toBe('3');
+    expect(field(rows, rows[1]!, 'to_print')).toBe('1');
   });
 
   /**
@@ -241,8 +285,8 @@ describe('toCsv', () => {
     const rows = parseCsv(
       toCsv(makeBom({ printed: [line({ quantity: 0 })], fasteners: [], shopping: [] })),
     );
-    expect(rows[1]![11]).toBe('12.5');
-    expect(rows[1]![12]).toBe('4.25');
+    expect(field(rows, rows[1]!, 'grams_each')).toBe('4.25');
+    expect(field(rows, rows[1]!, 'metres_each')).toBe('1.4');
   });
 
   it('marks a bounded footprint and a modelled print estimate', () => {
@@ -255,20 +299,18 @@ describe('toCsv', () => {
         shopping: [],
       })),
     );
-    expect(rows[0]![7]).toBe('footprint_estimated');
-    expect(rows[0]![8]).toBe('print_estimated');
-    expect(rows[1]![7]).toBe('yes');
-    expect(rows[1]![8]).toBe('yes');
+    expect(field(rows, rows[1]!, 'footprint_estimated')).toBe('yes');
+    expect(field(rows, rows[1]!, 'print_estimated')).toBe('yes');
   });
 
   it('records the part id, type, file and support flag', () => {
     const rows = parseCsv(toCsv(makeBom({ printed: [line({ supports: true })], fasteners: [], shopping: [] })));
     const row = rows[1]!;
     expect(row[0]).toBe('printed');
-    expect(row[2]).toBe('hook-25');
-    expect(row[4]).toBe('accessory');
-    expect(row[5]).toBe('models/accessories/hook-25.stl');
-    expect(row[6]).toBe('yes');
+    expect(field(rows, row, 'part_id')).toBe('hook-25');
+    expect(field(rows, row, 'type')).toBe('accessory');
+    expect(field(rows, row, 'file')).toBe('models/accessories/hook-25.stl');
+    expect(field(rows, row, 'supports')).toBe('yes');
   });
 
   it('separates fasteners and bought hardware into their own sections', () => {
@@ -277,9 +319,14 @@ describe('toCsv', () => {
     expect(sections).toContain('printed');
     expect(sections).toContain('fastener');
     expect(sections).toContain('shopping');
-    const shopping = rows.find((r) => r[0] === 'shopping' && r[3] === 'Wall plug, 8 mm "brown"');
+    const shopping = rows.find(
+      (r) => r[0] === 'shopping' && field(rows, r, 'part') === 'Wall plug, 8 mm "brown"',
+    );
     expect(shopping).toBeDefined();
     expect(shopping![1]).toBe('12');
+    // Bought, not printed: the progress columns are blank rather than zeroed.
+    expect(field(rows, shopping!, 'printed')).toBe('');
+    expect(field(rows, shopping!, 'to_print')).toBe('');
   });
 
   it('survives an empty BOM', () => {
@@ -288,7 +335,7 @@ describe('toCsv', () => {
       fasteners: [],
       shopping: [],
       fixings: { count: 0, junctions: 0, spacingMm: 220, perSquareMetre: 0, starvedPanelIds: [] },
-    totals: { parts: 0, minutes: 0, grams: 0, metres: 0, distinctParts: 0 },
+    totals: { parts: 0, printed: 0, toPrint: 0, grams: 0, metres: 0, distinctParts: 0 },
       issues: [],
     });
     expect(parseCsv(csv)).toHaveLength(1); // header only
@@ -306,8 +353,8 @@ describe('toMarkdownChecklist', () => {
     const text = md();
     const head = text.slice(0, text.indexOf('## '));
     expect(head).toContain('# Garage wall');
-    expect(head).toContain('| Print time |');
-    expect(head).toContain('19 h 15 min'); // 1155 minutes
+    expect(head).toContain('| Still to print |');
+    expect(head).toContain('| 33 |'); // nothing printed yet, so all 33 are left
     expect(head).toContain('470.5 g');
   });
 
@@ -336,9 +383,23 @@ describe('toMarkdownChecklist', () => {
     expect(panels).not.toContain('Hook 25 mm');
   });
 
-  it('shows quantity, total time and total filament per line', () => {
+  it('shows what is left to print and the total filament per line', () => {
     const text = md();
-    expect(text).toContain('**4 ×** Hook 25 mm — 50 min, 17 g');
+    expect(text).toContain('- [ ] **4 ×** Hook 25 mm — 17 g');
+  });
+
+  it('counts down as a line is printed, and ticks its box when it is done', () => {
+    const partly = toMarkdownChecklist(
+      makeBom({ printed: [line({ printed: 3 })], fasteners: [], shopping: [] }),
+      makeDoc(),
+    );
+    expect(partly).toContain('- [ ] **1 of 4 ×** Hook 25 mm — 3 of 4 printed, 17 g');
+
+    const done = toMarkdownChecklist(
+      makeBom({ printed: [line({ printed: 4 })], fasteners: [], shopping: [] }),
+      makeDoc(),
+    );
+    expect(done).toContain('- [x] **0 of 4 ×** Hook 25 mm — all printed, 17 g');
   });
 
   it('says so explicitly when a section is empty', () => {
@@ -392,13 +453,13 @@ describe('toMarkdownChecklist', () => {
         fasteners: [],
         shopping: [],
         fixings: { count: 0, junctions: 0, spacingMm: 220, perSquareMetre: 0, starvedPanelIds: [] },
-    totals: { parts: 0, minutes: 0, grams: 0, metres: 0, distinctParts: 0 },
+    totals: { parts: 0, printed: 0, toPrint: 0, grams: 0, metres: 0, distinctParts: 0 },
         issues: [],
       },
       makeDoc({ name: '' }),
     );
     expect(text).toContain('# Untitled layout');
-    expect(text).toContain('0 min');
+    expect(text).toContain('| Still to print | 0 |');
     expect(text.split('_Nothing in this section._')).toHaveLength(5);
   });
 });
@@ -453,7 +514,7 @@ describe('toPrintableHtml', () => {
     expect(text).toContain('>Accessories<');
     expect(text).toContain('>Inserts &amp; fasteners<');
     expect(text).toContain('>Shopping list<');
-    expect(text).toContain('19 h 15 min');
+    expect(text).toContain('<dt>To print</dt><dd>33</dd>');
   });
 
   it('shows per-line totals, not per-unit figures', () => {
@@ -461,8 +522,25 @@ describe('toPrintableHtml', () => {
       makeBom({ printed: [line()], fasteners: [], shopping: [] }),
       makeDoc(),
     );
-    expect(text).toContain('50 min'); // the line total, not 12.5 per unit
-    expect(text).toContain('17 g');
+    expect(text).toContain('17 g'); // the line total, not 4.25 per unit
+  });
+
+  it('prints what is LEFT in the quantity column, with the box already ticked when done', () => {
+    const partly = toPrintableHtml(
+      makeBom({ printed: [line({ printed: 3 })], fasteners: [], shopping: [] }),
+      makeDoc(),
+    );
+    expect(partly).toContain('<td class="qty">1</td>');
+    expect(partly).toContain('3 of 4');
+    // The stylesheet names the class too, so look for the CELL, not the word.
+    expect(partly).not.toContain('<td class="tick tick--done">');
+
+    const done = toPrintableHtml(
+      makeBom({ printed: [line({ printed: 4 })], fasteners: [], shopping: [] }),
+      makeDoc(),
+    );
+    expect(done).toContain('<td class="qty">0</td>');
+    expect(done).toContain('<td class="tick tick--done">');
   });
 
   it('escapes user text — a part name cannot inject markup', () => {
@@ -502,7 +580,7 @@ describe('toPrintableHtml', () => {
         fasteners: [],
         shopping: [],
         fixings: { count: 0, junctions: 0, spacingMm: 220, perSquareMetre: 0, starvedPanelIds: [] },
-    totals: { parts: 0, minutes: 0, grams: 0, metres: 0, distinctParts: 0 },
+    totals: { parts: 0, printed: 0, toPrint: 0, grams: 0, metres: 0, distinctParts: 0 },
         issues: [],
       },
       makeDoc(),

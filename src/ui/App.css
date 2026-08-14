@@ -1,9 +1,21 @@
-/* App shell layout. Tokens only — no colour, size or duration literals. */
+/* =============================================================================
+   App shell — chrome, the button component, and the two-tier header
+   =============================================================================
 
-/* `auto` rather than a fixed --topbar-height: the bar wraps to a second line on
-   a narrow window, and a fixed row height cropped it. It still measures exactly
-   --topbar-height when it fits on one line, which is every desktop width. */
+   Tokens only: no colour, size or duration literals anywhere in this file.
+
+   The shell reads as three surfaces and one subject. The subject is the WALL,
+   which is a hole in the app rather than a card on it — so the chrome around it
+   is quiet, bordered rather than shadowed, and every boundary between chrome and
+   canvas is drawn with the same weight (`--border-strong`, which the rail and
+   the parts list already use for their own edges).
+   ============================================================================= */
+
 .app {
+  /* `auto` rather than the header's token heights: both tiers wrap to a second
+     line on a narrow window, and a fixed row height cropped them. Each still
+     measures exactly its token height when it fits, which is every desktop
+     width. */
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   block-size: 100dvh;
@@ -13,117 +25,53 @@
   overflow: hidden;
 }
 
-/* ---------- top bar ---------- */
+/* -----------------------------------------------------------------------------
+   Icons
+   -----------------------------------------------------------------------------
+   `Icon.tsx` draws every one of these; this is only their size. They are stroked
+   and inherit `currentColor`, which is what lets one glyph sit in a ghost
+   button, a primary button and a danger row without three variants of it.
+   -------------------------------------------------------------------------- */
 
-/* Wrapping, not scrolling or hiding.
-   At 1024px the bar overflowed and took `Solve panels` and the 3D/Plan toggle
-   off the end of it — the primary action in the product, invisible on the
-   tablet the brief asked it to work on. Nothing here is optional enough to
-   hide, so the bar takes a second line instead. */
-.app__bar {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--space-2) var(--space-4);
-  min-block-size: var(--topbar-height);
-  padding-inline: var(--space-4);
-  padding-block: var(--space-1);
-  border-block-end: var(--border-width-hair) solid var(--border-subtle);
-  background: var(--surface-1);
-  min-inline-size: 0;
+/* `fill: none` has to be a RULE, not the `fill="none"` attribute the component
+   already carries. base.css sets `svg { fill: currentColor }` for the app's other
+   inline SVG, and a presentation attribute loses to any stylesheet declaration —
+   so every stroked icon came out as a solid blob, which is exactly what a
+   filled-in "undo" arrow looks like. */
+.icon {
+  display: block;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
 }
 
-.app__brand {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex: 0 0 auto;
-}
+.icon--sm { inline-size: var(--icon-size-sm); block-size: var(--icon-size-sm); }
+.icon--md { inline-size: var(--icon-size-md); block-size: var(--icon-size-md); }
 
-/* A single hexagon as the mark. The product is a hex grid; anything else would
-   be decoration for its own sake. */
-.app__mark {
-  inline-size: var(--space-4);
-  block-size: var(--space-4);
-  background: var(--accent);
-  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
-}
+/* -----------------------------------------------------------------------------
+   The button component
+   -----------------------------------------------------------------------------
+   base.css strips every bare <button> deliberately and leaves the component to
+   the app. This is that component, and it is the ONLY definition of button
+   chrome: the header, the parts list's export row, the library, the import
+   dialog and the inspector all resolve here.
 
-.app__name {
-  inline-size: 22ch;
-  padding: var(--space-1) var(--space-2);
-  border: var(--border-width-hair) solid transparent;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-primary);
-  font-family: var(--font-sans);
-  font-size: var(--font-size-md);
-  font-weight: var(--font-weight-medium);
-}
+   Four weights, and choosing between them is the whole point — a row in which
+   every button is bordered at the same strength is a list, not a hierarchy:
 
-.app__name:hover { border-color: var(--border-subtle); }
-.app__name:focus-visible {
-  outline: var(--focus-ring-width) solid var(--focus-ring-color);
-  outline-offset: var(--focus-ring-offset);
-}
+     --primary  the one action this region exists for. At most one per group.
+     (default)  a real, bordered secondary action.
+     --subtle   an action that is always available but is not what you came for.
+                A tinted fill and NO border, so a row of them reads as one strip
+                rather than as five boxed decisions.
+     --ghost    chrome-free until hovered: toolbar and list-row actions.
+   -------------------------------------------------------------------------- */
 
-.app__wall-controls,
-.app__actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-inline-size: 0;
-}
-
-.app__wall-controls { flex: 1 1 auto; flex-wrap: wrap; }
-.app__actions { flex: 0 0 auto; flex-wrap: wrap; }
-
-.app__wall-controls label,
-.app__actions label {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  color: var(--text-tertiary);
-  font-size: var(--font-size-xs);
-  white-space: nowrap;
-}
-
-/* Wide enough for a five-digit millimetre value AND the spin buttons. At 7ch
-   the browser clipped "2400" to "24", which reads as a wrong wall size rather
-   than a narrow field. */
-.app__wall-controls input[type='number'] {
-  inline-size: 9ch;
-  padding-inline-end: var(--space-1);
-  font-variant-numeric: var(--font-numeric-tabular);
-  /* The label around them is tertiary grey; without this the two most important
-     editable numbers in the bar inherit it and read as disabled. */
-  color: var(--text-primary);
-}
-
-.app__wall-controls select { color: var(--text-primary); }
-
-.app__unit {
-  color: var(--text-tertiary);
-  font-size: var(--font-size-xs);
-}
-
-/* ---------- buttons ----------
-   base.css deliberately strips every <button> and leaves the component to the
-   app. Nothing ever defined it, so the top bar shipped 20px unpadded text
-   beside 32px rounded inputs — the single loudest "unfinished" tell in the
-   product.
-
-   `.button` is that component, and it is now the only definition of button
-   chrome in the app: the top bar, the import control, the BOM's export row and
-   the import dialog all resolve to this rule. Three of those used to hand-roll
-   their own, which is why the export row disagreed with the import control
-   about font size by a pixel. */
-.button,
-.app__bar button,
-.app__import {
+.button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: var(--space-2);
   block-size: var(--control-height-md);
   padding-inline: var(--space-3);
   border: var(--border-width-hair) solid var(--border-default);
@@ -141,95 +89,370 @@
               border-color var(--duration-fast) var(--ease-standard);
 }
 
-.button:hover:not(:disabled),
-.app__bar button:hover:not(:disabled),
-.app__import:hover {
+.button:hover:not(:disabled) {
   background: var(--surface-2);
   color: var(--text-primary);
   border-color: var(--border-strong);
 }
 
-.button:active:not(:disabled),
-.app__bar button:active:not(:disabled) { background: var(--surface-3); }
+.button:active:not(:disabled) { background: var(--surface-3); }
 
-.button:disabled,
-.app__bar button:disabled {
+.button:disabled {
   color: var(--text-disabled);
   cursor: default;
 }
 
-.button:focus-visible,
-.app__bar button:focus-visible {
+.button:focus-visible {
   outline: var(--focus-ring-width) solid var(--focus-ring-color);
   outline-offset: var(--focus-ring-offset);
 }
 
-.button--primary,
-.app__primary {
+/* An icon inside a button is quieter than its word: at full strength a 16px
+   glyph out-weighs 13px of text beside it and the row reads as icons with
+   captions. It comes up to full strength with the label on hover. */
+.button .icon { opacity: 0.75; }
+.button:hover:not(:disabled) .icon,
+.button--primary .icon { opacity: 1; }
+
+.button--primary {
   background: var(--accent);
   color: var(--accent-on);
   border-color: var(--accent);
 }
 
-.button--primary:hover:not(:disabled),
-.app__bar .app__primary:hover {
+.button--primary:hover:not(:disabled) {
   background: var(--accent-hover);
   border-color: var(--accent-hover);
   color: var(--accent-on);
 }
-.button--primary:active:not(:disabled),
-.app__bar .app__primary:active { background: var(--accent-active); }
+
+.button--primary:active:not(:disabled) { background: var(--accent-active); }
 
 /* The standard ring is the accent colour, which vanishes on an accent-filled
    button. Offsetting it outward keeps one ring for the whole app while still
    being visible here. */
-.button--primary:focus-visible,
-.app__bar .app__primary:focus-visible {
-  outline-offset: var(--space-0-5);
+.button--primary:focus-visible { outline-offset: var(--space-0-5); }
+
+.button--subtle {
+  border-color: transparent;
+  background: var(--surface-2);
+  color: var(--text-secondary);
 }
 
-/* Segmented 3D / Plan switch. */
-.app__viewtoggle {
-  display: inline-flex;
-  border: var(--border-width-hair) solid var(--border-default);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
+.button--subtle:hover:not(:disabled) {
+  border-color: transparent;
+  background: var(--surface-3);
+  color: var(--text-primary);
 }
 
-.app__bar .app__viewtoggle button {
-  border: none;
-  border-radius: var(--radius-none);
+.button--ghost {
+  border-color: transparent;
   background: transparent;
-  padding-inline: var(--space-3);
+  color: var(--text-secondary);
 }
 
-.app__bar .app__viewtoggle button[aria-pressed='true'] {
+.button--ghost:hover:not(:disabled) {
+  border-color: transparent;
+  background: var(--surface-2);
+  color: var(--text-primary);
+}
+
+.button--danger:hover:not(:disabled) {
+  border-color: var(--danger-border);
+  background: var(--danger-bg);
+  color: var(--danger-fg);
+}
+
+/* A denser button for a panel row, where the 32px default stacks up fast. */
+.button--sm {
+  block-size: var(--control-height-sm);
+  padding-inline: var(--space-2);
+  font-size: var(--font-size-xs);
+}
+
+/* -----------------------------------------------------------------------------
+   Icon buttons
+   -----------------------------------------------------------------------------
+   Square, chrome-free, one glyph, and the label carried by `aria-label` and
+   `title` rather than by text. Used only where the action is either universally
+   known (undo, redo, theme) or opens something that names itself.
+   -------------------------------------------------------------------------- */
+
+.iconbutton {
+  display: inline-grid;
+  place-items: center;
+  inline-size: var(--control-height-md);
+  block-size: var(--control-height-md);
+  border: var(--border-width-hair) solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-standard),
+              color var(--duration-fast) var(--ease-standard);
+}
+
+.iconbutton:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--text-primary);
+}
+
+.iconbutton:active:not(:disabled) { background: var(--surface-3); }
+
+.iconbutton:disabled {
+  color: var(--text-disabled);
+  cursor: default;
+}
+
+.iconbutton[aria-expanded='true'] {
   background: var(--accent-bg);
   color: var(--accent);
 }
 
-/* File inputs are unstylable, so the input is hidden and the label is the
-   control. The label keeps the real focus ring via :focus-within. */
+.iconbutton:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* -----------------------------------------------------------------------------
+   Header — tier 1, the title bar
+   -----------------------------------------------------------------------------
+   What this DOCUMENT is, and what you can do to the app. Nothing here changes
+   what the next solve produces; everything that does is in the tier below.
+   -------------------------------------------------------------------------- */
+
+/* One element, two tiers. The boundary between the header and the canvas is
+   drawn at the same weight as the rail's and the parts list's own edges, so the
+   three chrome-to-wall boundaries in the shell match. */
+.app__header {
+  background: var(--surface-1);
+  border-block-end: var(--border-width-hair) solid var(--border-strong);
+  min-inline-size: 0;
+}
+
+.app__titlebar,
+.app__toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  padding-inline: var(--space-4);
+  min-inline-size: 0;
+}
+
+.app__titlebar {
+  gap: var(--space-2) var(--space-3);
+  min-block-size: var(--titlebar-height);
+  padding-block: var(--space-1);
+  border-block-end: var(--border-width-hair) solid var(--border-subtle);
+}
+
+/* `0 1 auto`, not `1 1 auto`. The brand used to absorb every spare pixel in the
+   bar, which left the wordmark below nothing to centre itself in. */
+.app__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 0 1 auto;
+  min-inline-size: 0;
+}
+
+/* A single hexagon as the mark. The product is a hex grid; anything else would
+   be decoration for its own sake. */
+.app__mark {
+  inline-size: var(--icon-size-md);
+  block-size: var(--icon-size-md);
+  flex: none;
+  background: var(--accent);
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+}
+
+.app__identity {
+  display: grid;
+  gap: var(--space-0-5);
+  min-inline-size: 0;
+}
+
+/* The layout name, styled as the page's title rather than as a form field: no
+   chrome until you hover it, which is what says it is editable without making
+   the top-left corner of the app look like a search box. */
+.app__name {
+  inline-size: 22ch;
+  max-inline-size: 100%;
+  padding: var(--space-0-5) var(--space-1);
+  margin-inline-start: calc(-1 * var(--space-1)); /* optical: the text lines up
+                                                     with the meta line below */
+  border: var(--border-width-hair) solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+  /* base.css gives text inputs a 32px minimum and a surface; a title is not a
+     field until it is being edited. */
+  min-block-size: 0;
+}
+
+.app__name:hover {
+  border-color: var(--border-subtle);
+  background: var(--surface-2);
+}
+
+.app__name:focus {
+  border-color: var(--border-default);
+  background: var(--surface-2);
+}
+
+.app__name:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* What the title is describing, in the document's own figures. Tabular, so a
+   wall being resized does not jitter the line under the name. */
+.app__docmeta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-2xs);
+  letter-spacing: var(--letter-spacing-wide);
+  line-height: var(--line-height-none);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app__docmeta-sep { opacity: 0.6; }
+
+/* The logo.
+   -----------------------------------------------------------------------------
+   Centred by `margin-inline: auto`, which in a flex row splits the FREE space
+   evenly on either side of one item — so it sits in the middle of the gap
+   between the document and the actions, and it stays there as either of them
+   changes width. A fixed centre (a 3-column grid, absolute positioning) would
+   be centred on the WINDOW instead, which drifts out of that gap as soon as the
+   two blocks are uneven, and neither survives the bar wrapping.
+
+   Sized by HEIGHT, with the width following the artwork's own 6.095:1 ratio, so
+   the one number to change is `--app-logo-height`. The master file carries a
+   31 x 64 px transparent border; both variants here are cropped to their own
+   content, which is most of what makes the logo look big rather than the box
+   around it being big. */
+.app__logo {
+  --app-logo-height: var(--space-7);            /* 48px */
+  --app-logo-ratio: 6.095;
+
+  flex: 0 0 auto;
+  margin-inline: auto;
+  block-size: var(--app-logo-height);
+  inline-size: calc(var(--app-logo-height) * var(--app-logo-ratio));
+  /* The artwork is wider than the space on a mid-size window; it scales down
+     rather than pushing the actions off the end. `contain` keeps the ratio. */
+  max-inline-size: 100%;
+  background-image: url('./assets/honeycomb-logo.png');
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+}
+
+/* The dark artwork, chosen through the same two-block pattern as every themed
+   token: the OS preference applies unless the user has explicitly chosen light,
+   and an explicit choice wins in both directions. The two rules are identical
+   on purpose — keep them in step.
+
+   Only the NEUTRALS differ between the two files. The supplied logo letters its
+   name in dark grey, which is invisible on a near-black bar; the dark variant
+   lifts every desaturated pixel into the light half of the ramp and leaves the
+   gold exactly as drawn, so the brand colour is the one thing that does not
+   move between themes. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .app__logo {
+    background-image: url('./assets/honeycomb-logo-dark.png');
+  }
+}
+
+:root[data-theme='dark'] .app__logo {
+  background-image: url('./assets/honeycomb-logo-dark.png');
+}
+
+.app__titleactions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+}
+
+/* Undo and redo are one control with two halves, so they sit tight together and
+   the gap goes outside the pair. */
+.app__actiongroup {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-0-5);
+}
+
+.app__actiondivider {
+  inline-size: var(--border-width-hair);
+  block-size: var(--icon-size-md);
+  margin-inline: var(--space-1);
+  background: var(--border-subtle);
+}
+
+/* Buy Me a Coffee.
+   -----------------------------------------------------------------------------
+   The one control in the app that is deliberately NOT on the palette: it carries
+   the service's own yellow in both themes, because a brand mark that follows the
+   page's theme stops being recognisable, which is the only thing it is for. It
+   does not take `.button` for the same reason — that component's whole job is to
+   look like the rest of this app.
+
+   Everything else about it is ordinary: the same height, radius and transition
+   as its neighbours, so it sits in the row rather than on top of it. */
+.app__coffee {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  block-size: var(--control-height-md);
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--bmc-yellow);
+  color: var(--bmc-ink);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-none);
+  white-space: nowrap;
+  /* base.css underlines every <a>; this one is a button, not prose. */
+  text-decoration: none;
+  transition: filter var(--duration-fast) var(--ease-standard);
+}
+
+/* Hover on a fixed brand colour is a brightness change, not a different
+   colour — there is no second yellow to move to that is still their yellow. */
+.app__coffee:hover { filter: brightness(1.08); color: var(--bmc-ink); }
+.app__coffee:active { filter: brightness(0.94); }
+
+.app__coffee:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.app__coffee .icon { opacity: 1; }
+
+/* File inputs are unstylable, so the input is hidden and the LABEL is the
+   control — it takes `.button` like any other, and keeps a real focus ring
+   through `:focus-within`. */
 .app__import {
   position: relative;
   overflow: hidden;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  block-size: var(--control-height-md);
-  padding-inline: var(--space-3);
-  border: var(--border-width-hair) solid var(--border-default);
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  font-size: var(--font-size-sm);
-  cursor: pointer;
 }
 
-.app__import:hover { background: var(--surface-2); color: var(--text-primary); }
 .app__import:focus-within {
   outline: var(--focus-ring-width) solid var(--focus-ring-color);
   outline-offset: var(--focus-ring-offset);
 }
+
 .app__import input {
   position: absolute;
   inset: 0;
@@ -237,13 +460,308 @@
   cursor: pointer;
 }
 
-/* ---------- body ---------- */
+/* -----------------------------------------------------------------------------
+   Header — tier 2, the toolbar
+   -----------------------------------------------------------------------------
+   The parameters the next solve reads, and the two things that describe how the
+   wall is being LOOKED at. Grouped into wells, because these controls are not a
+   list — they are three questions (how big is the wall, what can you print,
+   what colour) with one answer button between them.
+   -------------------------------------------------------------------------- */
 
-/* The panels own their width via the tokens; the grid uses the SAME tokens so
-   the two cannot disagree. They previously did, leaving each panel floating in
-   a dead gutter with two parallel borders of different weights 32px apart —
-   which reads as a rendering bug. The rail and BOM slots carry no border of
-   their own: the panels already draw one. */
+.app__toolbar {
+  gap: var(--space-2);
+  min-block-size: var(--toolbar-height);
+  padding-block: var(--space-1);
+}
+
+/* A cluster of controls that belong to one question, drawn as one recessed
+   field. `--surface-0` is the shell's ground, which is DARKER than the bar in
+   both themes — so the same token reads as "set into the bar" either way round,
+   and there is no second definition to keep in step. */
+.toolbar__group {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-block-size: var(--control-height-md);
+  padding-inline: var(--space-2);
+  border: var(--border-width-hair) solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+  /* WRAPS rather than shrinks, and the group never gives up its own content
+     width. Squeezed on a narrow window the printer well let its select and its
+     two build-plate fields shrink past their text and print them on top of each
+     other — "Custom…380 340mm" in one 90px run, which reads as a rendering
+     fault rather than as a full bar. */
+  flex-wrap: wrap;
+  flex: 0 1 auto;
+  min-inline-size: 0;
+}
+
+/* The children never shrink; the GROUP does, and wraps them. The pair is what
+   makes a squeezed bar go taller instead of going wrong. */
+.toolbar__group > * { flex: 0 0 auto; }
+
+.toolbar__group:focus-within { border-color: var(--border-default); }
+
+.toolbar__groupicon {
+  color: var(--text-tertiary);
+  margin-inline-end: var(--space-0-5);
+}
+
+.toolbar__field {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-inline-size: 0;
+}
+
+.toolbar__label,
+.app__unit {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+}
+
+.toolbar__times {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+}
+
+/* Inside a well the well IS the box, so the controls in it lose theirs. They
+   keep a hover edge, or a field with no chrome at all is indistinguishable from
+   a label until it is clicked. */
+.toolbar__group :where(input:not([type='checkbox']), select) {
+  border-color: transparent;
+  background: transparent;
+  min-block-size: var(--control-height-sm);
+  padding-inline: var(--space-1);
+  color: var(--text-primary);
+}
+
+.toolbar__group :where(input:not([type='checkbox']), select):hover:not(:disabled) {
+  border-color: var(--border-subtle);
+  background: var(--surface-1);
+}
+
+.toolbar__group :where(input:not([type='checkbox']), select):focus {
+  background: var(--surface-1);
+}
+
+/* Wide enough for a five-digit millimetre value AND the spin buttons. At 7ch
+   the browser clipped "2400" to "24", which reads as a wrong wall size rather
+   than a narrow field. */
+.toolbar__group input[type='number'] {
+  inline-size: 8ch;
+  font-variant-numeric: var(--font-numeric-tabular);
+}
+
+/* A native select is as wide as its LONGEST option, and the bed list runs to
+   "350 × 350 (Bambu X1E / large)" — 29 characters, which took a fifth of the
+   toolbar to display "Prusa Mini". Capped and ellipsised: the full label is
+   still there the moment the list is open, which is the only time it is being
+   read. */
+.toolbar__group select {
+  max-inline-size: 20ch;
+  text-overflow: ellipsis;
+}
+
+/* Pushes the view controls to the far end of the bar. */
+.toolbar__spacer { flex: 1 1 auto; min-inline-size: 0; }
+
+/* The one action the whole tier exists for, so it is the tallest thing in it. */
+.app__primary { block-size: var(--control-height-lg); }
+
+/* "Fit to printer" sits with the printer select, because it changes what that
+   select MEANS: with it on, the bed decides the plate size rather than just
+   filtering the shipped ones. */
+.app__fitprinter {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding-inline-start: var(--space-2);
+  margin-inline-start: var(--space-1);
+  border-inline-start: var(--border-width-hair) solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* The two default colours, and the selection's when there is one. */
+.app__colors { gap: var(--space-1); }
+
+.app__colors__label {
+  margin-inline-end: var(--space-1);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+}
+
+/* -----------------------------------------------------------------------------
+   The view switch
+   -----------------------------------------------------------------------------
+   The 3D wall and the Plan are the two halves of the product, and the Plan is
+   the half that measures, blocks out a light switch, sets the border and lines
+   the wall up against a photograph — none of which exist in 3D at all. It was
+   two 12px words in the far corner of the bar, behind the colour swatches, with
+   the inactive half drawn in the METADATA colour. So it now sits next to the
+   primary action, at the tallest control height in the bar, named.
+   -------------------------------------------------------------------------- */
+
+.app__viewswitch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 0 0 auto;
+}
+
+/* The word "View", because a pair of segments is only self-explanatory once you
+   already know there are two views — which is the thing this switch has to say
+   to someone who has never pressed it. */
+.app__viewswitch__label {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: var(--letter-spacing-caps);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* A segmented control and not two buttons: the two are exclusive and one is
+   always on, which is a different fact from "here are two things you could
+   press". */
+.app__viewtoggle {
+  display: inline-flex;
+  gap: var(--space-0-5);
+  padding: var(--space-0-5);
+  border: var(--border-width-hair) solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+}
+
+.app__viewtoggle button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  block-size: calc(var(--control-height-lg) - var(--space-1));
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  /* SECONDARY, not tertiary. Tertiary is the metadata colour — units, hints,
+     the figures under the layout name — and a tab drawn in it reads as one you
+     are not allowed to press. The inactive half of this switch is not disabled;
+     it is the other half of the product. */
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-none);
+  transition: background var(--duration-fast) var(--ease-standard),
+              color var(--duration-fast) var(--ease-standard);
+}
+
+.app__viewtoggle button:hover {
+  background: var(--surface-1);
+  color: var(--text-primary);
+}
+
+/* Raised rather than accent-filled: `Solve panels` is accent-filled and stands
+   directly beside it, and two filled controls side by side make neither of them
+   the primary action. The icon carries the accent instead. */
+.app__viewtoggle button[aria-pressed='true'] {
+  background: var(--surface-2);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.app__viewtoggle button .icon { color: var(--text-tertiary); }
+.app__viewtoggle button:hover .icon { color: var(--text-secondary); }
+.app__viewtoggle button[aria-pressed='true'] .icon { color: var(--accent); }
+
+.app__viewtoggle button:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* -----------------------------------------------------------------------------
+   The overflow menu
+   -----------------------------------------------------------------------------
+   Holds the catalogue-maintenance actions. Not portalled: the title bar does not
+   clip its overflow the way the parts list does, and this drops into the app's
+   own body area.
+   -------------------------------------------------------------------------- */
+
+.toolmenu { position: relative; }
+
+.toolmenu__list {
+  position: absolute;
+  inset-block-start: calc(100% + var(--space-1));
+  inset-inline-end: 0;
+  z-index: var(--z-popover);
+  display: grid;
+  gap: var(--space-0-5);
+  min-inline-size: 15rem;
+  padding: var(--space-1);
+  border: var(--border-width-hair) solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-3);
+  box-shadow: var(--shadow-lg);
+}
+
+.toolmenu__heading {
+  padding: var(--space-1) var(--space-2) var(--space-0-5);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: var(--letter-spacing-caps);
+  text-transform: uppercase;
+}
+
+.toolmenu__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  inline-size: 100%;
+  min-block-size: var(--control-height-md);
+  padding-inline: var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  text-align: start;
+  transition: background var(--duration-fast) var(--ease-standard),
+              color var(--duration-fast) var(--ease-standard);
+}
+
+.toolmenu__item:hover,
+.toolmenu__item:focus-visible {
+  background: var(--accent-bg);
+  color: var(--text-primary);
+}
+
+.toolmenu__item .icon { color: var(--text-tertiary); }
+.toolmenu__item:hover .icon { color: var(--accent); }
+
+.toolmenu__label { flex: 1 1 auto; min-inline-size: 0; }
+
+.toolmenu__detail {
+  flex: none;
+  padding-inline: var(--space-1);
+  border-radius: var(--radius-pill);
+  background: var(--surface-1);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-2xs);
+}
+
+/* -----------------------------------------------------------------------------
+   Body
+   -----------------------------------------------------------------------------
+   The panels own their width via the tokens; the grid uses the SAME tokens so
+   the two cannot disagree. They previously did, leaving each panel floating in a
+   dead gutter with two parallel borders of different weights 32px apart — which
+   reads as a rendering bug. The rail and BOM slots carry no border of their own:
+   the panels already draw one.
+   -------------------------------------------------------------------------- */
+
 .app__body {
   display: grid;
   grid-template-columns: var(--panel-width-left) minmax(0, 1fr) var(--panel-width-right);
@@ -275,7 +793,9 @@
    was wider than the panel inside it. */
 .app__bom > * { inline-size: 100%; }
 
-/* ---------- overlays ---------- */
+/* -----------------------------------------------------------------------------
+   Overlays
+   -------------------------------------------------------------------------- */
 
 .app__toast {
   position: absolute;
@@ -313,23 +833,64 @@
   border: var(--border-width-hair) solid var(--border-subtle);
   border-radius: var(--radius-md);
   background: var(--surface-1);
+  box-shadow: var(--shadow-md);
   pointer-events: none;
   user-select: none;
 }
 
 .app__empty-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   color: var(--text-primary);
   font-size: var(--font-size-lg);
   font-weight: var(--font-weight-semibold);
 }
 
+.app__empty-title .icon { color: var(--accent); }
+
+/* Numbered steps, drawn as steps. `<ol>`'s own markers sit outside the text
+   block and at body weight, so three sentences of guidance read as a paragraph
+   that happens to be indented. */
 .app__empty-steps {
-  margin-block-start: var(--space-3);
+  margin-block-start: var(--space-4);
   display: grid;
-  gap: var(--space-2);
+  gap: var(--space-3);
+  padding-inline-start: var(--space-0);
+  list-style: none;
+  counter-reset: step;
   color: var(--text-secondary);
   font-size: var(--font-size-sm);
   line-height: var(--line-height-relaxed);
+}
+
+/* The marker is ABSOLUTE and the item stays a normal block. As a two-column
+   grid each child of the `<li>` became a grid item of its own — so the `<strong>`
+   inside a sentence was torn out of the running text and given its own row, and
+   step 2 rendered as "Press" / "Solve panels" / "and the planner works out…" on
+   three lines. */
+.app__empty-steps li {
+  position: relative;
+  padding-inline-start: calc(var(--space-5) + var(--space-3));
+  counter-increment: step;
+}
+
+.app__empty-steps li::before {
+  content: counter(step);
+  position: absolute;
+  inset-inline-start: 0;
+  inset-block-start: 0;
+  display: grid;
+  place-items: center;
+  inline-size: var(--space-5);
+  block-size: var(--space-5);
+  border-radius: var(--radius-pill);
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: var(--font-numeric-tabular);
+  line-height: var(--line-height-none);
 }
 
 .app__empty-steps strong { color: var(--text-primary); }
@@ -343,28 +904,44 @@
   line-height: var(--line-height-relaxed);
 }
 
-.app__hint {
-  position: absolute;
-  inset-block-end: var(--space-4);
-  inset-inline-start: var(--space-4);
-  color: var(--text-tertiary);
-  font-family: var(--font-mono);
-  font-size: var(--font-size-2xs);
-  pointer-events: none;
-  user-select: none;
-}
+/* `.app__hint` is gone. Each view owns its own corner text — a shell-level hint
+   here sat on top of the canvas's own scale readout, both 11px mono, both
+   anchored bottom-left — and the rule outlived the markup, so it was styling
+   nothing at all. See `.wall3d__hint`. */
 
 /* `.visually-hidden` is defined once, in base.css. It used to be defined here
    too, with a different body and a lower specificity, so which rule won
    depended on which properties each happened to set. */
 
-/* Narrow / tablet: the catalogue collapses to a strip above the stage so the
-   wall and the parts list keep the room.
-   The panel inside it must be told to fill that strip. It was not, so it kept
-   its 240px width inside a 990px rail and its scroll area collapsed to 37px —
-   the catalogue rendered NO tiles at all, which made the app unusable on the
-   tablet it was supposed to support. */
+/* -----------------------------------------------------------------------------
+   Narrow / tablet
+   -----------------------------------------------------------------------------
+   The catalogue collapses to a strip above the stage so the wall and the parts
+   list keep the room. The panel inside it must be told to fill that strip: it
+   was not, so it kept its 240px width inside a 990px rail and its scroll area
+   collapsed to 37px — the catalogue rendered NO tiles at all.
+   -------------------------------------------------------------------------- */
+
 @media (max-width: 68rem) {
+  /* The support link loses its words and keeps its cup. Measured, the title bar
+     needs 1095px to hold brand + logo + actions on one row, which is within a
+     few pixels of this breakpoint — so past it the label is what gives, and the
+     yellow square is still unmistakably the same button. The text stays in the
+     DOM: it is the link's accessible name. */
+  .app__coffee {
+    inline-size: var(--control-height-md);
+    padding-inline: var(--space-0);
+    justify-content: center;
+  }
+  .app__coffee__label {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
   .app__body {
     grid-template-columns: minmax(0, 1fr) var(--panel-width-right);
     grid-template-rows: auto minmax(0, 1fr);
@@ -407,9 +984,9 @@
 @media (max-width: 46rem) {
   .app__body {
     grid-template-columns: minmax(0, 1fr);
-    /* The wall is the point of the page, so it gets what is left after a
-       usable strip of catalogue and a readable parts list — not the other way
-       round. At 12rem/40vh it was left with about 110px. */
+    /* The wall is the point of the page, so it gets what is left after a usable
+       strip of catalogue and a readable parts list — not the other way round.
+       At 12rem/40vh it was left with about 110px. */
     grid-template-rows: auto minmax(0, 1fr) minmax(8rem, 30vh);
   }
   .app__rail { grid-column: 1; grid-row: 1; max-block-size: 9rem; }
@@ -417,28 +994,21 @@
   .app__bom { grid-column: 1; grid-row: 3; }
 
   /* Every control still fits, but on four or five lines, which leaves no wall.
-     The label words go first — each input keeps its aria-label, so this costs a
-     sighted user a word they can infer and a screen-reader user nothing — and
-     the layout name goes with them; it is set once and is in the tab title. */
-  .app__brand { display: none; }
-  .app__wall-controls label { gap: var(--space-1); font-size: 0; }
-  .app__wall-controls label > * { font-size: var(--font-size-xs); }
-  .app__wall-controls input[type='number'] { inline-size: 7ch; }
-  .app__bar { gap: var(--space-1) var(--space-2); }
-
+     The document's figures go first — they are repeated at the top of the parts
+     list — then the toolbar's label words, each input keeping its aria-label, so
+     this costs a sighted user a word they can infer and a screen-reader user
+     nothing. */
+  .app__docmeta { display: none; }
+  /* The logo goes with them. There is no gap left to centre it in at this
+     width, so it wraps to a line of its own — and a line of branding is the
+     last thing worth spending on a screen where the wall is already down to
+     about a third of the window. */
+  .app__logo { display: none; }
+  .app__name { inline-size: 14ch; }
+  .toolbar__label { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); }
+  .toolbar__group input[type='number'] { inline-size: 7ch; }
+  .app__titlebar, .app__toolbar { padding-inline: var(--space-2); }
+  .app__toolbar { gap: var(--space-1); }
   .app__empty { padding: var(--space-4); }
   .app__empty-steps { font-size: var(--font-size-xs); }
-}
-
-/* "Fit to printer" sits with the printer select, because it changes what that
-   select MEANS: with it on, the bed decides the plate size rather than just
-   filtering the shipped ones. */
-.app__fitprinter {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  color: var(--text-secondary);
-  font-size: var(--font-size-sm);
-  white-space: nowrap;
-  cursor: pointer;
 }

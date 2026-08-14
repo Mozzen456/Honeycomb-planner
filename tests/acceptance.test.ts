@@ -204,7 +204,7 @@ describe('a 2400 x 1200 garage wall', () => {
 
     // 5. Totals are positive and self-consistent.
     expect(bom.totals.parts).toBeGreaterThan(30);
-    expect(bom.totals.minutes).toBeGreaterThan(0);
+    expect(bom.totals.toPrint).toBe(bom.totals.parts); // nothing printed yet
     expect(bom.totals.grams).toBeGreaterThan(0);
 
     // 6. No errors in the finished layout.

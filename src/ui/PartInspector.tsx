@@ -43,7 +43,7 @@ import type { MeshData } from '../core/stl';
 import type { Catalog, CatalogPart, Hex, InsertRequirement } from '../core/types';
 import { FootprintEditor } from './FootprintEditor';
 import { thumbnailFor } from './partThumbnails';
-import { loadPartMesh, loadRawMesh, orient } from './meshLibrary';
+import { loadPartMesh, loadRawMesh, orient, plateGeometry } from './meshLibrary';
 import { fileToScene, mountingMatrixInFileFrame, wallBasis } from './mountingTransform';
 import './PartInspector.css';
 
@@ -661,54 +661,42 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
   }, [catalog, cells]);
 
   /**
-   * That panel's real mesh, with the two facts needed to line its lattice up
-   * with this dialog's: where its block's centre is, and which of its cells sits
+   * That panel's mesh, with the two facts needed to line its lattice up with
+   * this dialog's: where its block's centre is, and which of its cells sits
    * nearest that centre.
    *
-   * `loadPartMesh` is the wall view's own loader, so this gets the same
-   * geometry — including the 90° spin a pointy-drawn plate needs to match its
-   * own block — and shares its cache. Which also means the geometry must NOT be
-   * disposed here.
+   * Built by the GENERATOR, at the chosen plate's real size, and shared through
+   * `meshLibrary` — so it is the same geometry the wall draws and must NOT be
+   * disposed here. It used to be `loadPartMesh(panelPart)`, the shipped STL, and
+   * that stopped working when the 22.0 mouth went against the wall (D97): a
+   * printed plate turned over is a mirrored cell block, and its holes would land
+   * between the cells this dialog draws its sockets on. Also makes the plate
+   * synchronous, so it can no longer arrive after the part it is behind.
    */
-  const [panelMesh, setPanelMesh] = useState<{
-    geometry: THREE.BufferGeometry;
-    centreCell: Hex;
-    blockCentre: { x: number; y: number };
-  } | null>(null);
-
-  useEffect(() => {
-    let live = true;
-    if (panelPart === null) {
-      setPanelMesh(null);
-      return;
-    }
+  const panelMesh = useMemo(() => {
+    if (panelPart === null) return null;
     const panel = panelPart.panel!;
-    void loadPartMesh(panelPart).then((mesh) => {
-      if (!live) return;
-      if (mesh === null) {
-        // No models/ to fetch from — the drawn plate takes over.
-        setPanelMesh(null);
-        return;
+    const block = panelCells({ q: 0, r: 0 }, panel.columns, panel.rows);
+    const bounds = cellsBoundsMm(block);
+    const blockCentre = {
+      x: (bounds.minX + bounds.maxX) / 2,
+      y: (bounds.minY + bounds.maxY) / 2,
+    };
+    let centreCell = block[0] ?? { q: 0, r: 0 };
+    let nearest = Infinity;
+    for (const c of block) {
+      const m = hexToMm(c);
+      const d = (m.x - blockCentre.x) ** 2 + (m.y - blockCentre.y) ** 2;
+      if (d < nearest) {
+        nearest = d;
+        centreCell = c;
       }
-      const block = panelCells({ q: 0, r: 0 }, panel.columns, panel.rows);
-      const bounds = cellsBoundsMm(block);
-      const blockCentre = {
-        x: (bounds.minX + bounds.maxX) / 2,
-        y: (bounds.minY + bounds.maxY) / 2,
-      };
-      let centreCell = block[0] ?? { q: 0, r: 0 };
-      let nearest = Infinity;
-      for (const c of block) {
-        const m = hexToMm(c);
-        const d = (m.x - blockCentre.x) ** 2 + (m.y - blockCentre.y) ** 2;
-        if (d < nearest) {
-          nearest = d;
-          centreCell = c;
-        }
-      }
-      setPanelMesh({ geometry: mesh.geometry, centreCell, blockCentre });
-    });
-    return () => { live = false; };
+    }
+    return {
+      geometry: plateGeometry(panel.columns, panel.rows),
+      centreCell,
+      blockCentre,
+    };
   }, [panelPart]);
 
   // --- the insert the part hangs on ------------------------------------------
@@ -889,15 +877,14 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
      * holds their part up against, and it should be the same file they are going
      * to print.
      *
-     * So the plate is the smallest shipped panel that covers the patch, loaded
-     * through the same `loadPartMesh` the wall view uses — which means it also
-     * gets the pointy-drawn 90° spin that makes a plate match its own block. Its
-     * lattice is aligned to this dialog's by putting the panel's most central
-     * cell exactly where cell (0, 0) of the part goes; both sides are `hexToMm`,
-     * so from there every other cell agrees for free.
+     * So the plate is a real plate at the size of the smallest shipped panel
+     * that covers the patch, built by the same generator the wall draws from —
+     * the whole measured bore, both faces the right way round. Its lattice is
+     * aligned to this dialog's by putting the panel's most central cell exactly
+     * where cell (0, 0) of the part goes; both sides are `hexToMm`, so from
+     * there every other cell agrees for free.
      *
-     * The drawn plate stays as the fallback for when the STL cannot be had — the
-     * app is built to run from a file:// URL with no `models/` beside it.
+     * The drawn plate below stays as the fallback for a patch no plate covers.
      */
     const wallPanel = panelMesh?.geometry ?? null;
     if (wallPanel !== null && panelMesh !== null) {
@@ -920,8 +907,9 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
        * once, through the same function as everything else in the group, is
        * what makes that impossible rather than merely fixed.
        *
-       * `loadPartMesh` centres the plate on its own block and leaves its mating
-       * face at z = 0, so the mesh's front is a panel thickness further out.
+       * `plateGeometry` centres the plate on its own block and puts its WALL
+       * face at z = 0, so the whole plate is a thickness further back and the
+       * face the part sits against lands on this dialog's z = 0.
        */
       const home = at({ q: 0, r: 0 });
       slab.position.set(
@@ -950,9 +938,11 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
         }
         return shape;
       };
-      // The real cell is stepped: a 22.0 mouth 2.0 deep over the 20.0 throat that
-      // retains an insert (HSW-SPEC §3). Two layers, as `buildPanelGeometry`
-      // builds the wall itself, with the mouth on the side the part is on.
+      // The real cell is stepped: a 22.0 mouth 2.0 deep BEHIND the 20.0 throat
+      // that retains an insert (HSW-SPEC §3). Two layers, as `buildPanelGeometry`
+      // builds the wall itself, with the mouth against the WALL — the far side
+      // from the part — because that is the end an insert's barbs snap into
+      // (D97). The part is looking at the throat.
       const layer = (acrossFlats: number, thickness: number, back: number): THREE.Mesh => {
         const g = new THREE.ExtrudeGeometry([perforated(acrossFlats)], {
           depth: thickness, bevelEnabled: false, curveSegments: 1,
@@ -964,8 +954,10 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
           new THREE.MeshLambertMaterial({ color: 0x9aa4b2, side: THREE.DoubleSide }),
         );
       };
-      group.add(layer(CELL.mouthAcrossFlats, CELL.mouthDepth, -CELL.mouthDepth));
-      group.add(layer(CELL.throatAcrossFlats, PANEL_DEPTH - CELL.mouthDepth, -PANEL_DEPTH));
+      group.add(layer(CELL.mouthAcrossFlats, CELL.mouthDepth, -PANEL_DEPTH));
+      group.add(layer(
+        CELL.throatAcrossFlats, PANEL_DEPTH - CELL.mouthDepth, -(PANEL_DEPTH - CELL.mouthDepth),
+      ));
     }
 
     /**

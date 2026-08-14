@@ -42,7 +42,7 @@
 
 import { PITCH, ROW_STEP } from './constants';
 import { hexDistance, hexKey, hexToMm, placeFootprint, placedPanelCells } from './hex';
-import type { Hex, LayoutDoc, PlacedPanel, Rotation } from './types';
+import type { FixingEdits, Hex, LayoutDoc, PlacedPanel, Rotation } from './types';
 
 /**
  * Which of a part's OWN cells carry the fastener it hangs on.
@@ -145,6 +145,25 @@ export interface FixingPlan {
   starvedPanelIds: string[];
   /** Multi-panel junctions, each bridged by a four-cell countersunk insert. */
   junctions: JunctionFixing[];
+  /**
+   * Cells in `cells` that a PERSON put there, keyed. The plan is otherwise
+   * indistinguishable once it is built, and the views want to say which ones
+   * were chosen by hand — and the store wants to know that taking one out means
+   * forgetting an addition rather than recording a removal.
+   */
+  manual: ReadonlySet<string>;
+  /**
+   * How many of the planner's own choices were taken out by hand. Zero means
+   * this plan is exactly what the planner would produce on its own.
+   */
+  removedCount: number;
+  /**
+   * Panels left with no fixing at all BECAUSE one was removed by hand — as
+   * against `starvedPanelIds`, where the planner could not find a free cell in
+   * the first place. Two different problems, said differently: one is "clear
+   * some cells", the other is "you took the only one out".
+   */
+  unfixedPanelIds: string[];
 }
 
 /**
@@ -186,6 +205,13 @@ export function planFixings(
    *  than being ordered for a hole that is not free. */
   avoid: ReadonlySet<string> = new Set(),
   shared: SharedCells = { cells: new Set(), junctionSockets: [] },
+  /**
+   * What a person decided instead. Applied AFTER the plan, never fed back into
+   * it: the grid must not notice a gap where a fixing was removed and helpfully
+   * put one back a cell away, which is what re-planning around the edits would
+   * do. See `applyFixingEdits`.
+   */
+  edits?: FixingEdits,
 ): FixingPlan {
   const spacing = clampSpacing(spacingMm);
   const chosen = new Map<string, string>(); // cell key -> panel id
@@ -214,6 +240,7 @@ export function planFixings(
     return {
       cells: [], panelIds: [], spacingMm: spacing, perSquareMetre: 0,
       starvedPanelIds: [], junctions: [],
+      manual: new Set(), removedCount: 0, unfixedPanelIds: [],
     };
   }
 
@@ -377,13 +404,107 @@ export function planFixings(
   entries.sort((a, b) => a.cell.r - b.cell.r || a.cell.q - b.cell.q);
 
   const areaM2 = totalPanelAreaM2(byPanel.reduce((n, p) => n + p.cells.length, 0));
-  return {
+  const planned: FixingPlan = {
     cells: entries.map((e) => e.cell),
     panelIds: entries.map((e) => e.panelId),
     spacingMm: spacing,
     perSquareMetre: areaM2 > 0 ? (entries.length + junctions.length) / areaM2 : 0,
     starvedPanelIds: starved.sort(),
     junctions,
+    manual: new Set(),
+    removedCount: 0,
+    unfixedPanelIds: [],
+  };
+  return applyFixingEdits(planned, edits, owner, areaM2);
+}
+
+/**
+ * The plan as a person left it: their removals taken out, their own positions
+ * put in.
+ *
+ * Separate from the planning above, and applied to its OUTPUT, because the two
+ * answer different questions. The planner says where fixings belong on a sheet
+ * of this shape; this says where somebody decided otherwise. Feeding the edits
+ * back into the planner instead would let the grid notice the hole a removal
+ * left and fill it from a cell away — the fixing you just deleted, moved 24 mm.
+ *
+ * A removal is matched by CELL for a single fixing and by ANCHOR for a junction:
+ * the anchor is what the view has to name to point at one, and it is stable
+ * across the rotation search. Nothing here re-plans, so the result stays a pure
+ * function of (panels, spacing, avoid, edits).
+ */
+function applyFixingEdits(
+  plan: FixingPlan,
+  edits: FixingEdits | undefined,
+  owner: ReadonlyMap<string, string>,
+  areaM2: number,
+): FixingPlan {
+  const removed = new Set((edits?.removed ?? []).map(hexKey));
+  const added = edits?.added ?? [];
+  if (removed.size === 0 && added.length === 0) return plan;
+
+  const cells: Hex[] = [];
+  const panelIds: string[] = [];
+  let removedCount = 0;
+  for (const [i, cell] of plan.cells.entries()) {
+    if (removed.has(hexKey(cell))) { removedCount += 1; continue; }
+    cells.push(cell);
+    panelIds.push(plan.panelIds[i] ?? '');
+  }
+  const junctions = plan.junctions.filter((j) => {
+    const gone = removed.has(hexKey(j.anchor));
+    if (gone) removedCount += 1;
+    return !gone;
+  });
+
+  /*
+   * A hand-placed fixing has to land on a plate and in a hole nothing else is
+   * already fixed through. It does NOT have to avoid an accessory: overlap is
+   * allowed everywhere else in this app (see `isExclusive` in store.ts), the
+   * planner only keeps clear of accessories because it is guessing, and a person
+   * pointing at a cell is not guessing. What it cannot share is a hole another
+   * fixing is already in.
+   */
+  const taken = new Set(cells.map(hexKey));
+  for (const j of junctions) for (const c of j.cells) taken.add(hexKey(c));
+  const manual = new Set<string>();
+  for (const cell of added) {
+    const key = hexKey(cell);
+    const panelId = owner.get(key);
+    if (panelId === undefined || taken.has(key)) continue;
+    taken.add(key);
+    manual.add(key);
+    cells.push({ q: cell.q, r: cell.r });
+    panelIds.push(panelId);
+  }
+
+  // Reading order down the wall, exactly as the planner leaves it, so a
+  // hand-placed fixing does not sit at the end of the parts list's own order.
+  const order = cells
+    .map((cell, i) => ({ cell, panelId: panelIds[i] ?? '' }))
+    .sort((a, b) => a.cell.r - b.cell.r || a.cell.q - b.cell.q);
+
+  // Plates left holding nothing. Only counted where the planner HAD given the
+  // plate a fixing and a person took it away — a plate the planner could not fit
+  // one into is already in `starvedPanelIds`, and saying both about the same
+  // plate would put two warnings on the list for one problem.
+  const held = new Set(order.map((e) => e.panelId));
+  for (const j of junctions) for (const id of j.panelIds) held.add(id);
+  const hadOne = new Set(plan.panelIds);
+  for (const j of plan.junctions) for (const id of j.panelIds) hadOne.add(id);
+  const unfixed = [...hadOne].filter((id) => id.length > 0 && !held.has(id)).sort();
+
+  const total = order.length + junctions.length;
+  return {
+    cells: order.map((e) => e.cell),
+    panelIds: order.map((e) => e.panelId),
+    spacingMm: plan.spacingMm,
+    perSquareMetre: areaM2 > 0 ? total / areaM2 : 0,
+    starvedPanelIds: plan.starvedPanelIds,
+    junctions,
+    manual,
+    removedCount,
+    unfixedPanelIds: unfixed.filter((id) => !plan.starvedPanelIds.includes(id)),
   };
 }
 
@@ -404,4 +525,10 @@ export const fixingsFor = (
   avoid?: ReadonlySet<string>,
   shared?: SharedCells,
 ): FixingPlan =>
-  planFixings(doc?.panels ?? [], spacingMm ?? DEFAULT_FIXING_SPACING_MM, avoid, shared);
+  planFixings(
+    doc?.panels ?? [],
+    spacingMm ?? DEFAULT_FIXING_SPACING_MM,
+    avoid,
+    shared,
+    doc?.fixingEdits,
+  );

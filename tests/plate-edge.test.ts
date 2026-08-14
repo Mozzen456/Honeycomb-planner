@@ -267,9 +267,11 @@ describe('the band round the plate', () => {
     /*
      * Each plate's material at one height, kept SEPARATE and OR-ed.
      *
-     * Sliced in the MOUTH band (z 6.0–8.0), because `plateEdgeShapes` returns the
-     * mouth; at the throat the mouth's own 0.8 mm wall is solid and every probe
-     * near a rim is a false positive.
+     * Sliced in the MOUTH band, because `plateEdgeShapes` returns the mouth; at
+     * the throat the mouth's own 0.8 mm wall is solid and every probe near a rim
+     * is a false positive. The mouth is z 0.0–2.0 since D97 turned the plate the
+     * right way round — it was 6.0–8.0, and slicing at the old height put every
+     * probe in the throat and reported two filled cells that are not filled.
      *
      * Separate because even-odd parity is only valid within one solid. Plates
      * INTERLOCK — their outlines share stretches of boundary — so a ray crossing
@@ -278,7 +280,7 @@ describe('the band round the plate', () => {
      * filled cells on a plate that has none.
      */
     const sections = doc.panels.map((p) =>
-      sliceAt(buildHoneycombMesh({ ...panelModelSpecFor(p, doc), originAtZero: false }).positions, 7));
+      sliceAt(buildHoneycombMesh({ ...panelModelSpecFor(p, doc), originAtZero: false }).positions, 1));
     /*
      * Point-in-section by a ray in a GENERIC direction, with the segment's far
      * endpoint excluded.

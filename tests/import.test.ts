@@ -219,7 +219,7 @@ describe('the imported part inside the rest of the app', () => {
     expect(csv).toContain(made.id);
     // The per-unit column is the catalogue value, not the rounded total.
     expect(csv).toContain('print_estimated');
-    expect(toMarkdownChecklist(bom, doc)).toMatch(/print time estimated/);
+    expect(toMarkdownChecklist(bom, doc)).toMatch(/filament estimated/);
   });
 
   it('pulls in the insert it bolts to, exactly once per cell', () => {

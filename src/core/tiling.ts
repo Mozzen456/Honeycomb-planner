@@ -39,15 +39,34 @@
  * structural rather than something we have to test for at runtime — but the tests
  * assert it anyway, because it is the property everything else depends on.
  *
- * One consequence worth stating: a band whose first absolute row is odd cannot
- * have its left edge at the same x as an even band. `panelCells` shifts by
- * −floor(r/2), so the band's left edge sits at PITCH·(q0 + r0/2) − MARGIN_X and
- * that is only a whole number of pitches when r0 is even. Odd bands are therefore
- * inset by exactly half a pitch (11.8 mm). That is the honeycomb stagger, not an
- * error, and `maxColumnsInBand` accounts for it so a band never overruns the wall.
+ * ---------------------------------------------------------------------------
+ * Why every band wants to start on an EVEN column
+ * ---------------------------------------------------------------------------
+ *
+ * `panelCells` staggers relative column `dq` by −floor(dq/2), so inside a block
+ * the odd columns sit half a pitch UP from the even ones. In wall millimetres a
+ * band beginning at absolute column q0 puts the lowest cell of column q at
+ *
+ *   y / PITCH = k + frac((q − q0)/2),   k an integer,
+ *
+ * and frac((q − q0)/2) is frac(q/2) when q0 is even and its OPPOSITE when q0 is
+ * odd. An odd-origin band therefore carries the other phase of the same lattice:
+ * its odd columns hang half a pitch down exactly where an even-origin band's odd
+ * columns reach half a pitch up. No choice of k repairs that — k is a whole row
+ * and the error is half of one — so the two bands' silhouettes differ by a whole
+ * PITCH (23.6 mm) at the top and at the bottom. On screen it reads as "the
+ * honeycomb runs one cell high for a few columns, then one cell low for the next
+ * few", which is the same defect at both ends of the wall.
+ *
+ * So the solver prefers the band width that leaves the NEXT band on an even
+ * column (`BandPlan.keepsPhase`); starting from q0 = 0 that keeps the whole wall
+ * in one phase, at a cost of at most one column of plate width. It is a
+ * PREFERENCE, not a rule: where only odd widths fit — possible with the shipped
+ * plates, never with generated ones — a step is better than bare wall, so
+ * `isBetterBand` falls through to covering the most cells.
  */
 
-import { PITCH, ROW_STEP, MARGIN_X, MARGIN_Y, BEDS } from './constants';
+import { PITCH, ROW_STEP, MARGIN_X, MARGIN_Y, bedFor } from './constants';
 import type { Bed } from './constants';
 import type { Hex } from './types';
 import { cellsBoundsMm, hexKey, hexNeighbours, panelCells } from './hex';
@@ -68,8 +87,10 @@ export interface PanelSize {
 
 export interface TilingRequest {
   wall: { widthMm: number; heightMm: number };
-  /** Id from BEDS in constants.ts. */
+  /** Id from BEDS in constants.ts, or `custom` with `customBed` beside it. */
   bedId: string;
+  /** The typed build plate, when `bedId` is `custom`. Resolved by `bedFor`. */
+  customBed?: { widthMm: number; depthMm: number };
   available: PanelSize[];
   /** Default true: a panel may be used 90° rotated, which swaps both footprints. */
   allowRotation?: boolean;
@@ -155,17 +176,21 @@ export function maxPlateForBed(
 /**
  * Every block size this printer can make, largest first.
  *
- * The whole grid up to the maximum, not just the maximum: the solver fills a
+ * The WHOLE grid up to the maximum, not just the maximum: the solver fills a
  * wall greedily and needs the smaller sizes to finish the right-hand edge and
- * the top band. Offering only the biggest plate leaves a strip of bare wall
- * exactly one plate wide.
+ * the top of every band. Offering only the biggest plate leaves a strip of bare
+ * wall exactly one plate wide.
  *
- * Capped at `MAX_CANDIDATES` because the solver tries every variant at every
- * position, and a 400 mm bed would otherwise offer 19 × 16 = 304 of them on
- * every step of a garage wall. The cap drops the SMALLEST first — a 1 × 1 plate
- * is a 23.6 mm chip nobody wants to print — so what survives is the useful end.
+ * It used to keep only the 120 largest, on the grounds that the solver tries
+ * every variant at every position. That is the wrong axis to economise on: a
+ * band's WIDTH is chosen once, but its heights have to STACK to the top of the
+ * wall exactly, so dropping the short plates leaves a band unable to finish.
+ * Measured on a 2400 × 1200 wall with a 350 mm bed: the shortest 5-column plate
+ * offered was 9 rows, the last band had 7 rows of room, and the right-hand strip
+ * of that wall ended 165 mm below every other band — a ragged top, from a cap
+ * that was never load-bearing. The grid is small anyway: the biggest bed the app
+ * knows about makes 19 × 16, and the solver's own loop is an array scan.
  */
-const MAX_CANDIDATES = 120;
 
 /**
  * What a bordered plate can carry beyond its own cells.
@@ -180,8 +205,12 @@ const MAX_CANDIDATES = 120;
 const BORDER_OVERHANG_X = ROW_STEP;
 const BORDER_OVERHANG_Y = PITCH / 2;
 
-export function generatedPlateSizes(bedId: string, borderMm = 0): PanelSize[] {
-  const bed = BEDS.find((b) => b.id === bedId);
+export function generatedPlateSizes(
+  bedId: string,
+  borderMm = 0,
+  customBed?: { widthMm: number; depthMm: number },
+): PanelSize[] {
+  const bed = bedFor(bedId, customBed);
   if (bed === undefined) return [];
   const allowance = borderMm > 0
     ? { width: BORDER_OVERHANG_X, depth: BORDER_OVERHANG_Y }
@@ -206,7 +235,7 @@ export function generatedPlateSizes(bedId: string, borderMm = 0): PanelSize[] {
     }
   }
   out.sort((a, b) => b.columns * b.rows - a.columns * a.rows);
-  return out.slice(0, MAX_CANDIDATES);
+  return out;
 }
 
 
@@ -289,34 +318,36 @@ function maxColumnIndex(wallWidthMm: number): number {
 const bandShift = (q0: number): number => q0 / 2 - Math.floor(q0 / 2);
 
 /**
- * Half a pitch that odd columns overhang ABOVE the even columns.
+ * Whole-pitch nudge that lands a band's LOWEST cell on the wall.
  *
- * `panelCells` staggers by −floor(q/2), which is the parity the meshes actually
+ * `panelCells` staggers by −floor(dq/2), which is the parity the meshes actually
  * use (tests/panel-parity.test.ts checks the generated map against the measured
- * footprints). Odd columns therefore sit half a pitch UP from even ones. With the
- * opposite assumption a band's topmost cells ran 11.8 mm off the edge of the wall.
- */
-const topOverhang = (bandColumns: number): number => (bandColumns >= 2 ? 0.5 : 0);
-
-/**
- * Whole-pitch nudge that keeps a band's topmost cell on the wall.
+ * footprints), so the odd relative columns lean UP and the band's lowest cell is
+ * always in its first column, centred `PITCH·bandShift(q0)` above the wall's
+ * bottom edge. Half a cell of plate hangs below that centre, so a band at an even
+ * origin (shift 0) has to come up a whole row — `r` is an integer, and a whole
+ * pitch is the only correction there is.
  *
- * `r` is an integer, so the only correction available is a whole pitch. A band
- * whose column parity puts its odd columns off the wall is pushed one row down;
- * the cost is 11.8 mm of unused wall on that band, which is honest and bounded,
- * whereas the alternative is panels that overhang.
+ * It used to ask for `bandColumns >= 2` as well, reasoning about the odd columns
+ * at the TOP. That is the same arithmetic read at the wrong end: a ONE-column
+ * band has no odd column, so it was left unbumped with its cells centred on
+ * y = 0 and half of every one of them below the wall (measured: −11.8 mm on a
+ * 360 mm wall, whose last band is a single column). A one-column band is exactly
+ * what finishes a wall whose width does not divide, so it was on screen often.
  */
-const bandBump = (q0: number, bandColumns: number): number =>
-  (topOverhang(bandColumns) > bandShift(q0) ? 1 : 0);
+const bandBump = (q0: number): number => (bandShift(q0) < 0.5 ? 1 : 0);
 
 /**
  * How many rows tall a band may be before it overruns the wall.
  *
- * The topmost material belongs to an ODD column (odd columns lean up), so the
- * limit is set by the band's own offset after any bump.
+ * The topmost material belongs to an ODD relative column (they lean up), so the
+ * limit allows for that half pitch — including for a one-column band, which has
+ * none and could take half a row more. The allowance is kept uniform on purpose:
+ * it is what makes every band finish at the same height, and spending it would
+ * leave one narrow band standing a row proud of its neighbours.
  */
-function maxRowsInBand(wallHeightMm: number, q0: number, bandColumns: number): number {
-  const shift = bandShift(q0) + bandBump(q0, bandColumns);
+function maxRowsInBand(wallHeightMm: number, q0: number): number {
+  const shift = bandShift(q0) + bandBump(q0);
   // PITCH·(shift + rows − 1) + 2·MARGIN_Y <= wallHeightMm
   const rows = (wallHeightMm - 2 * MARGIN_Y) / PITCH - shift + 1;
   return Math.max(0, Math.floor(rows + EPS));
@@ -336,8 +367,8 @@ function fillBand(
   const usable = byColumns.get(bandColumns);
   if (usable === undefined) return [];
 
-  const rOrigin = -Math.floor(q0 / 2) + bandBump(q0, bandColumns);
-  const maxRows = maxRowsInBand(wallHeightMm, q0, bandColumns);
+  const rOrigin = -Math.floor(q0 / 2) + bandBump(q0);
+  const maxRows = maxRowsInBand(wallHeightMm, q0);
 
   const out: TiledPanel[] = [];
   let row = 0;
@@ -359,17 +390,26 @@ function fillBand(
 interface BandPlan {
   columns: number;
   cells: number;
+  /** Does the band after this one start on an even column — or is there none? */
+  keepsPhase: boolean;
   panels: TiledPanel[];
 }
 
 /**
- * Band plans are compared on cells covered first, then on panel count — given two
- * plans that cover the same wall, the one made of fewer, larger pieces is the one
- * with fewer seams. `columns` breaks the last tie and is unique per plan, so the
- * order is total.
+ * Band plans are compared on phase first, then on cells covered, then on panel
+ * count — given two plans that cover the same wall, the one made of fewer, larger
+ * pieces is the one with fewer seams. `columns` breaks the last tie and is unique
+ * per plan, so the order is total.
+ *
+ * Phase outranks coverage because an out-of-phase band is a 23.6 mm step in the
+ * honeycomb along the whole height of the wall (see the header), while the cost
+ * of staying in phase is one column of plate width. When nothing keeps phase
+ * every candidate scores the same here and the comparison falls through, which is
+ * the whole of the fallback.
  */
 function isBetterBand(candidate: BandPlan, incumbent: BandPlan | null): boolean {
   if (incumbent === null) return true;
+  if (candidate.keepsPhase !== incumbent.keepsPhase) return candidate.keepsPhase;
   if (candidate.cells !== incumbent.cells) return candidate.cells > incumbent.cells;
   if (candidate.panels.length !== incumbent.panels.length) {
     return candidate.panels.length < incumbent.panels.length;
@@ -423,7 +463,7 @@ export function solveTiling(req: TilingRequest): TilingResult {
     return emptyResult(wallWidthMm, wallHeightMm, warnings);
   }
 
-  const bed = BEDS.find((b) => b.id === req.bedId);
+  const bed = bedFor(req.bedId, req.customBed);
   if (bed === undefined) {
     // Without a bed we cannot certify that anything here is printable, and
     // quietly guessing one would put unprintable panels on someone's BOM.
@@ -513,7 +553,15 @@ export function solveTiling(req: TilingRequest): TilingResult {
       if (band.length === 0) continue;
       let cells = 0;
       for (const p of band) cells += p.columns * p.rows;
-      const plan: BandPlan = { columns, cells, panels: band };
+      // A band that finishes the wall is in phase by default: there is no next
+      // band to put out, so an odd width is free at the right-hand edge.
+      const next = q0 + columns;
+      const plan: BandPlan = {
+        columns,
+        cells,
+        keepsPhase: next > qMax || next % 2 === 0,
+        panels: band,
+      };
       if (isBetterBand(plan, best)) best = plan;
     }
 

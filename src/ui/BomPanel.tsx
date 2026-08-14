@@ -9,15 +9,23 @@
  * Two conventions inherited from `core/bom.ts` and worth restating, because
  * getting either wrong produces a list that looks right and is not:
  *
- *   - `BomLine.minutes | grams | metres` are LINE TOTALS. The catalogue's
- *     per-unit estimate has already been multiplied by `quantity`. Nothing here
+ *   - `BomLine.grams | metres` are LINE TOTALS. The catalogue's per-unit
+ *     estimate has already been multiplied by `quantity`. Nothing here
  *     multiplies again.
  *   - Rounding is for display only. `bom.ts` rounds once at its own boundary;
  *     this file never feeds a rounded number back into anything.
+ *
+ * The counts are the same: `printed` and `toPrint` arrive already capped at the
+ * quantity, so nothing here compares, clamps or subtracts. It reports what the
+ * user did — a number typed, or a step up or down — and draws what comes back.
  */
 
 import { useMemo } from 'react';
 
+import { colorsInUse } from '../core/colors';
+import { ColorSwatch } from './ColorSwatch';
+import { Icon } from './Icon';
+import { NumberField } from './NumberField';
 import type { Bom, BomLine, Catalog, CatalogPart, Issue, LayoutDoc } from '../core/types';
 
 import './BomPanel.css';
@@ -33,9 +41,53 @@ export interface BomPanelProps {
   extras?: JSX.Element;
   /** Clicking a line highlights that part on the wall. */
   onSelectPart?: (partId: string) => void;
+  /**
+   * The line whose parts are currently lit on the wall, by partId.
+   *
+   * Passed back in rather than tracked here, because the shell owns it: the
+   * wall is what the highlight is FOR, and Escape clears it from a keyboard
+   * handler this component knows nothing about. Marking the row is how you find
+   * your way back to it in a sixty-line list.
+   */
+  litLine?: string | null;
+  /** Colour everything on a line — every plate of that shape, every hook. */
+  onSetLineColor?: (lineKey: string, color: string | undefined) => void;
+  /** Every colour back to the theme's. Shown only once something is coloured. */
+  onClearColors?: () => void;
   /** Index into `bom.issues` as given — not the display order. */
   onDismissIssue?: (index: number) => void;
+  /**
+   * How many of a line have been printed, as an absolute count. For the typed
+   * field and for `all` / `none`, where the number IS what the user said.
+   */
+  onSetPrinted?: (partId: string, count: number) => void;
+  /**
+   * One more, or one fewer — as a CHANGE, not as a number.
+   *
+   * The two are not interchangeable and this is the load-bearing half. A button
+   * in a rendered list only knows the count as of its last render, so three
+   * quick clicks each compute `printed + 1` from the same starting value and
+   * the third overwrites the first two: driving the running app, `+ + +` on a
+   * 12-plate line recorded ONE. The store owns the count, so the store does the
+   * arithmetic. `max` is the line's quantity.
+   */
+  onBumpPrinted?: (partId: string, delta: number, max: number) => void;
+  /** Back to nothing printed — the start of a second wall from the same plan. */
+  onResetPrinted?: () => void;
+  /**
+   * Give the wall fixings back to the planner, undoing every move and removal.
+   * Shown only once there is something to undo — the count comes off the
+   * document, so the button cannot appear on a plan nobody has touched.
+   */
+  onResetFixings?: () => void;
 }
+
+/**
+ * The ceiling on a typed count. Not a rule about printing — it is the same
+ * bound the loader puts on a stored count, so a number typed here and a number
+ * read out of a file cannot disagree about what is a count.
+ */
+const MAX_PRINTED = 100_000;
 
 // ---------------------------------------------------------------------------
 // Formatting. Display only: round late, round once, never round back into a sum.
@@ -54,21 +106,6 @@ function formatCount(value: number | undefined | null): string {
 function formatDecimal(value: number | undefined | null): string {
   const fixed = finite(value).toFixed(1);
   return fixed.endsWith('.0') ? fixed.slice(0, -2) : fixed;
-}
-
-/**
- * Minutes as a print job is read: `5 h 15 m`, never `315.12 minutes`. Nobody
- * plans an afternoon in minutes, and a slicer's two decimal places are noise at
- * this scale.
- */
-function formatMinutes(value: number | undefined | null): string {
-  const total = Math.round(finite(value));
-  if (total <= 0) return '0 m';
-  const hours = Math.floor(total / 60);
-  const minutes = total % 60;
-  if (hours === 0) return `${minutes} m`;
-  if (minutes === 0) return `${hours} h`;
-  return `${hours} h ${minutes} m`;
 }
 
 const formatGrams = (value: number | undefined | null): string => `${formatDecimal(value)} g`;
@@ -130,6 +167,11 @@ const ISSUE_COPY: Record<Issue['code'], IssueCopy> = {
     title: 'Two panels cover the same cells',
     advice: 'Panels butt up against each other; slide one aside so they only touch.',
   },
+  'panel-unfixed': {
+    title: 'A panel has no wall fixing left',
+    advice:
+      'You removed the one holding it. Drag another fixing onto it, or press Reset fixings below to give the plan back its own.',
+  },
 };
 
 const FALLBACK_COPY: IssueCopy = {
@@ -165,20 +207,113 @@ const REVIEW_TOOLTIP =
 // Sections
 // ---------------------------------------------------------------------------
 
+/**
+ * The count of a line that have been printed: type it, or step it.
+ *
+ * The two arrive by different routes on purpose. Typing, `all` and `none` state
+ * a NUMBER, so they go through `onSetPrinted`. The ± buttons state a CHANGE and
+ * go through `onBumpPrinted`, because this component only knows the count as of
+ * its last render and a fast hand does not wait for one — see the note on the
+ * prop. `NumberField` on `confirm` for the same reason a zone's size uses it:
+ * every commit is an undo step, and typing `12` over `2` should not leave `1`
+ * and `12` behind it in the history.
+ */
+interface PrintedProps {
+  line: BomLine;
+  onSetPrinted: (partId: string, count: number) => void;
+  onBumpPrinted?: (partId: string, delta: number, max: number) => void;
+}
+
+function PrintedControl({ line, onSetPrinted, onBumpPrinted }: PrintedProps): JSX.Element {
+  const label = line.name.length > 0 ? line.name : line.partId;
+  const set = (count: number): void => onSetPrinted(line.partId, count);
+  const step = (delta: number): void =>
+    onBumpPrinted === undefined
+      ? set(line.printed + delta)
+      : onBumpPrinted(line.partId, delta, line.quantity);
+  return (
+    <div className="bom-printed">
+      <button
+        type="button"
+        className="bom-printed__step hit-area"
+        onClick={() => step(-1)}
+        disabled={line.printed <= 0}
+        title={`One fewer ${label} printed`}
+        aria-label={`One fewer ${label} printed`}
+      >
+        −
+      </button>
+      <NumberField
+        className="bom-printed__field tabular-nums"
+        value={line.printed}
+        min={0}
+        max={MAX_PRINTED}
+        step={1}
+        commitOn="confirm"
+        onCommit={set}
+        title={`How many ${label} you have printed`}
+        aria-label={`How many ${label} you have printed`}
+      />
+      <button
+        type="button"
+        className="bom-printed__step hit-area"
+        onClick={() => step(1)}
+        disabled={line.toPrint <= 0}
+        title={
+          line.toPrint <= 0
+            ? `All ${formatCount(line.quantity)} printed`
+            : `One more ${label} printed`
+        }
+        aria-label={`One more ${label} printed`}
+      >
+        +
+      </button>
+      {/* The one button that gets used most: a plate goes on the bed as a batch,
+          and nobody wants to click + eleven times. */}
+      <button
+        type="button"
+        className="bom-printed__all"
+        onClick={() => set(line.toPrint <= 0 ? 0 : line.quantity)}
+        title={
+          line.toPrint <= 0
+            ? `Mark ${label} as not printed yet`
+            : `Mark all ${formatCount(line.quantity)} ${label} as printed`
+        }
+      >
+        {line.toPrint <= 0 ? 'none' : 'all'}
+      </button>
+    </div>
+  );
+}
+
 interface SectionProps {
   title: string;
   lines: BomLine[];
   index: ReadonlyMap<string, CatalogPart>;
   onSelectPart?: (partId: string) => void;
+  litLine?: string | null;
+  colors?: LayoutDoc['colors'];
+  onSetLineColor?: (lineKey: string, color: string | undefined) => void;
+  onSetPrinted?: (partId: string, count: number) => void;
+  onBumpPrinted?: (partId: string, delta: number, max: number) => void;
   emptyText: string;
 }
 
-function BomSection({ title, lines, index, onSelectPart, emptyText }: SectionProps): JSX.Element {
+function BomSection(
+  { title, lines, index, onSelectPart, litLine, colors, onSetLineColor, onSetPrinted,
+    onBumpPrinted, emptyText }: SectionProps,
+): JSX.Element {
+  const left = lines.reduce((sum, line) => sum + finite(line.toPrint), 0);
+  const total = lines.reduce((sum, line) => sum + finite(line.quantity), 0);
   return (
     <section className="bom-section">
       <h3 className="bom-section__title">
         {title}
-        <span className="bom-section__count tabular-nums">{formatCount(lines.length)}</span>
+        <span className="bom-section__count tabular-nums">
+          {lines.length === 0 || left === total
+            ? formatCount(lines.length)
+            : `${formatCount(left)} left`}
+        </span>
       </h3>
 
       {lines.length === 0 ? (
@@ -188,17 +323,17 @@ function BomSection({ title, lines, index, onSelectPart, emptyText }: SectionPro
           <colgroup>
             <col className="bom-table__col--qty" />
             <col />
-            <col className="bom-table__col--time" />
+            <col className="bom-table__col--printed" />
             <col className="bom-table__col--filament" />
           </colgroup>
           <thead>
             <tr>
-              <th scope="col" className="bom-table__num">
-                Qty
+              <th scope="col" className="bom-table__num" title="How many are still to print">
+                To print
               </th>
               <th scope="col">Part</th>
               <th scope="col" className="bom-table__num">
-                Time
+                Printed
               </th>
               <th scope="col" className="bom-table__num">
                 Filament
@@ -209,11 +344,43 @@ function BomSection({ title, lines, index, onSelectPart, emptyText }: SectionPro
             {lines.map((line) => {
               const part = index.get(line.partId);
               const label = line.name.length > 0 ? line.name : line.partId;
+              const done = line.toPrint <= 0 && line.quantity > 0;
+              const lit = litLine === line.partId;
               return (
-                <tr key={line.partId} className="bom-line">
-                  <td className="bom-table__num bom-line__qty">{formatCount(line.quantity)}</td>
+                <tr
+                  key={line.partId}
+                  className={done ? 'bom-line bom-line--done' : 'bom-line'}
+                  // Which line the wall is lit for. An attribute rather than a
+                  // class so the row keeps its two existing states without a
+                  // third combination to spell out.
+                  data-lit={lit ? 'true' : undefined}
+                  aria-current={lit ? 'true' : undefined}
+                >
+                  {/* What is LEFT, because that is the number you act on. The
+                      quantity stays underneath it whenever the two differ, so
+                      the list never looks like it shrank the job. */}
+                  <td className="bom-table__num bom-line__qty">
+                    {formatCount(line.toPrint)}
+                    {line.printed > 0 ? (
+                      <span className="bom-line__sub tabular-nums">
+                        of {formatCount(line.quantity)}
+                      </span>
+                    ) : null}
+                  </td>
                   <td className="bom-line__part">
                     <span className="bom-line__heading">
+                      {/* Before the name, so the colours line up down the list
+                          and read as a key to what is on the wall. */}
+                      {onSetLineColor === undefined ? null : (
+                        <ColorSwatch
+                          className="bom-line__swatch"
+                          label={`Colour for ${label}`}
+                          value={colors?.lines?.[line.partId]}
+                          fallback={line.type === 'panel' ? colors?.panels : colors?.parts}
+                          onChange={(c) => onSetLineColor(line.partId, c)}
+                          onClear={() => onSetLineColor(line.partId, undefined)}
+                        />
+                      )}
                       {onSelectPart === undefined ? (
                         <span className="bom-line__name">{label}</span>
                       ) : (
@@ -221,7 +388,7 @@ function BomSection({ title, lines, index, onSelectPart, emptyText }: SectionPro
                           type="button"
                           className="bom-line__name bom-line__name--button"
                           onClick={() => onSelectPart(line.partId)}
-                          title={`Highlight ${label} on the wall`}
+                          title={lit ? `Stop highlighting ${label}` : `Highlight ${label} on the wall`}
                         >
                           {label}
                         </button>
@@ -252,9 +419,20 @@ function BomSection({ title, lines, index, onSelectPart, emptyText }: SectionPro
                           {line.providedBySockets} already in the wall
                         </span>
                       ) : null}
+                      {done ? <span className="bom-line__flag bom-line__flag--done">printed</span> : null}
                     </span>
                   </td>
-                  <td className="bom-table__num bom-line__time">{formatMinutes(line.minutes)}</td>
+                  <td className="bom-table__num bom-line__printed">
+                    {onSetPrinted === undefined ? (
+                      formatCount(line.printed)
+                    ) : (
+                      <PrintedControl
+                        line={line}
+                        onSetPrinted={onSetPrinted}
+                        onBumpPrinted={onBumpPrinted}
+                      />
+                    )}
+                  </td>
                   <td className="bom-table__num bom-line__filament">
                     {formatGrams(line.grams)}
                     <span className="bom-line__sub">{formatMetres(line.metres)}</span>
@@ -330,7 +508,25 @@ const EXPORTS: readonly { format: BomExportFormat; label: string; hint: string }
 // ---------------------------------------------------------------------------
 
 export function BomPanel(props: BomPanelProps): JSX.Element {
-  const { bom, catalog, doc, onExport, onSelectPart, onDismissIssue, extras } = props;
+  const {
+    bom, catalog, doc, onExport, onSelectPart, litLine, onSetLineColor, onClearColors,
+    onDismissIssue, onSetPrinted, onBumpPrinted, onResetPrinted, onResetFixings, extras,
+  } = props;
+
+  /**
+   * How many wall fixings a person overruled. Off the DOCUMENT rather than off
+   * the plan, because that is what "Reset fixings" undoes: a removal for a cell
+   * the planner no longer proposes is still an edit this button would clear.
+   */
+  const edited =
+    (doc.fixingEdits?.removed?.length ?? 0) + (doc.fixingEdits?.added?.length ?? 0);
+
+  /** The colours this build actually uses — through the one function that knows
+   *  which of the four levels answers for each thing on the wall. */
+  const palette = useMemo(
+    () => colorsInUse(doc, [...(bom.printed ?? []), ...(bom.fasteners ?? [])]),
+    [doc, bom.printed, bom.fasteners],
+  );
 
   const index = useMemo(() => {
     const map = new Map<string, CatalogPart>();
@@ -365,28 +561,38 @@ export function BomPanel(props: BomPanelProps): JSX.Element {
       <header className="bom-panel__head">
         <div className="bom-panel__identity">
           <h2 className="bom-panel__title">Parts list</h2>
-          <p className="bom-panel__doc" title={doc.name}>
-            {doc.name.length > 0 ? doc.name : 'Untitled layout'}
-          </p>
+          {/*
+            * The wall's own figures, and NOT the layout's name: the title bar
+            * carries that name three inches away, in a bigger type, and a panel
+            * heading that repeats it verbatim reads as a rendering fault. The
+            * figures stay because they are the thing this list is counting, and
+            * because the title bar drops them on a narrow window.
+            */}
           <p className="bom-panel__wall tabular-nums">
             {formatCount(doc.wall?.widthMm)} × {formatCount(doc.wall?.heightMm)} mm ·{' '}
             {formatCount(doc.panels?.length)} panels · {formatCount(doc.items?.length)} placed
           </p>
         </div>
 
+        {/*
+          * A utility strip, not four decisions.
+          *
+          * These were four full-height bordered buttons with a filled blue one
+          * at the front, which is the visual weight of a primary action — and
+          * exporting is never why anyone opened this panel. They are one
+          * segmented control now: the same four formats, one row, and Print
+          * keeps an icon because it is the one that goes on the workshop wall.
+          */}
         <div className="bom-panel__exports" role="group" aria-label="Export the parts list">
           {EXPORTS.map((entry) => (
             <button
               key={entry.format}
               type="button"
-              className={
-                entry.format === 'print'
-                  ? 'button button--primary bom-export'
-                  : 'button bom-export'
-              }
+              className="button button--ghost button--sm bom-export"
               title={entry.hint}
               onClick={() => onExport(entry.format)}
             >
+              {entry.format === 'print' ? <Icon name="printer" /> : null}
               {entry.label}
             </button>
           ))}
@@ -440,8 +646,8 @@ export function BomPanel(props: BomPanelProps): JSX.Element {
             <h3 className="bom-empty__title">Nothing to print yet</h3>
             <p className="bom-empty__body">
               Drag a wall panel from the catalogue onto the wall, then drop hooks, shelves and
-              bins into its cells. Everything you place is counted here — quantities, print time
-              and filament — ready to take to the printer.
+              bins into its cells. Everything you place is counted here — and as each batch comes
+              off the printer you tick it off, so the list always says what is left to print.
             </p>
             <p className="bom-empty__hint tabular-nums">
               {formatCount(catalog.parts?.length)} parts in the catalogue · wall{' '}
@@ -455,6 +661,11 @@ export function BomPanel(props: BomPanelProps): JSX.Element {
               lines={printed}
               index={index}
               onSelectPart={onSelectPart}
+              litLine={litLine}
+              colors={doc.colors}
+              onSetLineColor={onSetLineColor}
+              onSetPrinted={onSetPrinted}
+              onBumpPrinted={onBumpPrinted}
               emptyText="No panels or accessories placed yet."
             />
             <BomSection
@@ -462,6 +673,11 @@ export function BomPanel(props: BomPanelProps): JSX.Element {
               lines={fasteners}
               index={index}
               onSelectPart={onSelectPart}
+              litLine={litLine}
+              colors={doc.colors}
+              onSetLineColor={onSetLineColor}
+              onSetPrinted={onSetPrinted}
+              onBumpPrinted={onBumpPrinted}
               emptyText="Nothing here yet — inserts are added automatically by the parts that need them."
             />
             <ShoppingSection items={shopping} />
@@ -475,9 +691,36 @@ export function BomPanel(props: BomPanelProps): JSX.Element {
                   ? ` (${bom.fixings.perSquareMetre.toFixed(0)} per m²)`
                   : ''}
                 {bom.fixings.junctions > 0
-                  ? `, of which ${formatCount(bom.fixings.junctions)} are four-cell inserts bridging where panels meet`
+                  ? `, of which ${formatCount(bom.fixings.junctions)} ${
+                      bom.fixings.junctions === 1 ? 'is a four-cell insert' : 'are four-cell inserts'
+                    } bridging where panels meet`
                   : ''}
                 .
+                {/* Said out loud, because a spacing figure stops being the whole
+                    truth the moment somebody moves one: the count above is the
+                    plan AS EDITED, and this is how you get the planner's own
+                    back. */}
+                {edited > 0 ? (
+                  <>
+                    {' '}
+                    <span className="bom-panel__edited">
+                      {formatCount(edited)} moved or removed by hand
+                    </span>
+                    {onResetFixings === undefined ? null : (
+                      <>
+                        {' '}
+                        <button
+                          type="button"
+                          className="bom-totals__reset"
+                          onClick={onResetFixings}
+                          title="Put every wall fixing back where the planner had it"
+                        >
+                          Reset fixings
+                        </button>
+                      </>
+                    )}
+                  </>
+                ) : null}
               </p>
             )}
           </>
@@ -487,16 +730,21 @@ export function BomPanel(props: BomPanelProps): JSX.Element {
 
       <footer className="bom-totals" aria-label="Totals">
         <dl className="bom-totals__list">
+          {/* The lead number is what is LEFT, because that is what the panel is
+              asked while a wall is being built. The whole job is beside it. */}
           <div className="bom-totals__item bom-totals__item--lead">
-            <dt className="bom-totals__label">Print time</dt>
+            <dt className="bom-totals__label">Still to print</dt>
             <dd className="bom-totals__value bom-totals__value--lead tabular-nums">
-              {formatMinutes(totals?.minutes)}
+              {formatCount(totals?.toPrint)}
+              <span className="bom-totals__sub tabular-nums">
+                of {formatCount(totals?.parts)}
+              </span>
             </dd>
           </div>
           <div className="bom-totals__item">
-            <dt className="bom-totals__label">Parts</dt>
+            <dt className="bom-totals__label">Printed</dt>
             <dd className="bom-totals__value tabular-nums">
-              {formatCount(totals?.parts)}
+              {formatCount(totals?.printed)}
               <span className="bom-totals__sub tabular-nums">
                 {formatCount(totals?.distinctParts)} distinct
               </span>
@@ -510,9 +758,54 @@ export function BomPanel(props: BomPanelProps): JSX.Element {
             </dd>
           </div>
         </dl>
-        <p className="bom-totals__note" title={catalog.slicerProfile}>
-          Slicer estimates · {catalog.slicerProfile}
-        </p>
+        {/* What to load in the printer. Only the colours something on this wall
+            actually falls back to — a default nobody uses is not a spool you
+            have to buy, and listing it would say otherwise. */}
+        {palette.length > 0 && (
+          <p className="bom-totals__palette">
+            <span className="bom-totals__palette-label">
+              {palette.length === 1 ? '1 colour' : `${formatCount(palette.length)} colours`}
+            </span>
+            {palette.map((colour) => (
+              <span
+                key={colour}
+                className="bom-totals__chip"
+                style={{ backgroundColor: colour }}
+                title={colour}
+              >
+                <span className="visually-hidden">{colour}</span>
+              </span>
+            ))}
+            {onClearColors !== undefined && (
+              <button
+                type="button"
+                className="bom-totals__reset"
+                onClick={onClearColors}
+                title="Put every colour back to the way the wall is drawn by default"
+              >
+                Clear colours
+              </button>
+            )}
+          </p>
+        )}
+
+        <div className="bom-totals__foot">
+          <p className="bom-totals__note" title={catalog.slicerProfile}>
+            Filament is a slicer estimate · {catalog.slicerProfile}
+          </p>
+          {/* Only once there is progress to lose — an empty list has nothing to
+              reset, and the button would just be one more thing to read. */}
+          {onResetPrinted !== undefined && finite(totals?.printed) > 0 ? (
+            <button
+              type="button"
+              className="bom-totals__reset"
+              onClick={onResetPrinted}
+              title="Set every printed count back to none — building this wall again from scratch"
+            >
+              Reset printed
+            </button>
+          ) : null}
+        </div>
       </footer>
     </aside>
   );

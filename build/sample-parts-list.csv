@@ -1,45 +1,45 @@
-section,quantity,part_id,part,type,file,supports,footprint_estimated,print_estimated,fastener_count_unknown,already_in_the_wall,minutes_each,grams_each,metres_each,minutes_total,grams_total,metres_total
-printed,1,20-micro-sd-card-holder,20-micro-sd-card-holder,accessory,models/Hooks and holders/20-micro-sd-card-holder.stl,yes,no,no,no,0,84.42,12.7,4.25,84,12.7,4.25
-printed,1,5-micro-sd-card-holder,5-micro-sd-card-holder,accessory,models/Hooks and holders/5-micro-sd-card-holder.stl,yes,no,no,no,0,38.48,6.2,2.07,38,6.2,2.07
-printed,1,usb-holder,USB-holder,accessory,models/Hooks and holders/USB-holder.stl,yes,yes,no,no,0,170.53,28.6,9.57,171,28.6,9.57
-printed,1,usb-holder-without-screw,USB-holder-without-screw,accessory,models/Hooks and holders/USB-holder-without-screw.stl,yes,yes,no,no,0,164.72,28.3,9.48,165,28.3,9.48
-printed,1,box,box,accessory,models/Hooks and holders/box.stl,no,yes,no,no,0,109.83,16.6,5.57,110,16.6,5.57
-printed,1,box-and-usb-holder-cover,box-and-usb-holder-cover,accessory,models/Hooks and holders/box-and-usb-holder-cover.stl,no,yes,no,no,0,16.35,2.2,0.75,16,2.2,0.75
-printed,1,box-without-screw,box-without-screw,accessory,models/Hooks and holders/box-without-screw.stl,no,yes,no,no,0,113.68,17.2,5.78,114,17.2,5.78
-printed,1,caliper-mount,caliper-mount,accessory,models/Hooks and holders/caliper-mount.stl,no,yes,no,no,0,23.13,3.1,1.02,23,3.1,1.02
-printed,1,countersunk-to-holee,countersunk-to-holee,accessory,models/Other parts/countersunk-to-holee.stl,no,yes,no,no,0,15.23,1.5,0.49,15,1.5,0.49
-printed,1,cover-contersunk,cover-contersunk,accessory,models/Other parts/cover-contersunk.stl,no,yes,no,no,0,6.65,0.7,0.24,7,0.7,0.24
-printed,1,hook-12mm-for-m3,hook-12mm-for-M3,accessory,models/Hooks and holders/hook-12mm-for-M3.stl,yes,yes,no,no,0,11.13,1.1,0.38,11,1.1,0.38
-printed,1,hook-25mm-for-m3,hook-25mm-for-M3,accessory,models/Hooks and holders/hook-25mm-for-M3.stl,yes,yes,no,no,0,13.77,1.6,0.52,14,1.6,0.52
-printed,1,hook-bottom,hook-bottom,accessory,models/Hooks and holders/hook-bottom.stl,no,yes,no,no,0,16.67,2.2,0.73,17,2.2,0.73
-printed,1,hook-keyboard-bottom,hook-keyboard-bottom,accessory,models/Hooks and holders/hook-keyboard-bottom.stl,no,yes,no,no,0,9.2,1.5,0.49,9,1.5,0.49
-printed,1,hook-keyboard-side,hook-keyboard-side,accessory,models/Hooks and holders/hook-keyboard-side.stl,no,yes,no,no,0,10.58,1.8,0.59,11,1.8,0.59
-printed,1,hook-side,hook-side,accessory,models/Hooks and holders/hook-side.stl,no,yes,no,no,0,19.4,2.3,0.77,19,2.3,0.77
-printed,1,hook-to-empty,hook-to-empty,accessory,models/Hooks and holders/hook-to-empty.stl,yes,yes,no,no,0,18.78,3.1,1.03,19,3.1,1.03
-printed,1,hook-to-empty-long,hook-to-empty-long,accessory,models/Hooks and holders/hook-to-empty-long.stl,no,yes,no,no,0,39.93,7.2,2.41,40,7.2,2.41
-printed,1,insert-cable-holder,insert-cable holder,accessory,models/Hooks and holders/insert-cable holder.stl,no,yes,no,no,0,13.02,2,0.67,13,2,0.67
-printed,1,screw-holder,screw-holder,accessory,models/Hooks and holders/screw-holder.stl,no,yes,no,no,0,23.22,3,1,23,3,1
-printed,1,sd-card-holder,sd-card-holder,accessory,models/Hooks and holders/sd-card-holder.stl,no,yes,no,no,0,148.25,22.4,7.52,148,22.4,7.52
-printed,1,sd-card-holder-cover,sd-card-holder-cover,accessory,models/Hooks and holders/sd-card-holder-cover.stl,no,yes,no,no,0,11.27,1.5,0.49,11,1.5,0.49
-printed,1,sd-card-holder-without-screw,sd-card-holder-without-screw,accessory,models/Hooks and holders/sd-card-holder-without-screw.stl,no,yes,no,no,0,171.07,25.9,8.67,171,25.9,8.67
-printed,1,shelf-1,shelf-1,accessory,models/shelves/shelf-1.stl,no,yes,no,no,0,54.63,7.7,2.57,55,7.7,2.57
-printed,1,shelf-2,shelf-2,accessory,models/shelves/shelf-2.stl,no,yes,no,no,0,80.5,11.4,3.81,81,11.4,3.81
-printed,1,shelf-3,shelf-3,accessory,models/shelves/shelf-3.stl,no,yes,no,no,0,105.88,15,5.03,106,15,5.03
-printed,1,shelf-4,shelf-4,accessory,models/shelves/shelf-4.stl,no,yes,no,no,0,141.15,19.8,6.62,141,19.8,6.62
-printed,44,wall-honeycomb-bambu-211x248-fixed,wall-honeycomb-bambu-211x248-fixed,panel,models/wall-honeycomb-bambu-211x248-fixed.stl,no,no,no,no,0,554.9,86.7,29.06,24416,3813.5,1278.66
-printed,11,wall-honeycomb-k1-211x201,wall-honeycomb-k1-211x201,panel,models/wall-honeycomb-k1-211x201.stl,no,no,no,no,0,444.1,69.6,23.34,4885,765.6,256.71
-printed,6,wall-honeycomb-part,wall-honeycomb-part,panel,models/wall-honeycomb-part.stl,no,no,no,no,0,315.15,49.1,16.45,1891,294.4,98.72
-printed,1,wranch-hoks-1,wranch-hoks-1,accessory,models/Hooks and holders/wranch-hoks-1.stl,no,yes,no,no,0,114.68,20.5,6.87,115,20.5,6.87
-printed,1,wranch-hoks-2,wranch-hoks-2,accessory,models/Hooks and holders/wranch-hoks-2.stl,no,yes,no,no,0,122.25,22.1,7.42,122,22.1,7.42
-fastener,29,insert-countersunk,Insert-countersunk,fastener,models/Parts for attaching honeycombs to the wall/Insert-countersunk.stl,yes,no,no,no,0,18.65,2.3,0.77,541,66.4,22.29
-fastener,1,double-m4,double M4,insert,models/Fasteners and parts for attaching hooks and objects/double M4.stl,yes,no,no,no,0,37.43,4.7,1.58,37,4.7,1.58
-fastener,3,insert-m4,insert M4,insert,models/Fasteners and parts for attaching hooks and objects/insert M4.stl,yes,no,no,no,0,18.55,2.4,0.79,56,7.1,2.36
-fastener,42,insert-empty,insert-empty,insert,models/Fasteners and parts for attaching hooks and objects/insert-empty.stl,yes,no,no,no,0,15.33,2,0.65,644,81.9,27.44
-fastener,44,insert-for-countersunk-hole-3,insert-for-countersunk-hole-3,fastener,models/Parts for attaching honeycombs to the wall/insert-for-countersunk-hole-3.stl,yes,no,no,no,0,64.88,8.4,2.81,2855,368.3,123.47
-fastener,3,insert-with-m3,insert-with-M3,insert,models/Fasteners and parts for attaching hooks and objects/insert-with-M3.stl,yes,no,no,no,0,18.23,2.3,0.79,55,7,2.36
-shopping,3,,"M3 bolt, 10-16 mm",bought,,,,,,,,,,,,
-shopping,3,,M3 nut,bought,,,,,,,,,,,,
-shopping,5,,"M4 bolt, 10-16 mm",bought,,,,,,,,,,,,
-shopping,5,,M4 nut,bought,,,,,,,,,,,,
-shopping,73,,"Wall plug, 6 mm",bought,,,,,,,,,,,,
-shopping,73,,"Wall screw, 3.5 x 35 mm countersunk",bought,,,,,,,,,,,,
+section,quantity,printed,to_print,part_id,part,type,file,supports,footprint_estimated,print_estimated,fastener_count_unknown,already_in_the_wall,color,grams_each,metres_each,grams_total,metres_total
+printed,1,0,1,20-micro-sd-card-holder,20-micro-sd-card-holder,accessory,models/Hooks and holders/20-micro-sd-card-holder.stl,yes,no,no,no,0,,12.7,4.25,12.7,4.25
+printed,1,0,1,5-micro-sd-card-holder,5-micro-sd-card-holder,accessory,models/Hooks and holders/5-micro-sd-card-holder.stl,yes,no,no,no,0,,6.2,2.07,6.2,2.07
+printed,1,0,1,usb-holder,USB-holder,accessory,models/Hooks and holders/USB-holder.stl,yes,yes,no,no,0,,28.6,9.57,28.6,9.57
+printed,1,0,1,usb-holder-without-screw,USB-holder-without-screw,accessory,models/Hooks and holders/USB-holder-without-screw.stl,yes,yes,no,no,0,,28.3,9.48,28.3,9.48
+printed,1,0,1,box,box,accessory,models/Hooks and holders/box.stl,no,yes,no,no,0,,16.6,5.57,16.6,5.57
+printed,1,0,1,box-and-usb-holder-cover,box-and-usb-holder-cover,accessory,models/Hooks and holders/box-and-usb-holder-cover.stl,no,yes,no,no,0,,2.2,0.75,2.2,0.75
+printed,1,0,1,box-without-screw,box-without-screw,accessory,models/Hooks and holders/box-without-screw.stl,no,yes,no,no,0,,17.2,5.78,17.2,5.78
+printed,1,0,1,caliper-mount,caliper-mount,accessory,models/Hooks and holders/caliper-mount.stl,no,yes,no,no,0,,3.1,1.02,3.1,1.02
+printed,1,0,1,countersunk-to-holee,countersunk-to-holee,accessory,models/Other parts/countersunk-to-holee.stl,no,yes,no,no,0,,1.5,0.49,1.5,0.49
+printed,1,0,1,cover-contersunk,cover-contersunk,accessory,models/Other parts/cover-contersunk.stl,no,yes,no,no,0,,0.7,0.24,0.7,0.24
+printed,1,0,1,hook-12mm-for-m3,hook-12mm-for-M3,accessory,models/Hooks and holders/hook-12mm-for-M3.stl,yes,yes,no,no,0,,1.1,0.38,1.1,0.38
+printed,1,0,1,hook-25mm-for-m3,hook-25mm-for-M3,accessory,models/Hooks and holders/hook-25mm-for-M3.stl,yes,yes,no,no,0,,1.6,0.52,1.6,0.52
+printed,1,0,1,hook-bottom,hook-bottom,accessory,models/Hooks and holders/hook-bottom.stl,no,yes,no,no,0,,2.2,0.73,2.2,0.73
+printed,1,0,1,hook-keyboard-bottom,hook-keyboard-bottom,accessory,models/Hooks and holders/hook-keyboard-bottom.stl,no,yes,no,no,0,,1.5,0.49,1.5,0.49
+printed,1,0,1,hook-keyboard-side,hook-keyboard-side,accessory,models/Hooks and holders/hook-keyboard-side.stl,no,yes,no,no,0,,1.8,0.59,1.8,0.59
+printed,1,0,1,hook-side,hook-side,accessory,models/Hooks and holders/hook-side.stl,no,yes,no,no,0,,2.3,0.77,2.3,0.77
+printed,1,0,1,hook-to-empty,hook-to-empty,accessory,models/Hooks and holders/hook-to-empty.stl,yes,yes,no,no,0,,3.1,1.03,3.1,1.03
+printed,1,0,1,hook-to-empty-long,hook-to-empty-long,accessory,models/Hooks and holders/hook-to-empty-long.stl,no,yes,no,no,0,,7.2,2.41,7.2,2.41
+printed,1,0,1,insert-cable-holder,insert-cable holder,accessory,models/Hooks and holders/insert-cable holder.stl,no,yes,no,no,0,,2,0.67,2,0.67
+printed,1,0,1,screw-holder,screw-holder,accessory,models/Hooks and holders/screw-holder.stl,no,yes,no,no,0,,3,1,3,1
+printed,1,0,1,sd-card-holder,sd-card-holder,accessory,models/Hooks and holders/sd-card-holder.stl,no,yes,no,no,0,,22.4,7.52,22.4,7.52
+printed,1,0,1,sd-card-holder-cover,sd-card-holder-cover,accessory,models/Hooks and holders/sd-card-holder-cover.stl,no,yes,no,no,0,,1.5,0.49,1.5,0.49
+printed,1,0,1,sd-card-holder-without-screw,sd-card-holder-without-screw,accessory,models/Hooks and holders/sd-card-holder-without-screw.stl,no,yes,no,no,0,,25.9,8.67,25.9,8.67
+printed,1,0,1,shelf-1,shelf-1,accessory,models/shelves/shelf-1.stl,no,yes,no,no,0,,7.7,2.57,7.7,2.57
+printed,1,0,1,shelf-2,shelf-2,accessory,models/shelves/shelf-2.stl,no,yes,no,no,0,,11.4,3.81,11.4,3.81
+printed,1,0,1,shelf-3,shelf-3,accessory,models/shelves/shelf-3.stl,no,yes,no,no,0,,15,5.03,15,5.03
+printed,1,0,1,shelf-4,shelf-4,accessory,models/shelves/shelf-4.stl,no,yes,no,no,0,,19.8,6.62,19.8,6.62
+printed,44,0,44,wall-honeycomb-bambu-211x248-fixed,wall-honeycomb-bambu-211x248-fixed,panel,models/wall-honeycomb-bambu-211x248-fixed.stl,no,no,no,no,0,,86.7,29.06,3813.5,1278.66
+printed,11,0,11,wall-honeycomb-k1-211x201,wall-honeycomb-k1-211x201,panel,models/wall-honeycomb-k1-211x201.stl,no,no,no,no,0,,69.6,23.34,765.6,256.71
+printed,6,0,6,wall-honeycomb-part,wall-honeycomb-part,panel,models/wall-honeycomb-part.stl,no,no,no,no,0,,49.1,16.45,294.4,98.72
+printed,1,0,1,wranch-hoks-1,wranch-hoks-1,accessory,models/Hooks and holders/wranch-hoks-1.stl,no,yes,no,no,0,,20.5,6.87,20.5,6.87
+printed,1,0,1,wranch-hoks-2,wranch-hoks-2,accessory,models/Hooks and holders/wranch-hoks-2.stl,no,yes,no,no,0,,22.1,7.42,22.1,7.42
+fastener,29,0,29,insert-countersunk,Insert-countersunk,fastener,models/Parts for attaching honeycombs to the wall/Insert-countersunk.stl,yes,no,no,no,0,,2.3,0.77,66.4,22.29
+fastener,1,0,1,double-m4,double M4,insert,models/Fasteners and parts for attaching hooks and objects/double M4.stl,yes,no,no,no,0,,4.7,1.58,4.7,1.58
+fastener,3,0,3,insert-m4,insert M4,insert,models/Fasteners and parts for attaching hooks and objects/insert M4.stl,yes,no,no,no,0,,2.4,0.79,7.1,2.36
+fastener,42,0,42,insert-empty,insert-empty,insert,models/Fasteners and parts for attaching hooks and objects/insert-empty.stl,yes,no,no,no,0,,2,0.65,81.9,27.44
+fastener,44,0,44,insert-for-countersunk-hole-3,insert-for-countersunk-hole-3,fastener,models/Parts for attaching honeycombs to the wall/insert-for-countersunk-hole-3.stl,yes,no,no,no,0,,8.4,2.81,368.3,123.47
+fastener,3,0,3,insert-with-m3,insert-with-M3,insert,models/Fasteners and parts for attaching hooks and objects/insert-with-M3.stl,yes,no,no,no,0,,2.3,0.79,7,2.36
+shopping,3,,,,"M3 bolt, 10-16 mm",bought,,,,,,,,,,,
+shopping,3,,,,M3 nut,bought,,,,,,,,,,,
+shopping,5,,,,"M4 bolt, 10-16 mm",bought,,,,,,,,,,,
+shopping,5,,,,M4 nut,bought,,,,,,,,,,,
+shopping,73,,,,"Wall plug, 6 mm",bought,,,,,,,,,,,
+shopping,73,,,,"Wall screw, 3.5 x 35 mm countersunk",bought,,,,,,,,,,,

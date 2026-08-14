@@ -32,6 +32,11 @@ thead { display: table-header-group; }
 td.tick, th.tick { width: 7mm; }
 td.tick::before { content: ""; display: block; width: 4.5mm; height: 4.5mm;
                   border: 1pt solid #000; margin-top: 0.6mm; }
+/* Already printed: the box arrives ticked, so the sheet starts where the app
+   left off. Solid rather than a drawn tick — a laser printer at 8pt makes a
+   glyph look like dirt, and a filled square cannot be misread. */
+td.tick--done::before { background: #000; }
+tr.done td.name, tr.done td.qty, tr.done td.n { color: #555; }
 td.qty, th.qty { width: 12mm; font-weight: 700; }
 td.n, th.n { text-align: right; width: 22mm; white-space: nowrap; }
 td.name .file { display: block; font-size: 8pt; word-break: break-all; }
@@ -56,11 +61,12 @@ tr.empty td { font-style: italic; }
 </head>
 <body>
 <h1>Garage wall</h1>
-<p class="meta">Wall 2400 &times; 1200 mm &middot; bed bed256 &middot; 61 panels &middot; 30 placed parts</p>
+<p class="meta">Wall 2400 &times; 1200 mm &middot; bed 256 × 256 (Bambu X1/P1) &middot; 61 panels &middot; 30 placed parts</p>
 <dl class="totals">
+<div><dt>To print</dt><dd>212</dd></div>
+<div><dt>Printed</dt><dd>0</dd></div>
 <div><dt>Parts</dt><dd>212</dd></div>
 <div><dt>Distinct</dt><dd>38</dd></div>
-<div><dt>Print time</dt><dd>620 h 47 min</dd></div>
 <div><dt>Filament</dt><dd>5697.7 g</dd></div>
 <div><dt>Length</dt><dd>1910.4 m</dd></div>
 </dl>
@@ -80,13 +86,13 @@ tr.empty td { font-style: italic; }
 <section>
 <h2>Panels</h2>
 <table>
-<thead><tr><th class="tick"></th><th class="qty">Qty</th><th>Part</th><th class="n">Time</th><th class="n">Filament</th><th class="n">Length</th></tr></thead>
+<thead><tr><th class="tick"></th><th class="qty">To print</th><th>Part</th><th class="n">Printed</th><th class="n">Filament</th><th class="n">Length</th></tr></thead>
 <tbody>
 <tr>
   <td class="tick"></td>
   <td class="qty">44</td>
   <td class="name">wall-honeycomb-bambu-211x248-fixed<span class="file">models/wall-honeycomb-bambu-211x248-fixed.stl</span></td>
-  <td class="n">406 h 56 min</td>
+  <td class="n">44</td>
   <td class="n">3813.5 g</td>
   <td class="n">1278.7 m</td>
 </tr>
@@ -94,7 +100,7 @@ tr.empty td { font-style: italic; }
   <td class="tick"></td>
   <td class="qty">11</td>
   <td class="name">wall-honeycomb-k1-211x201<span class="file">models/wall-honeycomb-k1-211x201.stl</span></td>
-  <td class="n">81 h 25 min</td>
+  <td class="n">11</td>
   <td class="n">765.6 g</td>
   <td class="n">256.7 m</td>
 </tr>
@@ -102,7 +108,7 @@ tr.empty td { font-style: italic; }
   <td class="tick"></td>
   <td class="qty">6</td>
   <td class="name">wall-honeycomb-part<span class="file">models/wall-honeycomb-part.stl</span></td>
-  <td class="n">31 h 31 min</td>
+  <td class="n">6</td>
   <td class="n">294.4 g</td>
   <td class="n">98.7 m</td>
 </tr>
@@ -112,13 +118,13 @@ tr.empty td { font-style: italic; }
 <section>
 <h2>Accessories</h2>
 <table>
-<thead><tr><th class="tick"></th><th class="qty">Qty</th><th>Part</th><th class="n">Time</th><th class="n">Filament</th><th class="n">Length</th></tr></thead>
+<thead><tr><th class="tick"></th><th class="qty">To print</th><th>Part</th><th class="n">Printed</th><th class="n">Filament</th><th class="n">Length</th></tr></thead>
 <tbody>
 <tr>
   <td class="tick"></td>
   <td class="qty">1</td>
   <td class="name">20-micro-sd-card-holder<span class="file">models/Hooks and holders/20-micro-sd-card-holder.stl</span><span class="flag">supports</span></td>
-  <td class="n">1 h 24 min</td>
+  <td class="n">1</td>
   <td class="n">12.7 g</td>
   <td class="n">4.3 m</td>
 </tr>
@@ -126,7 +132,7 @@ tr.empty td { font-style: italic; }
   <td class="tick"></td>
   <td class="qty">1</td>
   <td class="name">5-micro-sd-card-holder<span class="file">models/Hooks and holders/5-micro-sd-card-holder.stl</span><span class="flag">supports</span></td>
-  <td class="n">38 min</td>
+  <td class="n">1</td>
   <td class="n">6.2 g</td>
   <td class="n">2.1 m</td>
 </tr>
@@ -134,7 +140,7 @@ tr.empty td { font-style: italic; }
   <td class="tick"></td>
   <td class="qty">1</td>
   <td class="name">USB-holder<span class="file">models/Hooks and holders/USB-holder.stl</span><span class="flag">supports</span><span class="flag">footprint est.</span></td>
-  <td class="n">2 h 51 min</td>
+  <td class="n">1</td>
   <td class="n">28.6 g</td>
   <td class="n">9.6 m</td>
 </tr>
@@ -142,7 +148,7 @@ tr.empty td { font-style: italic; }
   <td class="tick"></td>
   <td class="qty">1</td>
   <td class="name">USB-holder-without-screw<span class="file">models/Hooks and holders/USB-holder-without-screw.stl</span><span class="flag">supports</span><span class="flag">footprint est.</span></td>
-  <td class="n">2 h 45 min</td>
+  <td class="n">1</td>
   <td class="n">28.3 g</td>
   <td class="n">9.5 m</td>
 </tr>
@@ -150,7 +156,7 @@ tr.empty td { font-style: italic; }
   <td class="tick"></td>
   <td class="qty">1</td>
   <td class="name">box<span class="file">models/Hooks and holders/box.stl</span><span class="flag">footprint est.</span></td>
-  <td class="n">1 h 50 min</td>
+  <td class="n">1</td>
   <td class="n">16.6 g</td>
   <td class="n">5.6 m</td>
 </tr>
@@ -158,7 +164,7 @@ tr.empty td { font-style: italic; }
   <td class="tick"></td>
   <td class="qty">1</td>
   <td class="name">box-and-usb-holder-cover<span class="file">models/Hooks and holders/box-and-usb-holder-cover.stl</span><span class="flag">footprint est.</span></td>
-  <td class="n">16 min</td>
+  <td class="n">1</td>
   <td class="n">2.2 g</td>
   <td class="n">0.8 m</td>
 </tr>
@@ -166,7 +172,7 @@ tr.empty td { font-style: italic; }
   <td class="tick"></td>
   <td class="qty">1</td>
   <td class="name">box-without-screw<span class="file">models/Hooks and holders/box-without-screw.stl</span><span class="flag">footprint est.</span></td>
-  <td class="n">1 h 54 min</td>
+  <td class="n">1</td>
   <td class="n">17.2 g</td>
   <td class="n">5.8 m</td>
 </tr>
@@ -174,7 +180,7 @@ tr.empty td { font-style: italic; }
   <td class="tick"></td>
   <td class="qty">1</td>
   <td class="name">caliper-mount<span class="file">models/Hooks and holders/caliper-mount.stl</span><span class="flag">footprint est.</span></td>
-  <td class="n">23 min</td>
+  <td class="n">1</td>
   <td class="n">3.1 g</td>
   <td class="n">1 m</td>
 </tr>
@@ -182,7 +188,7 @@ tr.empty td { font-style: italic; }
   <td class="tick"></td>
   <td class="qty">1</td>
   <td class="name">countersunk-to-holee<span class="file">models/Other parts/countersunk-to-holee.stl</span><span class="flag">footprint est.</span></td>
-  <td class="n">15 min</td>
+  <td class="n">1</td>
   <td class="n">1.5 g</td>
   <td class="n">0.5 m</td>
 </tr>
@@ -190,7 +196,7 @@ tr.empty td { font-style: italic; }
   <td class="tick"></td>
   <td class="qty">1</td>
   <td class="name">cover-contersunk<span class="file">models/Other parts/cover-contersunk.stl</span><span class="flag">footprint est.</span></td>
-  <td class="n">7 min</td>
+  <td class="n">1</td>
   <td class="n">0.7 g</td>
   <td class="n">0.2 m</td>
 </tr>
@@ -198,7 +204,7 @@ tr.empty td { font-style: italic; }
   <td class="tick"></td>
   <td class="qty">1</td>
   <td class="name">hook-12mm-for-M3<span class="file">models/Hooks and holders/hook-12mm-for-M3.stl</span><span class="flag">supports</span><span class="flag">footprint est.</span></td>
-  <td class="n">11 min</td>
+  <td class="n">1</td>
   <td class="n">1.1 g</td>
   <td class="n">0.4 m</td>
 </tr>
@@ -206,7 +212,7 @@ tr.empty td { font-style: italic; }
   <td class="tick"></td>
   <td class="qty">1</td>
   <td class="name">hook-25mm-for-M3<span class="file">models/Hooks and holders/hook-25mm-for-M3.stl</span><span class="flag">supports</span><span class="flag">footprint est.</span></td>
-  <td class="n">14 min</td>
+  <td class="n">1</td>
   <td class="n">1.6 g</td>
   <td class="n">0.5 m</td>
 </tr>
@@ -214,7 +220,7 @@ tr.empty td { font-style: italic; }
   <td class="tick"></td>
   <td class="qty">1</td>
   <td class="name">hook-bottom<span class="file">models/Hooks and holders/hook-bottom.stl</span><span class="flag">footprint est.</span></td>
-  <td class="n">17 min</td>
+  <td class="n">1</td>
   <td class="n">2.2 g</td>
   <td class="n">0.7 m</td>
 </tr>
@@ -222,7 +228,7 @@ tr.empty td { font-style: italic; }
   <td class="tick"></td>
   <td class="qty">1</td>
   <td class="name">hook-keyboard-bottom<span class="file">models/Hooks and holders/hook-keyboard-bottom.stl</span><span class="flag">footprint est.</span></td>
-  <td class="n">9 min</td>
+  <td class="n">1</td>
   <td class="n">1.5 g</td>
   <td class="n">0.5 m</td>
 </tr>
@@ -230,7 +236,7 @@ tr.empty td { font-style: italic; }
   <td class="tick"></td>
   <td class="qty">1</td>
   <td class="name">hook-keyboard-side<span class="file">models/Hooks and holders/hook-keyboard-side.stl</span><span class="flag">footprint est.</span></td>
-  <td class="n">11 min</td>
+  <td class="n">1</td>
   <td class="n">1.8 g</td>
   <td class="n">0.6 m</td>
 </tr>
@@ -238,7 +244,7 @@ tr.empty td { font-style: italic; }
   <td class="tick"></td>
   <td class="qty">1</td>
   <td class="name">hook-side<span class="file">models/Hooks and holders/hook-side.stl</span><span class="flag">footprint est.</span></td>
-  <td class="n">19 min</td>
+  <td class="n">1</td>
   <td class="n">2.3 g</td>
   <td class="n">0.8 m</td>
 </tr>
@@ -246,7 +252,7 @@ tr.empty td { font-style: italic; }
   <td class="tick"></td>
   <td class="qty">1</td>
   <td class="name">hook-to-empty<span class="file">models/Hooks and holders/hook-to-empty.stl</span><span class="flag">supports</span><span class="flag">footprint est.</span></td>
-  <td class="n">19 min</td>
+  <td class="n">1</td>
   <td class="n">3.1 g</td>
   <td class="n">1 m</td>
 </tr>
@@ -254,7 +260,7 @@ tr.empty td { font-style: italic; }
   <td class="tick"></td>
   <td class="qty">1</td>
   <td class="name">hook-to-empty-long<span class="file">models/Hooks and holders/hook-to-empty-long.stl</span><span class="flag">footprint est.</span></td>
-  <td class="n">40 min</td>
+  <td class="n">1</td>
   <td class="n">7.2 g</td>
   <td class="n">2.4 m</td>
 </tr>
@@ -262,7 +268,7 @@ tr.empty td { font-style: italic; }
   <td class="tick"></td>
   <td class="qty">1</td>
   <td class="name">insert-cable holder<span class="file">models/Hooks and holders/insert-cable holder.stl</span><span class="flag">footprint est.</span></td>
-  <td class="n">13 min</td>
+  <td class="n">1</td>
   <td class="n">2 g</td>
   <td class="n">0.7 m</td>
 </tr>
@@ -270,7 +276,7 @@ tr.empty td { font-style: italic; }
   <td class="tick"></td>
   <td class="qty">1</td>
   <td class="name">screw-holder<span class="file">models/Hooks and holders/screw-holder.stl</span><span class="flag">footprint est.</span></td>
-  <td class="n">23 min</td>
+  <td class="n">1</td>
   <td class="n">3 g</td>
   <td class="n">1 m</td>
 </tr>
@@ -278,7 +284,7 @@ tr.empty td { font-style: italic; }
   <td class="tick"></td>
   <td class="qty">1</td>
   <td class="name">sd-card-holder<span class="file">models/Hooks and holders/sd-card-holder.stl</span><span class="flag">footprint est.</span></td>
-  <td class="n">2 h 28 min</td>
+  <td class="n">1</td>
   <td class="n">22.4 g</td>
   <td class="n">7.5 m</td>
 </tr>
@@ -286,7 +292,7 @@ tr.empty td { font-style: italic; }
   <td class="tick"></td>
   <td class="qty">1</td>
   <td class="name">sd-card-holder-cover<span class="file">models/Hooks and holders/sd-card-holder-cover.stl</span><span class="flag">footprint est.</span></td>
-  <td class="n">11 min</td>
+  <td class="n">1</td>
   <td class="n">1.5 g</td>
   <td class="n">0.5 m</td>
 </tr>
@@ -294,7 +300,7 @@ tr.empty td { font-style: italic; }
   <td class="tick"></td>
   <td class="qty">1</td>
   <td class="name">sd-card-holder-without-screw<span class="file">models/Hooks and holders/sd-card-holder-without-screw.stl</span><span class="flag">footprint est.</span></td>
-  <td class="n">2 h 51 min</td>
+  <td class="n">1</td>
   <td class="n">25.9 g</td>
   <td class="n">8.7 m</td>
 </tr>
@@ -302,7 +308,7 @@ tr.empty td { font-style: italic; }
   <td class="tick"></td>
   <td class="qty">1</td>
   <td class="name">shelf-1<span class="file">models/shelves/shelf-1.stl</span><span class="flag">footprint est.</span></td>
-  <td class="n">55 min</td>
+  <td class="n">1</td>
   <td class="n">7.7 g</td>
   <td class="n">2.6 m</td>
 </tr>
@@ -310,7 +316,7 @@ tr.empty td { font-style: italic; }
   <td class="tick"></td>
   <td class="qty">1</td>
   <td class="name">shelf-2<span class="file">models/shelves/shelf-2.stl</span><span class="flag">footprint est.</span></td>
-  <td class="n">1 h 21 min</td>
+  <td class="n">1</td>
   <td class="n">11.4 g</td>
   <td class="n">3.8 m</td>
 </tr>
@@ -318,7 +324,7 @@ tr.empty td { font-style: italic; }
   <td class="tick"></td>
   <td class="qty">1</td>
   <td class="name">shelf-3<span class="file">models/shelves/shelf-3.stl</span><span class="flag">footprint est.</span></td>
-  <td class="n">1 h 46 min</td>
+  <td class="n">1</td>
   <td class="n">15 g</td>
   <td class="n">5 m</td>
 </tr>
@@ -326,7 +332,7 @@ tr.empty td { font-style: italic; }
   <td class="tick"></td>
   <td class="qty">1</td>
   <td class="name">shelf-4<span class="file">models/shelves/shelf-4.stl</span><span class="flag">footprint est.</span></td>
-  <td class="n">2 h 21 min</td>
+  <td class="n">1</td>
   <td class="n">19.8 g</td>
   <td class="n">6.6 m</td>
 </tr>
@@ -334,7 +340,7 @@ tr.empty td { font-style: italic; }
   <td class="tick"></td>
   <td class="qty">1</td>
   <td class="name">wranch-hoks-1<span class="file">models/Hooks and holders/wranch-hoks-1.stl</span><span class="flag">footprint est.</span></td>
-  <td class="n">1 h 55 min</td>
+  <td class="n">1</td>
   <td class="n">20.5 g</td>
   <td class="n">6.9 m</td>
 </tr>
@@ -342,7 +348,7 @@ tr.empty td { font-style: italic; }
   <td class="tick"></td>
   <td class="qty">1</td>
   <td class="name">wranch-hoks-2<span class="file">models/Hooks and holders/wranch-hoks-2.stl</span><span class="flag">footprint est.</span></td>
-  <td class="n">2 h 2 min</td>
+  <td class="n">1</td>
   <td class="n">22.1 g</td>
   <td class="n">7.4 m</td>
 </tr>
@@ -352,13 +358,13 @@ tr.empty td { font-style: italic; }
 <section>
 <h2>Inserts &amp; fasteners</h2>
 <table>
-<thead><tr><th class="tick"></th><th class="qty">Qty</th><th>Part</th><th class="n">Time</th><th class="n">Filament</th><th class="n">Length</th></tr></thead>
+<thead><tr><th class="tick"></th><th class="qty">To print</th><th>Part</th><th class="n">Printed</th><th class="n">Filament</th><th class="n">Length</th></tr></thead>
 <tbody>
 <tr>
   <td class="tick"></td>
   <td class="qty">29</td>
   <td class="name">Insert-countersunk<span class="file">models/Parts for attaching honeycombs to the wall/Insert-countersunk.stl</span><span class="flag">supports</span></td>
-  <td class="n">9 h 1 min</td>
+  <td class="n">29</td>
   <td class="n">66.4 g</td>
   <td class="n">22.3 m</td>
 </tr>
@@ -366,7 +372,7 @@ tr.empty td { font-style: italic; }
   <td class="tick"></td>
   <td class="qty">1</td>
   <td class="name">double M4<span class="file">models/Fasteners and parts for attaching hooks and objects/double M4.stl</span><span class="flag">supports</span></td>
-  <td class="n">37 min</td>
+  <td class="n">1</td>
   <td class="n">4.7 g</td>
   <td class="n">1.6 m</td>
 </tr>
@@ -374,7 +380,7 @@ tr.empty td { font-style: italic; }
   <td class="tick"></td>
   <td class="qty">3</td>
   <td class="name">insert M4<span class="file">models/Fasteners and parts for attaching hooks and objects/insert M4.stl</span><span class="flag">supports</span></td>
-  <td class="n">56 min</td>
+  <td class="n">3</td>
   <td class="n">7.1 g</td>
   <td class="n">2.4 m</td>
 </tr>
@@ -382,7 +388,7 @@ tr.empty td { font-style: italic; }
   <td class="tick"></td>
   <td class="qty">42</td>
   <td class="name">insert-empty<span class="file">models/Fasteners and parts for attaching hooks and objects/insert-empty.stl</span><span class="flag">supports</span></td>
-  <td class="n">10 h 44 min</td>
+  <td class="n">42</td>
   <td class="n">81.9 g</td>
   <td class="n">27.4 m</td>
 </tr>
@@ -390,7 +396,7 @@ tr.empty td { font-style: italic; }
   <td class="tick"></td>
   <td class="qty">44</td>
   <td class="name">insert-for-countersunk-hole-3<span class="file">models/Parts for attaching honeycombs to the wall/insert-for-countersunk-hole-3.stl</span><span class="flag">supports</span></td>
-  <td class="n">47 h 35 min</td>
+  <td class="n">44</td>
   <td class="n">368.3 g</td>
   <td class="n">123.5 m</td>
 </tr>
@@ -398,7 +404,7 @@ tr.empty td { font-style: italic; }
   <td class="tick"></td>
   <td class="qty">3</td>
   <td class="name">insert-with-M3<span class="file">models/Fasteners and parts for attaching hooks and objects/insert-with-M3.stl</span><span class="flag">supports</span></td>
-  <td class="n">55 min</td>
+  <td class="n">3</td>
   <td class="n">7 g</td>
   <td class="n">2.4 m</td>
 </tr>
@@ -419,6 +425,6 @@ tr.empty td { font-style: italic; }
 </tbody>
 </table>
 </section>
-<p class="foot">Honeycomb Planner print list. Times and filament are slicer estimates for the recorded profile.</p>
+<p class="foot">Honeycomb Planner print list. Quantities are what is still to print; filament figures are slicer estimates for the recorded profile.</p>
 </body>
 </html>

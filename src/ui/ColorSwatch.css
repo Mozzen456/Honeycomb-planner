@@ -1,0 +1,205 @@
+/* =============================================================================
+   ColorSwatch — pick a filament colour, or leave it to the theme
+   =============================================================================
+
+   Every value here comes from a token, with ONE exception by design: the colour
+   inside the well is the USER'S, and arrives as an inline style. That is data,
+   not design — the same reason a photograph's pixels are not a token either.
+   ============================================================================= */
+
+.swatch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-0-5);
+}
+
+/* The well is what you see: a square of the chosen colour. The input sits over
+   it invisibly, so the click target, the focus ring and the keyboard behaviour
+   are the browser's own rather than a re-implementation. */
+.swatch__well {
+  position: relative;
+  display: block;
+  inline-size: var(--icon-size-md);
+  block-size: var(--icon-size-md);
+  border: var(--border-width-hair) solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+/* Nothing chosen: a hatch, not a colour. A native picker handed no value shows
+   black, which reads as "your plates are black" instead of "you have not
+   decided" — and the difference matters, because one of those is a decision
+   somebody would go and buy a spool for. */
+.swatch__well[data-unset='true'] {
+  background-color: var(--surface-2);
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent 0 var(--space-1),
+    var(--border-strong) var(--space-1) calc(var(--space-1) + var(--border-width-hair))
+  );
+}
+
+.swatch__well:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.swatch__well:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.swatch__well:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* -----------------------------------------------------------------------------
+   The popover: presets, a custom picker, a hex field, and an OK
+   --------------------------------------------------------------------------
+
+   Portalled to the body and positioned in FIXED coordinates by the component,
+   because the parts list clips its own overflow and the swatches live in it. */
+
+/*
+   The width has to fit the WIDEST ROW, and the widest row is the buttons.
+   Capped below that, everything simply hung out of the right-hand side —
+   measured at 69 px, with OK sitting outside the panel it belongs to, because a
+   grid child laid out at its content width does not shrink to its parent and
+   the panel was not clipping. So: `max-content` for the natural size, a cap that
+   is comfortably wider than the actions row, and a viewport clamp under it so a
+   narrow window cannot push it off screen.
+*/
+.swatch-pop {
+  position: fixed;
+  z-index: var(--z-popover);
+  inline-size: max-content;
+  max-inline-size: min(calc(var(--space-8) * 4.5), calc(100vw - var(--space-5)));
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background-color: var(--surface-1);
+  border: var(--border-width-hair) solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+}
+
+/* Every row is allowed to be narrower than its content wants, so the cap above
+   makes things WRAP rather than escape. Without this a long label sets the
+   panel's width and the rest hangs off the edge. */
+.swatch-pop > * {
+  min-inline-size: var(--space-0);
+}
+
+.swatch-pop__title {
+  color: var(--text-secondary);
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: var(--letter-spacing-caps);
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+
+.swatch-pop__grid {
+  display: grid;
+  grid-template-columns: repeat(6, var(--space-5));
+  gap: var(--space-1);
+}
+
+.swatch-pop__preset {
+  inline-size: var(--space-5);
+  block-size: var(--space-5);
+  padding: var(--space-0);
+  border: var(--border-width-hair) solid var(--border-strong);
+  border-radius: var(--radius-sm);
+}
+
+.swatch-pop__preset:hover,
+.swatch-pop__preset[data-chosen='true'] {
+  outline: var(--border-width-thick) solid var(--accent);
+  outline-offset: var(--border-width-hair);
+}
+
+.swatch-pop__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* The native picker, kept as a small labelled control rather than the whole
+   swatch: it is one way in among three, not the control itself. */
+.swatch-pop__custom {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+}
+
+.swatch-pop__custom input {
+  inline-size: var(--space-5);
+  block-size: var(--space-5);
+  padding: var(--space-0);
+  border: var(--border-width-hair) solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: none;
+  cursor: pointer;
+}
+
+.swatch-pop__hex {
+  min-inline-size: var(--space-0);
+  flex: 1;
+  padding: var(--space-0-5) var(--space-1);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  background-color: var(--surface-0);
+  border: var(--border-width-hair) solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.swatch-pop__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+/* The buttons come from App.css, which sizes them for the top bar. In here they
+   are three across a narrow panel, so they are allowed to give: the label is
+   short enough to survive it, and the alternative is the row escaping. */
+.swatch-pop__actions .button {
+  min-inline-size: var(--space-0);
+}
+
+/* Pushed to the left, away from Cancel and OK: it is a different kind of
+   answer — "forget this colour" rather than "keep it" or "drop the change". */
+.swatch-pop__default {
+  margin-inline-end: auto;
+}
+
+.swatch__clear {
+  display: grid;
+  place-items: center;
+  inline-size: var(--icon-size-md);
+  block-size: var(--icon-size-md);
+  padding: var(--space-0);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-none);
+  border-radius: var(--radius-sm);
+}
+
+.swatch__clear:hover {
+  color: var(--text-primary);
+  background-color: var(--surface-2);
+}
+
+/* Same rule as the parts list's stepper: `.hit-area` already gives this a 44 px
+   target, so growing the box on a coarse pointer would only deform the row. */
+@media (pointer: coarse) {
+  .swatch__clear {
+    min-block-size: var(--icon-size-md);
+  }
+}

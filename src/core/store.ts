@@ -11,22 +11,28 @@
  * what was selected, or undoing a group drag leaves you holding nothing.
  */
 
-import { computeBom, itemCells, itemSocketCells, validate } from './bom';
+import { computeBom, fixingPlanFor, itemCells, itemSocketCells, validate } from './bom';
+import { bedFor, clampBedMm, CUSTOM_BED_ID } from './constants';
+import { hasColors, normaliseColor } from './colors';
 import { hexKey, hexRotate, panelCells, placedPanelCells, placeFootprint } from './hex';
 import { obstructedCells } from './obstacles';
 import { borderCutCells, frameIsOn } from './panelModel';
 import { placementsOf, withPartAdded, withPartRemoved, withPartsAdded } from './projectParts';
 import { crossesSeam } from './tiling';
+import type { FixingPlan } from './fixings';
 import type {
   Bom,
   Catalog,
   CatalogPart,
+  FixingEdits,
   Hex,
   Issue,
   LayoutDoc,
   PlacedItem,
   Rotation,
+  WallColors,
   WallFrame,
+  WallPhoto,
 } from './types';
 
 export interface Snapshot {
@@ -65,13 +71,16 @@ export function __resetIds(): void {
   idCounter = 0;
 }
 
+/** The printer a new layout starts on, and the seed for a custom bed. */
+export const DEFAULT_BED_ID = 'bed256';
+
 export function emptyDoc(): LayoutDoc {
   return {
     schemaVersion: 1,
     id: 'layout',
     name: 'Untitled wall',
     wall: { widthMm: 2400, heightMm: 1200 },
-    bedId: 'bed256',
+    bedId: DEFAULT_BED_ID,
     panels: [],
     items: [],
     groups: [],
@@ -409,9 +418,41 @@ export class Store {
     });
   }
 
+  /**
+   * Choose a printer.
+   *
+   * Picking `custom` SEEDS the typed size from the bed that was chosen before,
+   * so the fields open on a real printer's numbers rather than on nothing — and
+   * so a person who only wants to widen their bed by 20 mm does not have to type
+   * both numbers from scratch. An existing custom size is kept.
+   *
+   * Switching back to a preset keeps `customBed` too: it is remembered, not
+   * discarded, so flipping between "my printer" and "a Mini" is not destructive.
+   * A document that has never had one still serialises without the key.
+   */
   setBed(bedId: string): void {
-    this.commit('Change printer', {
-      doc: { ...this.current.doc, bedId },
+    const doc = this.current.doc;
+    const seed = bedFor(doc.bedId, doc.customBed) ?? bedFor(DEFAULT_BED_ID);
+    const next: LayoutDoc = bedId === CUSTOM_BED_ID && doc.customBed === undefined && seed
+      ? { ...doc, bedId, customBed: { widthMm: seed.width, depthMm: seed.depth } }
+      : { ...doc, bedId };
+    this.commit('Change printer', { doc: next, selection: this.current.selection });
+  }
+
+  /**
+   * The typed build plate. Clamped, like the wall, by whoever owns the clamp.
+   *
+   * Setting a size implies choosing the custom printer: the fields only exist
+   * while it is chosen, and a size that did not take effect would be a control
+   * that does nothing.
+   */
+  setCustomBed(widthMm: number, depthMm: number): void {
+    this.commit('Change build plate', {
+      doc: {
+        ...this.current.doc,
+        bedId: CUSTOM_BED_ID,
+        customBed: { widthMm: clampBedMm(widthMm), depthMm: clampBedMm(depthMm) },
+      },
       selection: this.current.selection,
     });
   }
@@ -471,6 +512,327 @@ export class Store {
       doc: { ...next, panels: cutAroundObstacles(next.panels, next.obstacles, next.frame) },
       selection: this.current.selection,
     });
+  }
+
+  /**
+   * The photograph laid under the plan, or none.
+   *
+   * An ordinary undoable edit, like everything else on the document — which is
+   * the reason the alignment lives there rather than in component state. You
+   * calibrate a photo once, drag a dozen zones onto it, and the one thing that
+   * must not happen is losing the calibration to a stray drag with no way back.
+   *
+   * Cuts nothing. A photo is a reference, not an obstruction: it changes where
+   * you decide to put a zone, and never what the honeycomb does.
+   */
+  setPhoto(photo: WallPhoto | undefined, label = 'Change wall photo'): void {
+    const doc = this.current.doc;
+    const next: LayoutDoc = photo
+      ? { ...doc, photo }
+      : (() => {
+          // Deleted, not set to undefined: an absent key has to round-trip to an
+          // absent key, and `{photo: undefined}` serialises as neither.
+          const { photo: _drop, ...rest } = doc;
+          return rest as LayoutDoc;
+        })();
+    this.commit(label, { doc: next, selection: this.current.selection });
+  }
+
+  // --- colours ---------------------------------------------------------------
+
+  /**
+   * The default colour for the plates, or for everything that clips into them.
+   *
+   * `undefined` REMOVES it — back to the theme's own tone — rather than storing
+   * a colour that happens to look like the default. The distinction is real: a
+   * layout with no colours is a layout somebody has not made that decision
+   * about, and it stays that way through a save and a reload.
+   */
+  setDefaultColor(kind: 'panels' | 'parts', color: string | undefined, label?: string): void {
+    const colour = color === undefined ? undefined : normaliseColor(color);
+    if (color !== undefined && colour === undefined) return;
+    const doc = this.current.doc;
+    if ((doc.colors?.[kind] ?? undefined) === colour) return;
+    const next: WallColors = { ...doc.colors };
+    if (colour === undefined) delete next[kind];
+    else next[kind] = colour;
+    this.commit(
+      label ?? (colour === undefined ? 'Clear colour' : 'Change colour'),
+      { doc: withColors(doc, next), selection: this.current.selection },
+    );
+  }
+
+  /**
+   * Colour everything on one parts-list line — every plate of that shape, or
+   * every placement of that part. Keyed by the line, which is what the list
+   * shows and what gets printed together.
+   */
+  setLineColor(lineKey: string, color: string | undefined, label = 'Colour parts'): void {
+    if (typeof lineKey !== 'string' || lineKey.length === 0) return;
+    const colour = color === undefined ? undefined : normaliseColor(color);
+    if (color !== undefined && colour === undefined) return;
+    const doc = this.current.doc;
+    if ((doc.colors?.lines?.[lineKey] ?? undefined) === colour) return;
+    const lines = { ...(doc.colors?.lines ?? {}) };
+    if (colour === undefined) delete lines[lineKey];
+    else lines[lineKey] = colour;
+    this.commit(label, {
+      doc: withColors(doc, { ...doc.colors, lines }),
+      selection: this.current.selection,
+    });
+  }
+
+  /**
+   * Colour the placed items themselves — this hook, not every hook.
+   *
+   * Takes a LIST because that is how the wall is used: you select three bins and
+   * paint them, and it costs one undo step rather than three. Unknown ids are
+   * ignored rather than stored, or deleting an item would leave its colour
+   * behind for ever.
+   */
+  setItemColor(itemIds: readonly string[], color: string | undefined, label = 'Colour parts'): void {
+    const colour = color === undefined ? undefined : normaliseColor(color);
+    if (color !== undefined && colour === undefined) return;
+    const doc = this.current.doc;
+    const known = new Set(doc.items.map((i) => i.id));
+    const ids = [...new Set(itemIds)].filter((id) => known.has(id));
+    if (ids.length === 0) return;
+
+    const items = { ...(doc.colors?.items ?? {}) };
+    let changed = false;
+    for (const id of ids) {
+      if ((items[id] ?? undefined) === colour) continue;
+      if (colour === undefined) delete items[id];
+      else items[id] = colour;
+      changed = true;
+    }
+    if (!changed) return;
+    this.commit(label, {
+      doc: withColors(doc, { ...doc.colors, items }),
+      selection: this.current.selection,
+    });
+  }
+
+  /** Every colour back to the theme's. */
+  clearColors(label = 'Clear colours'): void {
+    if (!hasColors(this.current.doc.colors)) return;
+    this.commit(label, {
+      doc: withColors(this.current.doc, {}),
+      selection: this.current.selection,
+    });
+  }
+
+  // --- the wall fixings, by hand -------------------------------------------
+
+  /**
+   * The fixing plan as it stands, edits included — the one the wall draws and
+   * the one the parts list orders.
+   *
+   * Through `bom.fixingPlanFor`, never through a second reading of which cells
+   * are free: two readings put a fixing in the picture that is not on the list,
+   * which is the failure D48 and D53 are both about.
+   */
+  fixingPlan(): FixingPlan {
+    return fixingPlanFor(this.current.doc, this.catalogRef);
+  }
+
+  /**
+   * Take a planned fixing out.
+   *
+   * `at` is the cell for a single fixing, or the ANCHOR for a junction. A
+   * fixing the USER added is forgotten rather than recorded as a removal —
+   * otherwise adding one and taking it away again leaves two entries that
+   * cancel, and a document that is not equal to the one you started with.
+   */
+  removeFixing(at: Hex, label = 'Remove wall fixing'): DropResult {
+    const plan = this.fixingPlan();
+    const key = hexKey(at);
+    const isSingle = plan.cells.some((c) => hexKey(c) === key);
+    const isJunction = plan.junctions.some((j) => hexKey(j.anchor) === key);
+    if (!isSingle && !isJunction) {
+      return { ok: false, reason: 'There is no wall fixing there.' };
+    }
+
+    const edits = this.current.doc.fixingEdits;
+    if (plan.manual.has(key)) {
+      const added = (edits?.added ?? []).filter((c) => hexKey(c) !== key);
+      this.commit(label, {
+        doc: withFixingEdits(this.current.doc, { ...edits, added }),
+        selection: this.current.selection,
+      });
+      return { ok: true };
+    }
+
+    const removed = [...(edits?.removed ?? []), { q: at.q, r: at.r }];
+    this.commit(label, {
+      doc: withFixingEdits(this.current.doc, { ...edits, removed }),
+      selection: this.current.selection,
+    });
+    return { ok: true };
+  }
+
+  /**
+   * Put a fixing in a cell yourself.
+   *
+   * Refused off the plates, and refused where another fixing already is — one
+   * screw per hole. NOT refused where an accessory sits: overlap is allowed
+   * everywhere else in this app, the planner keeps clear of accessories because
+   * it is guessing at a screwdriver's reach, and someone pointing at a cell is
+   * not guessing.
+   */
+  addFixing(at: Hex, label = 'Add wall fixing'): DropResult {
+    const doc = this.current.doc;
+    const key = hexKey(at);
+    const onPanel = doc.panels.some((p) =>
+      placedPanelCells(p).some((c) => hexKey(c) === key));
+    if (!onPanel) {
+      return { ok: false, reason: 'A wall fixing has to go in a cell of a panel.' };
+    }
+    const plan = this.fixingPlan();
+    const taken = plan.cells.some((c) => hexKey(c) === key)
+      || plan.junctions.some((j) => j.cells.some((c) => hexKey(c) === key));
+    if (taken) {
+      return { ok: false, reason: 'That cell already carries a wall fixing.', blockedCells: [at] };
+    }
+    // A part PLUGGED into the hole is the one genuine clash: two things cannot
+    // occupy the same hexagon. An accessory standing proud of it is fine.
+    const plugged = this.plugIndex().get(key)?.[0];
+    if (plugged !== undefined) {
+      const item = doc.items.find((i) => i.id === plugged);
+      const part = item ? this.part(item.partId) : undefined;
+      return {
+        ok: false,
+        reason: `${part?.name ?? 'Something'} is already in that hole.`,
+        blockedCells: [at],
+      };
+    }
+
+    const edits = doc.fixingEdits;
+    /*
+     * Putting one back where the planner had it is UNDOING a removal, not
+     * adding an override. Recorded as an addition instead, the cell would carry
+     * both a removal and an addition for ever, and re-solving the wall — which
+     * moves the plan — would leave a fixing pinned to a cell the planner no
+     * longer chose while its removal quietly did nothing.
+     */
+    const wasRemoved = (edits?.removed ?? []).some((c) => hexKey(c) === key);
+    const next: FixingEdits = wasRemoved
+      ? { ...edits, removed: (edits?.removed ?? []).filter((c) => hexKey(c) !== key) }
+      : { ...edits, added: [...(edits?.added ?? []), { q: at.q, r: at.r }] };
+    this.commit(label, {
+      doc: withFixingEdits(doc, next),
+      selection: this.current.selection,
+    });
+    return { ok: true };
+  }
+
+  /**
+   * Drag a fixing from one cell to another: ONE undo step, not two.
+   *
+   * A junction fastener cannot be moved, and that is not a limitation to work
+   * around — it is a four-cell insert whose whole job is to straddle the corner
+   * where three or four plates meet (HSW-SPEC §4). Somewhere else it is just a
+   * big single fixing in the wrong part. It can be removed.
+   */
+  moveFixing(from: Hex, to: Hex, label = 'Move wall fixing'): DropResult {
+    if (hexKey(from) === hexKey(to)) return { ok: true };
+    const plan = this.fixingPlan();
+    if (plan.junctions.some((j) => hexKey(j.anchor) === hexKey(from))) {
+      return {
+        ok: false,
+        reason: 'That one bridges the corner where the plates meet, so it stays there. It can be removed.',
+      };
+    }
+    const before = this.current;
+    const taken = this.removeFixing(from, label);
+    if (!taken.ok) return taken;
+    const put = this.addFixing(to, label);
+    if (!put.ok) {
+      // Both halves or neither: a refused destination must not leave the fixing
+      // deleted. Restored in place rather than undone, so the user's own undo
+      // stack does not gain a step for a move that did not happen.
+      this.current = before;
+      this.past.pop();
+      this.emit();
+      return put;
+    }
+    // Two commits went on the stack; fold them into one so a drag costs one undo.
+    this.past.pop();
+    this.label = label;
+    this.emit();
+    return { ok: true };
+  }
+
+  /** Give every fixing back to the planner. */
+  resetFixings(label = 'Reset wall fixings'): void {
+    if (this.current.doc.fixingEdits === undefined) return;
+    this.commit(label, {
+      doc: withFixingEdits(this.current.doc, {}),
+      selection: this.current.selection,
+    });
+  }
+
+  /**
+   * How many of a parts-list line have been printed.
+   *
+   * An ordinary undoable edit on the document, for the same reasons the photo's
+   * alignment is one: it belongs to this wall, it travels down a share link, and
+   * a mis-click on a count you built up over three printing sessions has to be
+   * recoverable.
+   *
+   * Zero DELETES the key, and the last key deletes the map — an absent key must
+   * round-trip to an absent key, or a layout you have not started printing stops
+   * being byte-identical to its own reload. The count is NOT capped at what the
+   * layout currently needs: the cap belongs to the line that reads it
+   * (`bom.printedOf`), so that deleting a shelf and putting it back does not
+   * quietly forget the four you already printed.
+   */
+  setPrinted(partId: string, count: number, label = 'Update printed count'): void {
+    if (typeof partId !== 'string' || partId.length === 0) return;
+    const doc = this.current.doc;
+    const wanted = Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0;
+    const current = doc.printed?.[partId] ?? 0;
+    if (wanted === current) return;
+
+    const next: Record<string, number> = { ...(doc.printed ?? {}) };
+    if (wanted === 0) delete next[partId];
+    else next[partId] = wanted;
+
+    this.commit(label, {
+      doc: withPrinted(doc, next),
+      selection: this.current.selection,
+    });
+  }
+
+  /**
+   * One more, or one fewer, printed — read from the DOCUMENT, not from a number
+   * the caller is holding.
+   *
+   * It exists because `setPrinted` cannot serve a stepper. A button in a
+   * rendered list knows the count as of its last render, so three quick clicks
+   * all compute `0 + 1` and the third overwrites the first two: measured in the
+   * running app, `+ + +` on a 12-plate line recorded ONE. Same shape as D58 —
+   * state is only visible after a render, and the pointer does not wait — and
+   * the same fix: whoever holds the truth does the arithmetic.
+   *
+   * `max` is the line's quantity, so a burst of clicks cannot run the count off
+   * past what the wall needs. It is the caller's because the quantity is the
+   * parts list's answer, not the store's; it is stable across a click storm
+   * because only an edit to the layout changes it.
+   */
+  bumpPrinted(partId: string, delta: number, max = Number.POSITIVE_INFINITY): void {
+    if (typeof partId !== 'string' || partId.length === 0) return;
+    if (!Number.isFinite(delta)) return;
+    const current = this.current.doc.printed?.[partId] ?? 0;
+    const ceiling = Number.isFinite(max) ? Math.max(0, Math.floor(max)) : Number.POSITIVE_INFINITY;
+    this.setPrinted(partId, Math.min(ceiling, current + delta));
+  }
+
+  /** Start the build again: every count back to none. */
+  clearPrinted(label = 'Clear printed counts'): void {
+    const doc = this.current.doc;
+    if (doc.printed === undefined) return;
+    this.commit(label, { doc: withPrinted(doc, {}), selection: this.current.selection });
   }
 
   // --- the project's parts --------------------------------------------------
@@ -845,6 +1207,55 @@ const withinLattice = (h: Hex): boolean =>
  */
 export function isExclusive(part: CatalogPart): boolean {
   return part.type === 'insert' || part.type === 'fastener';
+}
+
+/**
+ * The document with new colours, or with the field GONE when nothing is
+ * coloured any more. Empty maps are dropped as well as an empty object: an
+ * absent key has to round-trip to an absent key.
+ */
+function withColors(doc: LayoutDoc, colors: WallColors): LayoutDoc {
+  const next: WallColors = {};
+  if (colors.panels !== undefined) next.panels = colors.panels;
+  if (colors.parts !== undefined) next.parts = colors.parts;
+  if (colors.lines && Object.keys(colors.lines).length > 0) next.lines = colors.lines;
+  if (colors.items && Object.keys(colors.items).length > 0) next.items = colors.items;
+  if (!hasColors(next)) {
+    const { colors: _drop, ...rest } = doc;
+    return rest as LayoutDoc;
+  }
+  return { ...doc, colors: next };
+}
+
+/**
+ * The document with new fixing edits, or with the field GONE when there is
+ * nothing left in it. Empty ARRAYS are dropped as well as an empty object: an
+ * absent key has to round-trip to an absent key, and `{removed: []}` is a
+ * document that says something when it means nothing.
+ */
+function withFixingEdits(doc: LayoutDoc, edits: FixingEdits): LayoutDoc {
+  const next: FixingEdits = {};
+  if (edits.removed && edits.removed.length > 0) next.removed = edits.removed;
+  if (edits.added && edits.added.length > 0) next.added = edits.added;
+  if (next.removed === undefined && next.added === undefined) {
+    const { fixingEdits: _drop, ...rest } = doc;
+    return rest as LayoutDoc;
+  }
+  return { ...doc, fixingEdits: next };
+}
+
+/**
+ * The document with a new set of printed counts, or with the field GONE when
+ * there are none left. `{printed: {}}` is not the same document as one that has
+ * never had a count on it: it serialises differently, so an untouched layout
+ * would stop matching its own reload.
+ */
+function withPrinted(doc: LayoutDoc, counts: Record<string, number>): LayoutDoc {
+  if (Object.keys(counts).length === 0) {
+    const { printed: _drop, ...rest } = doc;
+    return rest as LayoutDoc;
+  }
+  return { ...doc, printed: counts };
 }
 
 /**

@@ -11,8 +11,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import catalogJson from '../catalog/catalog.json';
 import overridesJson from '../catalog/overrides.json';
-import { BEDS } from '../core/constants';
-import { computeBom } from '../core/bom';
+import { BEDS, bedFor, CUSTOM_BED_ID, MAX_BED_MM, MIN_BED_MM } from '../core/constants';
+import { computeBom, panelsForLine } from '../core/bom';
+import { normaliseColor } from '../core/colors';
 import { toCsv, toMarkdownChecklist, toPrintableHtml, downloadName } from '../core/exporters';
 import { buildHoneycombMesh, toBinaryStl } from '../core/honeycomb';
 import { proposePart, type ImportedPart, type ImportProposal } from '../core/importPart';
@@ -20,18 +21,21 @@ import { isModelFile, MODEL_ACCEPT } from '../core/modelFile';
 import { applyOverrides, mountingOf, type MountingOverride } from '../core/overrides';
 import { panelModelFileName, panelModelSpecFor } from '../core/panelModel';
 import { decodeShareUrl, encodeShareUrl, deserialize, serialize } from '../core/persist';
-import { resolveProjectParts } from '../core/projectParts';
+import { resolveProjectParts, shoppableParts } from '../core/projectParts';
 import {
   emptyDoc, MAX_WALL_MM, MIN_WALL_MM, Store, type EditorState, type DropResult,
 } from '../core/store';
 import { generatedPlateSizes, solveTiling, type PanelSize } from '../core/tiling';
 import type { Catalog, Hex, InsertRequirement, PlacedPanel, Rotation } from '../core/types';
 import {
-  deleteModelBytes, loadUserParts, mergeCatalog, putModelBytes, saveUserParts, sweepOrphans,
+  deleteModelBytes, loadUserParts, mergeCatalog, pruneWallPhotos, putModelBytes, saveUserParts,
+  sweepOrphans, WALL_PHOTOS_KEPT,
 } from '../core/userCatalog';
 import { BomPanel } from './BomPanel';
+import { ColorSwatch } from './ColorSwatch';
 import { CatalogPanel } from './CatalogPanel';
 import { ObstaclePanel } from './ObstaclePanel';
+import { WallPhotoPanel } from './WallPhotoPanel';
 import { ImportDialog } from './ImportDialog';
 import { PartLibrary } from './PartLibrary';
 import { forgetPhotoUrl, removePhoto, savePhoto } from './partPhotos';
@@ -44,6 +48,8 @@ import { AlignPanel } from './AlignPanel';
 import { PartInspector } from './PartInspector';
 import { forgetPartMesh } from './meshLibrary';
 import { forgetThumbnail } from './partThumbnails';
+import { Icon } from './Icon';
+import { ToolMenu } from './ToolMenu';
 import { NumberField } from './NumberField';
 import { WallCanvas, ghostCells, type DragPayload } from './WallCanvas';
 import { WallView3D } from './WallView3D';
@@ -56,6 +62,42 @@ import './App.css';
 const shippedCatalog = catalogJson as unknown as Catalog;
 
 type Theme = 'system' | 'light' | 'dark';
+
+/** Where the chosen theme is remembered. Its own key, like every other store. */
+const THEME_KEY = 'hsw.theme.v1';
+
+/**
+ * The theme this browser was left on, or `system` if it has never been said.
+ *
+ * Read defensively and through a try: a stored value is user input by the time
+ * it comes back, and Safari throws on `localStorage` outright in private mode
+ * rather than returning null. A theme is not worth failing to start over.
+ */
+function storedTheme(): Theme {
+  try {
+    const raw = localStorage.getItem(THEME_KEY);
+    return raw === 'light' || raw === 'dark' ? raw : 'system';
+  } catch {
+    return 'system';
+  }
+}
+
+/**
+ * Which theme is actually on screen, given the browser's own preference.
+ *
+ * `system` is not a third look, it is "ask the OS" — so the button has to
+ * resolve it before it can offer the opposite. Without `matchMedia` (jsdom, an
+ * old engine) light is the safe assumption: it is what the stylesheet's bare
+ * `:root` defines, so the answer matches what is painted.
+ */
+function effectiveTheme(theme: Theme): 'light' | 'dark' {
+  if (theme !== 'system') return theme;
+  try {
+    return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  } catch {
+    return 'light';
+  }
+}
 
 
 export function App() {
@@ -129,7 +171,28 @@ export function App() {
   const [dropCheck, setDropCheck] = useState<DropResult>({ ok: true });
   const [toast, setToast] = useState<{ text: string; kind: 'error' | 'warn' | 'ok' } | null>(null);
   const [filter, setFilter] = useState('');
-  const [theme, setTheme] = useState<Theme>('system');
+  /**
+   * The wall fixing the user has picked, if any — a cell for a single fixing, a
+   * junction's anchor for the four-cell one.
+   *
+   * Shell state and not the store's selection, because a fixing is not an item:
+   * `selection` holds ids that every other consumer looks up in `doc.items`, and
+   * a cell key in that list would be a stranger to all of them. It does not need
+   * to travel with undo either — what a removal has to give back is the fixing,
+   * not the fact that it was highlighted.
+   */
+  const [pickedFixing, setPickedFixing] = useState<Hex | null>(null);
+  /**
+   * The parts-list line whose plates are lit on the wall, by its partId.
+   *
+   * The LINE is stored, not the panel ids: the wall changes under it — solve
+   * again, cut a plate round a switch — and a stored list of ids would light
+   * plates that no longer answer to that line. Deriving on each render keeps the
+   * highlight true to what the line means now, and clicking the same line again
+   * turns it off.
+   */
+  const [litLine, setLitLine] = useState<string | null>(null);
+  const [theme, setTheme] = useState<Theme>(storedTheme);
   /**
    * 3D is the default view. The wall is a physical object you hang things ON,
    * and a plan view hides the question that actually matters at the wall: how
@@ -175,6 +238,21 @@ export function App() {
     void sweepOrphans(catalog.parts).then((n) => {
       if (n > 0) say(`Cleared ${n} leftover file${n === 1 ? '' : 's'} from an abandoned import`, 'ok');
     });
+    /*
+     * And bound the wall photographs, which are NOT swept the same way.
+     *
+     * A part's photo is orphaned the moment no part claims it, and the
+     * catalogue is the complete list of parts. There is no such list of
+     * documents: a layout naming a photo id may be a file on disk or a link
+     * nobody has opened yet. Nor can removing or replacing a photo drop its
+     * bytes, because both are undoable and undo has to give the picture back.
+     *
+     * So this is a cache bound, not a collector: the newest few survive and the
+     * open document's own photo is protected whatever its age. Startup only,
+     * where no attach can be in flight — and silent, because a number of
+     * photographs nobody asked about is alarming rather than useful.
+     */
+    void pruneWallPhotos(WALL_PHOTOS_KEPT, [store.getState().doc.photo?.id ?? '']);
     // Startup only. `catalog` is complete on the first render — imported parts
     // load synchronously from localStorage — so there is nothing to wait for.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -184,7 +262,69 @@ export function App() {
     const root = document.documentElement;
     if (theme === 'system') root.removeAttribute('data-theme');
     else root.setAttribute('data-theme', theme);
+    // Remembered, or the button is a toggle that forgets between visits — and
+    // both views repaint from the token layer on this attribute, so the choice
+    // has to survive the reload that a shared link or a reopened file causes.
+    try {
+      if (theme === 'system') localStorage.removeItem(THEME_KEY);
+      else localStorage.setItem(THEME_KEY, theme);
+    } catch {
+      // A browser refusing storage is not a reason to refuse the theme.
+    }
   }, [theme]);
+
+  /**
+   * Which plates the lit line means, through `bom.panelsForLine` — the one
+   * owner of that rule, so a click can never light a plate the line does not
+   * count (a cut or bordered plate has left the stock line for a generated one).
+   */
+  const litPanelIds = useMemo(() => {
+    if (litLine === null) return undefined;
+    const ids = panelsForLine(state.doc, litLine);
+    return ids.length > 0 ? new Set(ids) : undefined;
+  }, [state.doc, litLine]);
+
+  /**
+   * The colour the wall would draw something in if nobody had chosen one.
+   *
+   * Read from the token layer at call time rather than kept in state: it changes
+   * with the theme, and a swatch showing last theme's grey is a swatch that
+   * opens the picker on the wrong colour. Cheap — it runs when a swatch renders,
+   * not per frame.
+   */
+  const themeColor = (token: string, fallback: string): string => {
+    if (typeof window === 'undefined') return fallback;
+    const raw = getComputedStyle(document.documentElement).getPropertyValue(token).trim();
+    if (raw.length === 0) return fallback;
+    /*
+     * Through a canvas, because a TOKEN IS NOT A HEX COLOUR. `--accent` computes
+     * to `rgb(87 174 232)` — the token layer builds it from an `--accent-rgb`
+     * triple so one channel set can serve solid and translucent uses — and a
+     * `<input type="color">` handed that shows BLACK, silently. The 2D context
+     * normalises any CSS colour to `#rrggbb`, which is the one shape the picker
+     * and `normaliseColor` both accept.
+     */
+    const probe = document.createElement('canvas').getContext('2d');
+    if (!probe) return normaliseColor(raw) ?? fallback;
+    probe.fillStyle = '#000000';
+    probe.fillStyle = raw;
+    const normalised = typeof probe.fillStyle === 'string' ? probe.fillStyle : '';
+    return normaliseColor(normalised) ?? normaliseColor(raw) ?? fallback;
+  };
+
+  /**
+   * The colour of the selection — but only when they agree.
+   *
+   * Three parts painted three colours have no one colour, and showing the first
+   * one would offer to be cleared as if it were all of them. Undefined then, so
+   * the swatch reads as "not one colour" and picking one paints them all.
+   */
+  const selectionColor = useMemo(() => {
+    const colors = state.doc.colors?.items ?? {};
+    const chosen = state.selection.map((id) => colors[id]);
+    const first = chosen[0];
+    return chosen.length > 0 && chosen.every((c) => c === first) ? first : undefined;
+  }, [state.selection, state.doc.colors]);
 
   const say = useCallback((text: string, kind: 'error' | 'warn' | 'ok' = 'ok') => {
     setToast({ text, kind });
@@ -433,10 +573,24 @@ export function App() {
         return;
       }
       if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (sel.length) { e.preventDefault(); store.deleteItems(sel); }
+        if (sel.length) { e.preventDefault(); store.deleteItems(sel); return; }
+        /*
+         * A picked wall fixing, and ONLY when nothing else is selected. Three
+         * handlers now want this key — items here, the photograph in the plan
+         * canvas, and this — and they are told apart by a condition rather than
+         * by which listener runs first, exactly as D88 sets out.
+         */
+        if (pickedFixing) {
+          e.preventDefault();
+          const r = store.removeFixing(pickedFixing);
+          if (r.ok) { setPickedFixing(null); say('Wall fixing removed — Ctrl+Z puts it back', 'ok'); }
+          else say(r.reason ?? 'Could not remove that fixing', 'error');
+        }
         return;
       }
-      if (e.key === 'Escape') { cancelDrag(); store.select([]); return; }
+      if (e.key === 'Escape') {
+        cancelDrag(); store.select([]); setPickedFixing(null); setLitLine(null); return;
+      }
       if (e.key.toLowerCase() === 'r' && sel.length) {
         e.preventDefault();
         const r = store.rotateItems(sel, e.shiftKey ? -1 : 1);
@@ -456,7 +610,7 @@ export function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [store, state.selection, state.doc.items, say, cancelDrag]);
+  }, [store, state.selection, state.doc.items, say, cancelDrag, pickedFixing]);
 
   // --- commands -----------------------------------------------------------
 
@@ -488,11 +642,12 @@ export function App() {
       ? Math.max(0, state.doc.frame.thicknessMm)
       : 0;
     const available: PanelSize[] = sizeToPrinter
-      ? generatedPlateSizes(state.doc.bedId, border)
+      ? generatedPlateSizes(state.doc.bedId, border, state.doc.customBed)
       : shipped;
     const res = solveTiling({
       wall: state.doc.wall,
       bedId: state.doc.bedId,
+      ...(state.doc.customBed ? { customBed: state.doc.customBed } : {}),
       available,
       // MUST stay false. "Rotation" here swaps columns with rows, and 90° is
       // not a symmetry of a hex lattice — spinning a panel's measured cell
@@ -523,7 +678,8 @@ export function App() {
       `${res.panels.length} panels · ${res.cellCount} cells · ${(res.coverage * 100).toFixed(1)}% covered`,
       'ok',
     );
-  }, [catalog, state.doc.wall, state.doc.bedId, state.doc.frame, sizeToPrinter, store, say]);
+  }, [catalog, state.doc.wall, state.doc.bedId, state.doc.customBed, state.doc.frame,
+      sizeToPrinter, store, say]);
 
   const onExport = useCallback(
     (format: 'csv' | 'markdown' | 'print' | 'json') => {
@@ -862,140 +1018,418 @@ export function App() {
     [state.doc, catalog],
   );
 
+  /**
+   * The printer this document means, resolved once.
+   *
+   * `bedFor` is the only thing that turns a bed id plus a typed size into a bed,
+   * so the fields below show what the SOLVER will use — clamped, not what was
+   * typed — and a custom bed cannot be honoured by one reader and ignored by the
+   * next.
+   */
+  const bed = useMemo(
+    () => bedFor(state.doc.bedId, state.doc.customBed),
+    [state.doc.bedId, state.doc.customBed],
+  );
+
+  /**
+   * How many parts "Browse parts" actually offers.
+   *
+   * `catalog.parts.length` counted the seven wall plates, which are not on sale
+   * — the app generates every plate it draws (D97) — so the button promised
+   * seven parts the library will not show.
+   */
+  const shoppable = useMemo(() => shoppableParts(catalog), [catalog]);
+
   return (
     <div className="app">
-      <header className="app__bar">
-        <div className="app__brand">
-          <span className="app__mark" aria-hidden="true" />
-          <input
-            className="app__name"
-            value={state.doc.name}
-            onChange={(e) => store.setName(e.target.value)}
-            aria-label="Layout name"
+      {/*
+        * Two tiers, because the bar was carrying two different kinds of thing at
+        * one weight: what this DOCUMENT is and what you can do to the app (the
+        * title bar), against the parameters that decide what the next solve
+        * produces (the toolbar). Twenty controls in one undifferentiated row is
+        * the single loudest "unfinished" tell the product had.
+        */}
+      <header className="app__header">
+        <div className="app__titlebar">
+          <div className="app__brand">
+            <span className="app__mark" aria-hidden="true" />
+            <div className="app__identity">
+              <input
+                className="app__name"
+                value={state.doc.name}
+                onChange={(e) => store.setName(e.target.value)}
+                aria-label="Layout name"
+              />
+              {/* What the title is actually describing. It reads off the
+                  document, so it is never a caption for a wall that has since
+                  been re-solved. */}
+              <p className="app__docmeta tabular-nums">
+                {state.doc.wall.widthMm} × {state.doc.wall.heightMm} mm
+                <span className="app__docmeta-sep" aria-hidden="true">·</span>
+                {state.doc.panels.length} {state.doc.panels.length === 1 ? 'plate' : 'plates'}
+                <span className="app__docmeta-sep" aria-hidden="true">·</span>
+                {state.doc.items.length} placed
+              </p>
+            </div>
+          </div>
+
+          {/*
+            * The logo, in the gap between what you are working on and what you
+            * can do to it.
+            *
+            * A background-image on a labelled box rather than an `<img>`,
+            * because there are TWO artworks — the lettering in the supplied file
+            * is dark grey and disappears on the dark theme's near-black bar — and
+            * CSS is the only thing that can choose between them through the same
+            * `prefers-color-scheme` + `[data-theme]` pair the token layer already
+            * uses. Two `<img>` tags with one hidden would fetch both.
+            *
+            * Deliberately NOT a link: the document lives in memory, an unsaved
+            * layout is one click from gone, and it would be navigating to the
+            * page you are already on.
+            */}
+          <div
+            className="app__logo"
+            role="img"
+            aria-label="honeycombplanner.com"
+            title="honeycombplanner.com"
           />
-        </div>
 
-        <div className="app__wall-controls">
-          <label>
-            Wall
-            <NumberField
-              value={state.doc.wall.widthMm}
-              min={MIN_WALL_MM}
-              max={MAX_WALL_MM}
-              step={10}
-              onCommit={(v) => store.setWall(v, state.doc.wall.heightMm)}
-              aria-label="Wall width in millimetres"
-            />
-          </label>
-          <span aria-hidden="true">×</span>
-          <label>
-            <span className="visually-hidden">Height</span>
-            <NumberField
-              value={state.doc.wall.heightMm}
-              min={MIN_WALL_MM}
-              max={MAX_WALL_MM}
-              step={10}
-              onCommit={(v) => store.setWall(state.doc.wall.widthMm, v)}
-              aria-label="Wall height in millimetres"
-            />
-          </label>
-          <span className="app__unit">mm</span>
+          <div className="app__titleactions">
+            <div className="app__actiongroup" role="group" aria-label="History">
+              <button
+                type="button"
+                className="iconbutton"
+                onClick={() => store.undo()}
+                disabled={!state.canUndo}
+                aria-label="Undo"
+                title="Undo (Ctrl+Z)"
+              >
+                <Icon name="undo" />
+              </button>
+              <button
+                type="button"
+                className="iconbutton"
+                onClick={() => store.redo()}
+                disabled={!state.canRedo}
+                aria-label="Redo"
+                title="Redo (Ctrl+Shift+Z)"
+              >
+                <Icon name="redo" />
+              </button>
+            </div>
 
-          <label>
-            Printer
-            <select
-              value={state.doc.bedId}
-              onChange={(e) => store.setBed(e.target.value)}
-              aria-label="Printer bed"
-            >
-              {BEDS.map((b) => (
-                <option key={b.id} value={b.id}>{b.label}</option>
-              ))}
-            </select>
-          </label>
+            <span className="app__actiondivider" aria-hidden="true" />
 
-          <label className="app__fitprinter" title="Generate plates as large as this printer can hold, instead of using the seven shipped ones">
-            <input
-              type="checkbox"
-              checked={sizeToPrinter}
-              onChange={(e) => setSizeToPrinter(e.target.checked)}
-            />
-            Fit to printer
-          </label>
-
-          <button type="button" className="app__primary" onClick={autoTile}>
-            Solve panels
-          </button>
-
-          <div className="app__viewtoggle" role="group" aria-label="View">
-            <button
-              type="button"
-              aria-pressed={view === '3d'}
-              onClick={() => setView('3d')}
-            >
-              3D
+            {/* File in, link out — the two things a person does with a whole
+                layout, so they keep their words. Everything else up here is an
+                icon. */}
+            <label className="button button--subtle app__import" title="Add a model (.stl or .3mf), or open a saved layout">
+              <Icon name="import" />
+              Import
+              <input
+                type="file"
+                accept={`${MODEL_ACCEPT},application/json,.json`}
+                multiple
+                onChange={(e) => {
+                  for (const f of e.target.files ?? []) importFile(f);
+                  e.target.value = '';
+                }}
+              />
+            </label>
+            <button type="button" className="button button--subtle" onClick={share}>
+              <Icon name="share" />
+              Share
             </button>
+
+            {/*
+              * Buy Me a Coffee, in the service's own yellow so it is recognised
+              * as the thing it is rather than read as another app control.
+              *
+              * `target="_blank"` is not a preference here, it is the same rule
+              * the logo follows: the document lives in memory and an unsaved
+              * layout is one click from gone, so nothing in this bar may
+              * navigate the tab away. `rel="noopener noreferrer"` because the
+              * destination is somebody else's page.
+              */}
+            <a
+              className="app__coffee"
+              href="https://buymeacoffee.com/mort1hag"
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Support the planner — opens buymeacoffee.com in a new tab"
+            >
+              <Icon name="coffee" />
+              <span className="app__coffee__label">Buy me a coffee</span>
+            </a>
+
+            {/*
+              * The catalogue-maintenance channel, folded into one control.
+              *
+              * Align, Setup and Mine are the developer front doors described
+              * under "Correcting a part's mounting" — a person planning a wall
+              * never opens them — and in the flat bar they took a third of it at
+              * the same weight as Undo. Nothing is lost: each is one click away
+              * and still carries its own count.
+              */}
+            <ToolMenu
+              label="Catalogue setup"
+              heading="Catalogue setup"
+              items={[
+                {
+                  id: 'align',
+                  label: 'Align every part…',
+                  icon: 'target',
+                  hint: "Compare every part's mounting face against the peg measured from its own model",
+                  onSelect: () => setAligning(true),
+                },
+                {
+                  id: 'setup',
+                  label: 'Download setup',
+                  detail: String(setupParts),
+                  icon: 'download',
+                  hint: 'Download the setup for every part — mounting, cells, sockets and fasteners — to replace src/catalog/overrides.json and commit',
+                  onSelect: downloadSetup,
+                },
+                ...(Object.keys(userOverrides.parts).length > 0
+                  ? [{
+                    id: 'mine',
+                    label: 'Download my changes',
+                    detail: String(Object.keys(userOverrides.parts).length),
+                    icon: 'download' as const,
+                    hint: 'Download only what was corrected in this browser, as a small diff',
+                    onSelect: downloadOverrides,
+                  }]
+                  : []),
+              ]}
+            />
+
+            <span className="app__actiondivider" aria-hidden="true" />
+
+            {/*
+              * Last in the bar, so it sits in the top-right corner where a theme
+              * switch is looked for. A BUTTON and not the three-way select it
+              * replaces: "auto" is a state you leave rather than one you pick, so
+              * the control offers the one thing you actually want — the other
+              * theme — and resolving `system` first is what lets it say which.
+              */}
             <button
               type="button"
-              aria-pressed={view === '2d'}
-              onClick={() => setView('2d')}
+              className="iconbutton"
+              onClick={() => setTheme(effectiveTheme(theme) === 'dark' ? 'light' : 'dark')}
+              title={
+                effectiveTheme(theme) === 'dark'
+                  ? 'Switch to the light theme'
+                  : 'Switch to the dark theme'
+              }
+              aria-label={
+                effectiveTheme(theme) === 'dark'
+                  ? 'Switch to the light theme'
+                  : 'Switch to the dark theme'
+              }
             >
-              Plan
+              <Icon name={effectiveTheme(theme) === 'dark' ? 'sun' : 'moon'} />
             </button>
           </div>
         </div>
 
-        <div className="app__actions">
-          <button type="button" onClick={() => store.undo()} disabled={!state.canUndo} title="Undo (Ctrl+Z)">Undo</button>
-          <button type="button" onClick={() => store.redo()} disabled={!state.canRedo} title="Redo (Ctrl+Shift+Z)">Redo</button>
-          <button type="button" onClick={share}>Share</button>
-          <button
-            type="button"
-            onClick={() => setAligning(true)}
-            title="Compare every part's mounting face against the peg measured from its own model"
-          >
-            Align
+        <div className="app__toolbar">
+          {/*
+            * Three clusters, each in its own well: the WALL, the PRINTER, and
+            * the action that turns the two into plates. Grouping is the whole
+            * point — the bar's controls are not a list, they are three questions
+            * with an answer button, and drawn as a flat row of equals they read
+            * as neither.
+            */}
+          <div className="toolbar__group">
+            <Icon name="ruler" className="toolbar__groupicon" />
+            <label className="toolbar__field">
+              <span className="toolbar__label">Wall</span>
+              <NumberField
+                value={state.doc.wall.widthMm}
+                min={MIN_WALL_MM}
+                max={MAX_WALL_MM}
+                step={10}
+                onCommit={(v) => store.setWall(v, state.doc.wall.heightMm)}
+                aria-label="Wall width in millimetres"
+              />
+            </label>
+            <span className="toolbar__times" aria-hidden="true">×</span>
+            <label className="toolbar__field">
+              <span className="visually-hidden">Height</span>
+              <NumberField
+                value={state.doc.wall.heightMm}
+                min={MIN_WALL_MM}
+                max={MAX_WALL_MM}
+                step={10}
+                onCommit={(v) => store.setWall(state.doc.wall.widthMm, v)}
+                aria-label="Wall height in millimetres"
+              />
+            </label>
+            <span className="app__unit">mm</span>
+          </div>
+
+          <div className="toolbar__group">
+            <Icon name="printer" className="toolbar__groupicon" />
+            <label className="toolbar__field">
+              <span className="toolbar__label">Printer</span>
+              <select
+                value={state.doc.bedId}
+                onChange={(e) => {
+                  store.setBed(e.target.value);
+                  // Typing a bed size is only ever a request to GENERATE plates
+                  // for it — with "Fit to printer" off the size would just filter
+                  // the seven shipped plates, and the solve would look as if the
+                  // number had been ignored. Visible and reversible: the checkbox
+                  // next to it ticks.
+                  if (e.target.value === CUSTOM_BED_ID) setSizeToPrinter(true);
+                }}
+                aria-label="Printer bed"
+              >
+                {BEDS.map((b) => (
+                  <option key={b.id} value={b.id}>{b.label}</option>
+                ))}
+                <option value={CUSTOM_BED_ID}>Custom…</option>
+              </select>
+            </label>
+
+            {/*
+              * The build plate, when it is not one of the presets.
+              *
+              * `commitOn: 'confirm'`, like a blocked zone's size and unlike the
+              * wall's: there is no live preview to watch — the bed decides what
+              * the NEXT solve generates — so committing per keystroke would put
+              * three sizes nobody chose into the undo stack on the way to 300.
+              */}
+            {state.doc.bedId === CUSTOM_BED_ID && bed !== undefined && (
+              <>
+                <label className="toolbar__field">
+                  <span className="visually-hidden">Build plate width</span>
+                  <NumberField
+                    value={bed.width}
+                    min={MIN_BED_MM}
+                    max={MAX_BED_MM}
+                    step={10}
+                    commitOn="confirm"
+                    onCommit={(v) => store.setCustomBed(v, bed.depth)}
+                    aria-label="Build plate width in millimetres"
+                  />
+                </label>
+                <span className="toolbar__times" aria-hidden="true">×</span>
+                <label className="toolbar__field">
+                  <span className="visually-hidden">Build plate depth</span>
+                  <NumberField
+                    value={bed.depth}
+                    min={MIN_BED_MM}
+                    max={MAX_BED_MM}
+                    step={10}
+                    commitOn="confirm"
+                    onCommit={(v) => store.setCustomBed(bed.width, v)}
+                    aria-label="Build plate depth in millimetres"
+                  />
+                </label>
+                <span className="app__unit">mm</span>
+              </>
+            )}
+
+            <label className="app__fitprinter" title="Generate plates as large as this printer can hold, instead of using the seven shipped ones">
+              <input
+                type="checkbox"
+                checked={sizeToPrinter}
+                onChange={(e) => setSizeToPrinter(e.target.checked)}
+              />
+              Fit to printer
+            </label>
+          </div>
+
+          <button type="button" className="button button--primary app__primary" onClick={autoTile}>
+            <Icon name="solve" />
+            Solve panels
           </button>
-          {/* Only once there is something to export. A browser cannot write into
-              the repo, so this is how a hand-picked mounting face reaches
-              `src/catalog/overrides.json` and, through it, the scanner. */}
-          <button
-            type="button"
-            onClick={downloadSetup}
-            title="Download the setup for every part — mounting, cells, sockets and fasteners — to replace src/catalog/overrides.json and commit"
-          >
-            Setup ({setupParts})
-          </button>
-          {Object.keys(userOverrides.parts).length > 0 && (
-            <button
-              type="button"
-              onClick={downloadOverrides}
-              title="Download only what was corrected in this browser, as a small diff"
-            >
-              Mine ({Object.keys(userOverrides.parts).length})
-            </button>
-          )}
-          <label className="app__import" title="Add a model (.stl or .3mf), or open a saved layout">
-            Import
-            <input
-              type="file"
-              accept={`${MODEL_ACCEPT},application/json,.json`}
-              multiple
-              onChange={(e) => {
-                for (const f of e.target.files ?? []) importFile(f);
-                e.target.value = '';
-              }}
+
+          {/*
+            * The view switch, immediately after the action that fills the wall
+            * and BEFORE the spacer.
+            *
+            * It used to sit in the far corner of the bar, behind the colours,
+            * as two 12px words — and the Plan is not a minor mode. It is where
+            * you measure, block out a light switch, set the border and line the
+            * wall up against a photograph, none of which exist in 3D. Half of
+            * the product was one grey word in the corner. So: bigger, labelled,
+            * in the reading path, and the inactive half is drawn at SECONDARY
+            * rather than tertiary — see the note in App.css, a tab in the
+            * metadata colour reads as one you are not allowed to press.
+            */}
+          <div className="app__viewswitch" role="group" aria-label="View">
+            <span className="app__viewswitch__label" aria-hidden="true">View</span>
+            <div className="app__viewtoggle">
+              <button
+                type="button"
+                aria-pressed={view === '3d'}
+                onClick={() => setView('3d')}
+                title="See the wall as it will be built"
+              >
+                <Icon name="wall" size="md" />
+                3D
+              </button>
+              <button
+                type="button"
+                aria-pressed={view === '2d'}
+                onClick={() => setView('2d')}
+                title="Measure, block out zones, set the border and line up a photograph of your wall"
+              >
+                <Icon name="plan" size="md" />
+                Plan
+              </button>
+            </div>
+          </div>
+
+          {/* Everything after this is pushed to the far end: what the wall LOOKS
+              like. A colour is a property of the wall, like its size and its
+              printer, not an action you take. */}
+          <span className="toolbar__spacer" />
+
+          {/*
+            * The two defaults, and — only while something is selected — the one
+            * that paints it.
+            */}
+          <div className="app__colors toolbar__group" role="group" aria-label="Colours">
+            <Icon name="palette" className="toolbar__groupicon" />
+            <ColorSwatch
+              label="Colour for the panels"
+              value={state.doc.colors?.panels}
+              fallback={themeColor('--canvas-panel-tint', '#c8ced6')}
+              onChange={(c) => store.setDefaultColor('panels', c, 'Colour the panels')}
+              onClear={() => store.setDefaultColor('panels', undefined, 'Clear the panel colour')}
             />
-          </label>
-          <select
-            value={theme}
-            onChange={(e) => setTheme(e.target.value as Theme)}
-            aria-label="Colour theme"
-          >
-            <option value="system">Auto</option>
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
-          </select>
+            <span className="app__colors__label">Panels</span>
+            <ColorSwatch
+              label="Colour for the accessories and fasteners"
+              value={state.doc.colors?.parts}
+              fallback={themeColor('--accent', '#3d7ea6')}
+              onChange={(c) => store.setDefaultColor('parts', c, 'Colour the parts')}
+              onClear={() => store.setDefaultColor('parts', undefined, 'Clear the part colour')}
+            />
+            <span className="app__colors__label">Parts</span>
+            {/* Only with a selection. A swatch that silently paints nothing is
+                worse than no swatch: you pick a colour, the wall does not
+                change, and the control has told you nothing about why. */}
+            {state.selection.length > 0 && (
+              <>
+                <ColorSwatch
+                  label={`Colour the ${state.selection.length} selected`}
+                  value={selectionColor}
+                  fallback={themeColor('--accent', '#3d7ea6')}
+                  onChange={(c) => store.setItemColor(state.selection, c, 'Colour selected parts')}
+                  onClear={() =>
+                    store.setItemColor(state.selection, undefined, 'Clear the colour')}
+                />
+                <span className="app__colors__label">
+                  Selected ({state.selection.length})
+                </span>
+              </>
+            )}
+          </div>
         </div>
       </header>
 
@@ -1004,7 +1438,7 @@ export function App() {
           <CatalogPanel
             parts={project.parts}
             missing={project.missing}
-            catalogSize={catalog.parts.length}
+            catalogSize={shoppable.length}
             onBrowse={() => setBrowsing(true)}
             filter={filter}
             onFilterChange={setFilter}
@@ -1033,6 +1467,14 @@ export function App() {
                 const expanded = store.expandSelection(ids);
                 store.select(additive ? [...state.selection, ...expanded] : expanded);
               }}
+              litPanelIds={litPanelIds}
+              pickedFixing={pickedFixing}
+              onPickFixing={setPickedFixing}
+              onMoveFixing={(from, to) => {
+                const r = store.moveFixing(from, to);
+                if (r.ok) setPickedFixing(to);
+                else say(r.reason ?? 'That fixing cannot go there', 'error');
+              }}
             />
           ) : (
             <WallCanvas
@@ -1042,6 +1484,7 @@ export function App() {
               drag={drag}
               dragRef={dragRef}
               invalidCells={dropCheck.ok ? undefined : dropCheck.blockedCells}
+              litPanelIds={litPanelIds}
               placementValid={dropCheck.ok}
               onDragMove={onDragMove}
               onDrop={onDrop}
@@ -1049,6 +1492,7 @@ export function App() {
               onStartItemDrag={beginItemDrag}
               onObstaclesChange={(obstacles) => store.setObstacles(obstacles)}
               onFrameChange={(frame) => store.setFrame(frame)}
+              onPhotoChange={(photo) => store.setPhoto(photo)}
               onSelect={(ids, additive) => {
                 const expanded = store.expandSelection(ids);
                 store.select(additive ? [...state.selection, ...expanded] : expanded);
@@ -1064,7 +1508,10 @@ export function App() {
           */}
           {state.doc.panels.length === 0 && state.doc.items.length === 0 && (
             <div className="app__empty" aria-hidden="true">
-              <p className="app__empty-title">Start with the wall</p>
+              <p className="app__empty-title">
+                <Icon name="sparkle" size="md" />
+                Start with the wall
+              </p>
               <ol className="app__empty-steps">
                 <li>Set the size of your wall and pick your printer, above.</li>
                 <li>
@@ -1102,20 +1549,45 @@ export function App() {
             catalog={catalog}
             doc={state.doc}
             onExport={onExport}
-            onSelectPart={(partId) =>
-              store.select(state.doc.items.filter((i) => i.partId === partId).map((i) => i.id))
-            }
+            onSelectPart={(partId) => {
+              // Both halves of "show me this line": the placed ITEMS get
+              // selected, and the PLATES light up. A line is one or the other in
+              // practice — a panel line has no items, an accessory line has no
+              // plates — so this is one gesture with one meaning rather than two
+              // behaviours to remember. Clicking the same line again turns it
+              // off, which is the only way back for a panel line: a plate is not
+              // selectable, so Escape-the-selection does not cover it.
+              store.select(state.doc.items.filter((i) => i.partId === partId).map((i) => i.id));
+              setLitLine((current) => (current === partId ? null : partId));
+              setPickedFixing(null);
+            }}
+            litLine={litLine}
+            onSetLineColor={(lineKey, color) => store.setLineColor(lineKey, color)}
+            onClearColors={() => store.clearColors()}
+            onSetPrinted={(partId, count) => store.setPrinted(partId, count)}
+            onBumpPrinted={(partId, delta, max) => store.bumpPrinted(partId, delta, max)}
+            onResetPrinted={() => store.clearPrinted()}
+            onResetFixings={() => { store.resetFixings(); setPickedFixing(null); }}
             extras={
-              <ObstaclePanel
-                doc={state.doc}
-                onChange={(obstacles) => store.setObstacles(obstacles)}
-                onFrameChange={(frame) => store.setFrame(frame)}
-                onDownload={downloadPlate}
-                onCopy={(text, what) => {
-                  void navigator.clipboard?.writeText(text);
-                  say(`${what} settings copied — paste them into the customiser`, 'ok');
-                }}
-              />
+              <>
+                {/* Above the zones, because it is what you line them up
+                    against — and the order the job actually happens in. */}
+                <WallPhotoPanel
+                  doc={state.doc}
+                  onChange={(photo) => store.setPhoto(photo)}
+                  onProblem={(message) => say(message, 'error')}
+                />
+                <ObstaclePanel
+                  doc={state.doc}
+                  onChange={(obstacles) => store.setObstacles(obstacles)}
+                  onFrameChange={(frame) => store.setFrame(frame)}
+                  onDownload={downloadPlate}
+                  onCopy={(text, what) => {
+                    void navigator.clipboard?.writeText(text);
+                    say(`${what} settings copied — paste them into the customiser`, 'ok');
+                  }}
+                />
+              </>
             }
           />
         </aside>

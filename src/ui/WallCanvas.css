@@ -25,6 +25,10 @@
 .wall-canvas[data-tool='measure'] .wall-canvas__surface,
 .wall-canvas[data-tool='zone'] .wall-canvas__surface { cursor: crosshair; }
 .wall-canvas[data-tool='select'] .wall-canvas__surface { cursor: default; }
+/* The photo tool slides the picture, so the cursor says "grab" — except while
+   the scale gesture is armed, when the very next drag measures instead. */
+.wall-canvas[data-tool='photo'] .wall-canvas__surface { cursor: grab; }
+.wall-canvas[data-tool='photo'][data-scaling] .wall-canvas__surface { cursor: crosshair; }
 
 .wall-canvas__surface:focus-visible {
   outline: var(--focus-ring-width) solid var(--focus-ring-color);
@@ -58,26 +62,43 @@
   border-radius: var(--radius-md);
   background: var(--surface-2);
   box-shadow: var(--shadow-sm);
+  /* Wraps, and its controls never shrink. Flex's default `min-width: auto` only
+     protects a shrunk item as far as its own content box, and these carry an
+     icon, a word and a key hint — squeezed, the four tool buttons printed on top
+     of each other in one 90px run. The cap keeps the strip inside the stage,
+     which is what makes wrapping the outcome rather than overflow. */
+  flex-wrap: wrap;
+  max-inline-size: calc(100% - 2 * var(--space-4));
 }
+
+.wall-canvas__toolbar > * { flex: 0 0 auto; }
 
 .wall-canvas__toolbar button {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  min-block-size: var(--control-height-sm);
-  padding-inline: var(--space-3);
+  min-block-size: var(--control-height-md);
+  padding-inline: var(--space-2);
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-secondary);
   font-family: var(--font-sans);
   font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
   line-height: var(--line-height-none);
   white-space: nowrap;
   cursor: pointer;
   transition: background var(--duration-fast) var(--ease-standard),
               color var(--duration-fast) var(--ease-standard);
 }
+
+/* Quieter than its label at rest, full strength once the tool is the live one —
+   the same rule the buttons in App.css follow, so an icon never out-weighs the
+   word beside it. */
+.wall-canvas__toolbar button .icon { opacity: 0.7; }
+.wall-canvas__toolbar button:hover .icon,
+.wall-canvas__toolbar button[aria-pressed='true'] .icon { opacity: 1; }
 
 .wall-canvas__toolbar button:hover { background: var(--surface-3); color: var(--text-primary); }
 
@@ -92,16 +113,110 @@
   outline-offset: var(--focus-ring-offset);
 }
 
+/* Every radius in this file used to be written `var(--radius-xs, 3px)`.
+   `--radius-xs` has never existed, so all of them resolved to the 3px LITERAL in
+   the fallback slot — which is exactly the drift the token layer exists to stop,
+   and it is invisible: the CSS reads as if it were tokenised. Same for
+   `var(--radius-pill, 999px)` in WallPhotoPanel.css. A fallback is for a token
+   that might not be defined YET, not for one that does not exist. */
 .wall-canvas__toolbar kbd {
   padding-inline: var(--space-1);
   border: var(--border-width-hair) solid var(--border-subtle);
-  border-radius: var(--radius-xs, 3px);
+  border-radius: var(--radius-sm);
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-2xs);
+}
+
+.wall-canvas__toolbar .wall-canvas__clear { color: var(--text-tertiary); }
+
+.wall-canvas__toolbar button:disabled {
+  color: var(--text-tertiary);
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.wall-canvas__toolbar button:disabled:hover { background: transparent; }
+
+/* --- Setting the photograph's scale -------------------------------------- */
+
+.wall-canvas__scale {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-inline-start: var(--space-2);
+  border-inline-start: var(--border-width-hair) solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+}
+
+.wall-canvas__scale label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.wall-canvas__scale input {
+  inline-size: 8ch;
+  padding: 0 var(--space-1);
+  border: var(--border-width-hair) solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  text-align: end;
+}
+
+.wall-canvas__toolbar .wall-canvas__scale-go {
+  background: var(--accent-bg);
+  color: var(--accent);
+  box-shadow: inset 0 0 0 var(--border-width-hair) var(--accent-border);
+}
+
+/* The file input is never shown — the label is the button. */
+.wall-canvas__photopick {
+  position: relative;
+  overflow: hidden;
+  min-block-size: var(--control-height-sm);
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-sm);
+  line-height: var(--control-height-sm);
+  cursor: pointer;
+}
+
+.wall-canvas__photopick input[type='file'] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.wall-canvas__opacity {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
   color: var(--text-tertiary);
   font-family: var(--font-mono);
   font-size: var(--font-size-xs);
 }
 
-.wall-canvas__toolbar .wall-canvas__clear { color: var(--text-tertiary); }
+.wall-canvas__opacity input[type='range'] { inline-size: 7rem; }
+.wall-canvas__opacity span { min-inline-size: 4ch; text-align: end; }
+
+.wall-canvas__toolbar .wall-canvas__scale-drop { color: var(--text-tertiary); }
+.wall-canvas__toolbar .wall-canvas__scale-drop:hover {
+  background: var(--danger-bg, var(--surface-3));
+  color: var(--danger-fg, var(--text-primary));
+}
+
+.wall-canvas__scale-bad {
+  max-inline-size: 34ch;
+  color: var(--danger-fg);
+  font-size: var(--font-size-xs);
+  white-space: normal;
+}
 
 .wall-canvas__readout {
   display: inline-flex;
@@ -130,9 +245,11 @@
   .wall-canvas__toolbar button { transition: none; }
 }
 
+/* Same metrics as the tool strip above it and as the 3D view's own cluster —
+   three floating clusters, one component. */
 .wall-canvas__tools button {
-  min-inline-size: var(--control-height-sm);
-  min-block-size: var(--control-height-sm);
+  min-inline-size: var(--control-height-md);
+  min-block-size: var(--control-height-md);
   padding-inline: var(--space-2);
   border: none;
   border-radius: var(--radius-sm);
@@ -140,6 +257,7 @@
   color: var(--text-secondary);
   font-family: var(--font-sans);
   font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
   line-height: var(--line-height-none);
   cursor: pointer;
   transition: background var(--duration-fast) var(--ease-standard),
@@ -241,7 +359,7 @@
   gap: var(--space-1);
   padding: 0 var(--space-1);
   border: none;
-  border-radius: var(--radius-xs, 3px);
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-primary);
   font-family: var(--font-sans);
@@ -268,7 +386,7 @@
   inline-size: 8ch;
   padding: 0 var(--space-1);
   border: var(--border-width-hair) solid var(--accent-border);
-  border-radius: var(--radius-xs, 3px);
+  border-radius: var(--radius-sm);
   background: var(--surface-1);
   color: var(--text-primary);
   font-family: var(--font-mono);
@@ -282,7 +400,7 @@
   min-block-size: var(--control-height-sm);
   padding-inline: var(--space-2);
   border: var(--border-width-hair) solid var(--accent-border);
-  border-radius: var(--radius-xs, 3px);
+  border-radius: var(--radius-sm);
   background: var(--accent-bg);
   color: var(--accent);
   font-family: var(--font-sans);

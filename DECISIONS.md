@@ -2933,3 +2933,785 @@ tell rule 3's successor from another near miss.
 
 The left and right bands being filled (D84) makes the corner worse than it reads on paper, because
 the two bands meeting there are different widths to begin with.
+
+---
+
+## D88 — A photograph of the wall: the alignment is the document's, the pixels are not
+
+You cannot plan round a light switch you have not measured, and measuring one from a photograph is
+how anybody actually does it. So a picture of the real wall can be laid under the plan and scaled
+against something known, and the blocked zones are then dragged onto the things they represent
+rather than onto coordinates somebody wrote down.
+
+**The scale comes from two clicks and a typed distance, and from nothing else.** Not EXIF, not the
+wall size, not a lens model — those are all guesses dressed as measurements. `calibratePhoto` takes
+two points in wall millimetres and the real distance between them and produces `mmPerPixel`, which
+is the single number everything else falls out of.
+
+**It is anchored on the FIRST point, and that is the whole usability of the gesture.** You click a
+corner you can name — the edge of the switch plate, the door frame — then a second one, and the
+first stays exactly where you put it while the picture grows around it. Anchored on the photo's
+centre instead, both of the points you just chose move, so the feature you were lining up walks off
+under the cursor and the next drag has to chase it. Asserted in IMAGE PIXELS in
+`tests/wall-photo.test.ts`, not in wall millimetres: `|b − a| = realMm` on the wall points alone is
+true by construction and passes with the factor inverted.
+
+**A wildly wrong distance is REFUSED, not clamped.** Clamping keeps the anchor promise while
+silently making the scale a lie — the photo lands somewhere plausible and every measurement taken
+off it afterwards is wrong. `MIN/MAX_PHOTO_SPAN_MM` bound the result and a calibration that would
+breach them comes back with a sentence naming the size it would have produced.
+
+**The alignment is on the DOCUMENT and the image is in IndexedDB**, the same split an imported part
+uses. Everything about where the photo sits is a few dozen bytes and belongs with the layout — it
+undoes, it saves, it travels down a share link. The pixels are megabytes and cannot. That makes
+"the layout knows where the photograph goes and this browser does not have it" a REAL state, and it
+is said out loud, by file name, with a button that re-attaches the picture and keeps the
+calibration. A share link that carried the alignment and drew nothing would read as a broken
+feature.
+
+**The wall-photo store is never swept.** `sweepOrphans` deletes a part's photo the moment no part
+claims it, which is safe because the catalogue is the complete list of parts. There is no such list
+of documents: the layout holding this id may be a file on disk or a link nobody has opened yet, so
+"no open document claims it" is not evidence that nothing does. The bytes are dropped when the user
+replaces or removes the picture, which are the two moments the claim is genuinely over.
+
+**Re-attaching mints a NEW id even though the alignment is kept.** The id is a storage key and both
+views cache their decoded copy against it; re-storing under the same key leaves them drawing the old
+picture with nothing in the document to say it changed. Same shape as D50, D52 and D66 — a second
+reader of one fact quietly disagreeing with the first.
+
+### In the plan, a cell has to be made a hole
+
+Found by looking at the running app, and invisible to every test. In 3D "behind" works for free
+because a cell IS a hole: the photo sits at `z = −0.6` and shows through. In the plan a cell is a
+filled hexagon in an opaque colour, drawn so the plate reads as material against the wall — so the
+photograph was drawn faithfully, in the right place, at the right size, and then painted over
+completely. "Behind" came out as "not shown at all".
+
+And the first fix was wrong in an instructive way: **skipping the cell fill does nothing**, because
+the plate path already covers the whole hexagon out to its corners and the opening is painted on top
+of it. The hole has to be taken OUT of the material — plate and openings in one even-odd fill —
+which is what it is on the real plate. `showThrough` also joins the static layer's cache key, or the
+layer keeps its opaque cells from before the photo arrived.
+
+### The move drag lost every flick, exactly as D58 said it would
+
+The photograph commits ONCE per gesture rather than per pointer move: a zone drag gets away with
+per-frame commits because it is a few centimetres, but a photo is dragged the width of the wall,
+which is two hundred undo steps and pushes the user's real history off `HISTORY_LIMIT`. So the live
+position is local until the pointer comes up.
+
+Held in STATE, that local position is invisible to the release handler, which closes over the render
+it was made in — so a drag whose `pointerup` arrives before React commits a render silently does
+nothing. It worked for a slow human drag and lost every quick flick. The comment warning about this
+was already written above the code that then made the mistake. It lives in the ref now, with the
+state copy only for drawing, and it was caught by driving the real app rather than by any test.
+
+### The one control naming the feature was dead, and said nothing about why
+
+Reported as "I cannot click the photo part at all, just grayed out". The Photo tool was disabled
+until a photograph existed, and the only way to add one was `WallPhotoPanel` — which renders through
+`BomPanel`'s `extras` slot, at the BOTTOM of the parts list, below every plate and fastener on a
+solved wall. So the discoverable control was dead and the discovery path was off screen.
+
+Worse, the `title` explaining the situation never appeared: **a browser fires no tooltip on a
+disabled button.** A disabled control with an explanation nobody can read is strictly worse than no
+control, because it says the feature exists and refuses to say how.
+
+The tool is never disabled now — it is how you GET a photograph. Its toolbar strip carries the file
+picker when there is none, and the depth toggle and opacity slider when there is: those two are
+adjusted constantly while lining a zone up, so they belong where the wall is, while replacing,
+removing and typing a position are once-per-session jobs that stay in the rail.
+
+That makes two front doors onto "a chosen file becomes the wall's photograph", so it has exactly one
+owner — `attachWallPhoto` in `src/ui/wallPhotoImage.ts` — rather than a copy in each. A second copy
+would drift the moment one of them learnt something the other did not, which is the shape of D50,
+D52 and D66.
+
+### Removing the photo must not delete it, and Backspace has to share a key
+
+Asked for a delete button and a Backspace shortcut, which turned up a defect in what removal already
+did: `Remove` deleted the stored bytes on the spot, and removal is an ORDINARY UNDOABLE EDIT. Undo
+therefore restored a layout that remembered exactly where a photograph went and could not show it —
+the "not on this device" state, reached by pressing undo. Replacing a photo had the same fault for
+the same reason.
+
+So no edit drops the pixels any more. That leaves the store unbounded, and the sweep that works for
+a part's photo cannot be used: `sweepOrphans` is safe only because the catalogue is the complete list
+of parts, and there is no equivalent list of documents — the layout naming an id may be a file on
+disk or a link nobody has opened yet. `pruneWallPhotos` bounds it as a CACHE instead: the newest few
+survive, the open document's own photo is protected whatever its age, and startup is the only moment
+it runs. A layout naming a photo old enough to have been pruned still opens, still knows where the
+picture goes, and asks for it by name.
+
+**Ordered by key, compared by LENGTH first.** An id is `wallphoto` + base-36 milliseconds, so
+`wallphotozz` is OLDER than `wallphotoaaa`. A plain string sort inverts on the day that stamp gains
+a digit and prunes the newest photograph instead of the oldest — a silent, dated fault, so the test
+states it directly.
+
+**Backspace is shared with the shell, and the two are told apart by a CONDITION, not by order.** The
+shell deletes the selected items on the same key; both handlers listen on `window`, where neither can
+rely on running first. The shell acts only when something is selected and this only when nothing is,
+so they can never both fire. The tool is the scope on top of that: on the bare plan Backspace must
+not delete a photograph somebody spent five minutes calibrating. Checked in the app with a part
+selected — the part went and the photograph stayed — and again with nothing selected.
+
+## D89 — The list says what is LEFT to print, and print time is gone
+
+Asked for: take print time out, and put in a cart where you say how many you have printed and the
+list tells you how many more to print.
+
+Both halves are the same observation. A parts list is read while a wall is being BUILT, over weeks,
+and the question it is asked every time is "what do I put on the bed tonight". Print time answered a
+question nobody had — the estimate is a property of the machine and the profile, it is wrong for
+anyone whose printer is not the one in `catalog.slicerProfile`, and a headline "19 h 15 min" for a
+2.4 m wall is a number you cannot act on. What is left to print is the number you act on.
+
+So `LayoutDoc.printed` — partId to count — and every line carries `printed` and `toPrint`. Filament
+stays, because it is what you buy, and stays as the WHOLE job for the same reason: you order a spool
+once. Minutes are gone from `BomLine`, from the totals, from the CSV, the checklist, the printable
+sheet, the catalogue tiles and the library's sort. They are still MEASURED — `catalog.json` keeps
+what PrusaSlicer said and `stl.ts` still fits an estimator — because that is provenance, and the
+scanner is not made worse by the parts list changing its mind about what to show.
+
+**The count is on the DOCUMENT, so it travels and it undoes.** Same rule as the wall photo's
+alignment (D88) and the project's parts (D71): it belongs to this wall, it goes down a share link,
+and a mis-click on a count built up over three printing sessions has to be recoverable. In the
+browser it would be none of those things.
+
+**The document remembers more than the layout needs, and the LINE does the capping.** Delete a shelf
+and put it back, and the four you printed are still printed — so `setPrinted` stores what it is
+given and `bom.printedOf` caps at the quantity when it builds the line. Capping on the way IN throws
+the fact away; capping in the panel only would let the exports and the totals disagree with the
+screen. One cap, at the one place a line is made.
+
+**A stepper must not do the arithmetic — the store must.** The ± buttons first sent `printed ± 1`,
+computed from the line as rendered. Driving the running app, `+ + +` on a 12-plate line recorded
+ONE: three clicks arriving before a repaint all read 0 and all wrote 1. `bumpPrinted` reads the
+document and adds, and `setPrinted` is kept for the typed field and for `all` / `none`, where the
+number IS what the user said. This is D58 again — state is only visible after a render and the
+pointer does not wait — and it was found the same way, by using the thing rather than by testing it.
+
+**Nothing in the stepper may shrink.** Flex gave way in a 320 px panel and the buttons came out
+15 px wide with a field that could not show "12"; then the `none` label, being wider than `all`,
+pushed the whole control out of its column and over the part name. Everything is `flex: none` at a
+stated size, the toggle has a FIXED width because its label changes with its state, and the column
+is sized to hold the total. The per-line filament column paid for it — 48 px still fits "3813.5 g" —
+because the part name is the column that has to hold a real file name. All measured in the app.
+
+**The exports answer the same question.** The CSV gains `printed` and `to_print` (blank, not zero,
+for bought hardware — nobody ticks a screw off in here), the checklist counts down and ticks its own
+box, and the printable sheet puts what is left in the quantity column with the box already filled
+for a finished line. A sheet that starts at zero when the app knows better is a sheet that gets
+ignored on the second printing session.
+
+## D90 — The wall fixings are the planner's until you disagree, and then they are yours
+
+Asked for: remove and move the fixings the program puts in.
+
+They were the one thing on the wall you could not touch. `planFixings` spreads them across the
+assembly at a spacing (D48) and nothing could overrule it, so a fixing landing exactly where a shelf
+had to go was an argument you could not win — and the answer "move the shelf" is the wrong way round
+for a screw hole in someone else's wall.
+
+**They stay DERIVED, and the edits are applied to the plan's OUTPUT.** `LayoutDoc.fixingEdits` is
+two lists of cells: positions taken out, and positions put in. The alternative — materialising the
+plan into real placed items the first time you touch one — throws away everything the plan is for:
+resize the wall, cut it round a switch, re-solve it, and materialised fixings would sit where a wall
+that no longer exists once needed them. As edits, the untouched ones follow the wall and the three
+you moved stay moved.
+
+**Never fed back into the planner, and that is the trap.** Re-planning around a removal is the
+obvious implementation and it is wrong in a way that looks like a bug in the delete: the grid notices
+the hole and fills it from the next cell, so the fixing you deleted comes back 24 mm away. The edits
+apply after the plan is built, so a removal is a removal.
+
+**A move is a removal and an addition, and the two cancelling cases both had to be handled.** Put one
+back where the planner had it and that UNDOES the removal rather than recording an override at the
+same cell; take away one you added and the addition is FORGOTTEN rather than gaining a removal on top
+of it. Without both, the document accumulates pairs that cancel out, never returns to the state it
+started in, and re-solving the wall leaves overrides pinned to cells the planner no longer proposes.
+
+**A junction fastener can be removed but not moved.** It is a four-cell insert whose whole job is to
+straddle the corner where three or four plates meet (HSW-SPEC §4); anywhere else it is a big single
+fixing in the wrong part. Dragging one is refused with that sentence rather than silently ignored,
+because a drag that does nothing reads as a broken drag.
+
+**Removing the last fixing on a plate is a WARNING with its own words.** `no-room-for-mounts` already
+existed and says "clear a cell" — which is nonsense here: the cells are clear, the fixing is gone. So
+`panel-unfixed` says what actually happened and points at Reset fixings. Two problems with the same
+symptom need two sentences.
+
+**An addition is refused off the plates and refused where a fixing already is — and ALLOWED under an
+accessory.** The planner keeps clear of accessories because it is guessing at a screwdriver's reach;
+a person pointing at a cell is not guessing, and overlap is allowed everywhere else in this app
+(`isExclusive`). What it cannot do is share a hole with something plugged into it.
+
+**The picked fixing is SHELL state, not `selection`.** Every consumer of `selection` looks its ids up
+in `doc.items`, so a cell key in that list would be a stranger to all of them — and what a removal
+has to give back is the fixing, not the fact that it was highlighted. Delete is shared with the item
+handler and the photograph's, and the three are told apart by a condition rather than by which
+listener runs first, exactly as D88 sets out.
+
+## D91 — One button for the theme, in the corner, and it is remembered
+
+A three-way `<select>` (Auto / Light / Dark) sat mid-bar. "Auto" is a state you leave rather than one
+you pick, so the control asked a question nobody has instead of offering the one thing they want: the
+other theme. It is a single button now, last in the bar so it lands in the top-right corner where a
+theme switch is looked for, and it resolves `system` through `prefers-color-scheme` first — which is
+what lets it say *which* theme it is about to switch to, in its label and in its glyph.
+
+Remembered in `localStorage`, read through a try: a stored value is user input by the time it comes
+back, and Safari throws on `localStorage` outright in private mode rather than returning null. A
+theme is not worth failing to start over. Without it the button would forget on every reload — which
+is every share link and every reopened file.
+
+The sun carries U+FE0E. Without it a browser picks the emoji presentation and the button renders a
+yellow disc in a bar of monochrome glyphs; found by looking at it.
+
+## D92 — Clicking a parts-list line lights the plates it means
+
+The list said "44 × wall-honeycomb-bambu-211x248-fixed" and the wall gave you no way to find out
+which forty-four. Clicking a line already selected the placed ITEMS with that partId — which is
+nothing at all for a panel line, because a plate is not an item. So the one affordance the list
+offered ("Highlight … on the wall") did nothing for the lines that most need it.
+
+**Which plates a line means is a RULE, and it now has one owner.** `bom.panelsForLine` — not "the
+panels with that partId", which is the obvious implementation and is wrong: a plate cut round a
+switch, sized by the app, or carrying an edge has LEFT the stock line for a generated
+`custom/<shape>|<frame>` one (D56, D66). Answering that question in the view would light a plate the
+line does not count, which is the same shape as every other second-reader bug in this repo.
+`tests/lit-panels.test.ts` holds it to the parts list itself: for every line on a wall, the plates it
+names are as many as the line's own quantity, no plate is claimed twice, and between them the lines
+account for the whole wall.
+
+**LIT joins the instancing key in 3D.** Panels are drawn as one `InstancedMesh` per shape sharing one
+material, so two plates of the same shape cannot come out in two tones from one batch. Keying on it
+splits them — normally into one group, since nothing is lit.
+
+**A lit plate is the plate's own tone carried toward the selection colour, not replaced by it.**
+Replaced, it stops reading as a plate: the honeycomb disappears into a flat slab and you cannot see
+which cells it has, which is usually why you clicked. In the plan the same rule falls out differently
+at each zoom — cell by cell the openings are punched out of the tint as well, and zoomed out, where
+plates are drawn as blocks, forty lit plates as solid fills came out as ONE slab across most of the
+wall. It says "somewhere here" when the question was "which ones", so the blocks are tinted and
+OUTLINED instead, and the outline is what lets you count them.
+
+**Found by driving it: a prop the draw effect reads has to be a dependency of it.** `litPanelIds`
+reached `WallCanvas` and was left out of the draw effect's array, so clicking a line marked the row
+and repainted nothing — indistinguishable from a highlight that does not work. The 3D view had the
+same hazard and the same fix.
+
+**The LINE is stored, not the panel ids.** The wall changes under a highlight — solve again, cut a
+plate round a switch — and a stored list of ids would light plates that no longer answer to that
+line. Deriving on each render keeps it true to what the line means now. Clicking the same line again
+turns it off, and that is the only way back for a panel line: a plate is not selectable, so clearing
+the selection does not cover it.
+
+## D93 — Colours: two defaults, and anything you like on top
+
+Asked for: a default colour at the top so every clip-in fastener and accessory is one colour and the
+panels another, and the ability to colour things individually.
+
+**Four levels, resolved in one place.** This placed item, then everything on its parts-list line,
+then the default for its kind, then nothing. `colors.ts` is the only module that knows that order and
+both views ask through it, because the failure mode here is not a wrong colour — it is the plan and
+the 3D view painting the same wall two different ways, which is D50, D52 and D66 over again. The
+parts list and the exports read the same function, so the sheet at the printer says what the screen
+says.
+
+**"No colour" is an answer, and it is not black.** A native `<input type="color">` handed nothing
+shows `#000000`, which reads as "your plates are black" — a claim nobody made, and one somebody would
+buy a spool for. So an unchosen colour is stored as an ABSENT key, an untouched layout serialises
+exactly as it always did, and the swatch shows the colour the thing will actually be — its own or the
+one it falls back to — hatching only when nothing anywhere has been chosen. Own and inherited are
+told apart by the × beside the swatch, not by a second tone: two shades of "sort of orange" in a
+column of colours is unreadable.
+
+**A colour is the only user-supplied string this app paints with.** It reaches a canvas `fillStyle`
+and a `THREE.Color`, both of which accept arbitrary text and do something unhelpful with what they
+cannot parse, so `normaliseColor` takes `#rgb`/`#rrggbb` and nothing else — from the picker, from a
+file, from a share link — and expands the short form so everything downstream has one shape.
+
+**A TOKEN IS NOT A HEX COLOUR, and that one cost a picker.** The swatch opens on the colour the wall
+already uses, read from the token layer — but `--accent` computes to `rgb(87 174 232)`, because the
+token layer builds it from an `--accent-rgb` triple so one channel set can serve solid and
+translucent uses. Handed that, a colour input shows BLACK and says nothing. Everything now goes
+through a 2D context, which normalises any CSS colour to `#rrggbb`.
+
+**The colour joins the instancing key in 3D**, exactly as `lit` does (D92): one `InstancedMesh` per
+group shares one material, so two plates of a shape printed in different filament are two draws. In
+the plan the cells are gathered into one path PER COLOUR rather than one fill per plate — a handful
+of fills instead of sixty-seven of a few hundred hexagons each, every time the static layer rebuilds.
+Selection still beats colour in 3D: while something is selected the wall's job is to say which, and a
+part painted the selection blue would be indistinguishable from a selected one.
+
+**The palette lists what is USED, not what has been set.** A default nothing falls back to is not a
+spool you have to buy, and a line colour for a part that is not on this wall is not either. That is
+why `colorsInUse` walks the plates and the items and asks the same resolver they do, rather than
+listing the keys of the colour map.
+
+## D94 — A colour commits when the picker says OK, and a dependency array is not decoration
+
+Two reports on the same feature, one after the other: "the colour selector on the part is not
+working, but it is on the panels", and "I don't want the colour to change in real time while I
+select — when I click OK".
+
+**The first was a missing dependency, in the second file in a row.** The 3D item effect READS
+`doc.colors` and did not list it, so colouring a part changed the document, changed the parts list,
+and left the wall alone — while the plates, whose effect does list it, repainted. That is exactly the
+defect I had found in `WallCanvas` an hour earlier and written a line in CLAUDE.md about (D92). The
+line was right and it did not stop me making it again, which says the guard has to be the habit of
+checking every effect that reads a new prop, not a note about one that did.
+
+The symptom is worth recording because it does not look like a missing dependency: the feature works
+in one place and not another, which reads as a bug in the FEATURE. Both halves came from the same
+resolver and the same store command; only the repaint differed.
+
+**The second is `NumberField`'s rule arriving at a second control.** React's `onChange` on a colour
+input is the native `input` event, which fires continuously as the cursor moves over the spectrum —
+so the wall repainted while a colour was being considered, and every intermediate shade went on the
+undo stack. The native `change` event is the confirmation (OK, or the picker closing) and it is what
+reaches the document now; `input` moves the swatch and nothing else. Same shape as `commitOn:
+'confirm'`, same reason: **what a commit costs decides when it happens** — here it costs a re-render
+of every plate on the wall and an undo step.
+
+The swatch still follows along, because that preview is free: it is the component's own state, and it
+answers "which colour is the picker sitting on" without the document having to agree yet. `blur`
+commits as well, for a browser that fires no `change` on dismiss — otherwise a draft could sit on
+screen having never reached the document.
+
+**Committing only a REAL change is not an optimisation.** A picker dismissed on the colour it opened
+on has decided nothing; committing anyway would spend an undo step, and on an INHERITED swatch — one
+showing the default it falls back to — it would freeze that colour into an override that then stops
+following the default. `shouldCommit` is pure and tested for that reason.
+
+## D95 — The OK has to exist, and the fasteners the app puts in are part of the build
+
+Two reports: "there is no OK button", and "when I choose the 2nd colour I also want the fasteners
+that are already there to change to that colour, and all new items I drop in are also that colour".
+
+**Committing on the native `change` event fixed the wrong half.** D94 stopped the wall repainting on
+every shade dragged through the picker, which was right — and left a control with no visible moment
+of confirmation, because on macOS the system Colours panel has no OK button of its own. "It commits
+when you close the panel" is not a thing anyone can see. So the swatch opens a POPOVER now: twelve
+filament presets, the native picker behind "Custom…" for anything else, a hex field for a colour
+written on a spool, and Cancel / OK. Nothing reaches the document until OK; Escape and a click
+outside are Cancel; "Use default" is a third answer and sits apart from the other two, because
+"forget this colour" is not "keep it" or "drop the change".
+
+It is portalled to the body. The parts list scrolls and clips its own overflow
+(`contain: layout paint`), and that is exactly where most of the swatches are.
+
+**A cap narrower than the widest row does not shrink the rows — it lets them ESCAPE.** The popover
+was written with `inline-size: max-content` and a `max-inline-size` of 192 px, which sounds like "no
+wider than this" and means "no wider than this, and the children keep their own width anyway": every
+row hung 69 px out of the right-hand side, with OK sitting outside the panel it belongs to, reported
+as "the OK button is outside". Three things fix it together and all three are needed — a cap wide
+enough for the widest row (which is the buttons, not the swatch grid), `min-inline-size: 0` on the
+rows so the cap makes them WRAP instead of overflow, and `flex-wrap` on the actions. Measured in the
+app afterwards, in all three placements and at a 360 px viewport: nothing overflows, and the panel
+stays on screen.
+
+**The fasteners the app puts in are printed parts, and were the one thing ignoring the colour.**
+Wall fixings and the inserts under an accessory are not `doc.items` — they come from `fixingPlanFor`
+and `fasteningPlanFor` — so `colorOfItem` never saw them and they stayed the theme's grey while
+everything around them changed. They have their own LINES in the parts list, so they take
+`colorOfLine(colors, partId, false)`: the swatch on that line, then the `Parts` default. "Already
+there" is the whole point — the app chose them rather than the user, and that is no reason for them
+to be the one thing on the wall that ignores the colour chosen for their kind.
+
+New parts needed nothing: an item with no colour of its own already falls through to the default, so
+anything dropped after the choice arrives in it. Verified by placing one rather than by reasoning
+about it.
+
+**The palette was reading the wrong list.** `colorsInUse` walked the document — plates and items —
+which by construction could not see a planned fixing, so a wall whose only colour was on its fixings
+reported no colours at all. It reads the PARTS LIST now, which is exactly the set of things that get
+printed, plus the per-item overrides no line mentions. Same lesson as D48 and D53: when something is
+both drawn and counted, both readers take the same list.
+
+## D96 — A band starts on an even column, or the wall is two honeycombs
+
+Reported as "with Fit to printer the top and bottom are not on a straight line — the hexagons go one
+over for a few, then one under for a few".
+
+**The runs are BANDS, and the phase is a property of where a band starts.** `panelCells` staggers
+relative column `dq` by −floor(dq/2), so inside a block the odd columns lean half a pitch UP. Written
+out in wall millimetres, a band beginning at absolute column q0 puts the lowest cell of column q at
+`y/PITCH = k + frac((q − q0)/2)` for some whole `k` — and `frac((q − q0)/2)` is `frac(q/2)` when q0 is
+EVEN and its opposite when q0 is ODD. An odd-origin band therefore carries the other phase of the
+same lattice: its odd columns hang half a pitch down exactly where its neighbour's reach half a pitch
+up. No choice of `k` repairs a half-row error, so the silhouettes differ by a whole PITCH, 23.6 mm,
+at the top AND at the bottom, for the full height of the wall. Reproduced on a 1200 × 900 wall with
+an MK3S bed, whose widest plate is ELEVEN columns: bands at 0, 11, 22, 33, 44, 55, alternating phase
+every band, which is the "few" in the report.
+
+So `BandPlan.keepsPhase` — prefer the width that leaves the NEXT band on an even column — and it
+ranks ABOVE cells covered in `isBetterBand`. Starting from q0 = 0 that keeps the whole wall in one
+phase. The cost is at most one column of plate width, and only on a bed whose widest plate is an odd
+number of columns: 11 → 10 on an MK3S, 19 → 18 on a 400 mm bed. It is a preference and not a rule,
+because with only odd widths available — possible with the seven shipped plates, never with generated
+ones — a step is better than bare wall, and the comparison falls through to coverage on its own.
+
+**`bandBump` was reasoning about the wrong end of the band, and dropped a one-column band off the
+bottom of the wall.** It asked for `bandColumns >= 2` before nudging a band up a row, on the grounds
+that the odd columns lean up and would otherwise overrun the TOP. A one-column band has no odd
+column, so it was left unbumped — with its cells centred on y = 0 and half of every one of them below
+the wall, measured at −11.8 mm on a 360 mm wall, whose last band is a single column. The bump belongs
+to the LOWEST cell, which is in the first column of every band whatever its width, so it is now a
+function of q0 alone.
+
+**The candidate cap was the same defect at the top edge.** `generatedPlateSizes` kept only its 120
+largest sizes, "because the solver tries every variant at every position". That is the wrong axis to
+economise on: a band's WIDTH is chosen once, but its heights have to STACK to the top of the wall
+exactly, so dropping the short plates leaves a band unable to finish. On a 2400 × 1200 wall with a
+350 mm bed the shortest 5-column plate offered was 9 rows, the last band had 7 rows of room, and the
+right-hand strip of that wall ended 165 mm below every other band. The whole grid is offered now —
+19 × 16 at the very biggest, and the solver's inner loop is an array scan. Coverage went UP on the
+three beds where it had been silently truncating: 94.1 → 96.0 % on a 300, 95.4 → 96.0 on a 350.
+
+**What is left is the lattice's own zig-zag and cannot be removed.** Adjacent columns of a honeycomb
+are half a cell out of step by construction, so the top and bottom edges alternate by MARGIN_Y over
+every column, everywhere. `tests/plate-size.test.ts` states exactly that: the lowest cell of every
+column takes one of two heights half a pitch apart, over five walls, every bed, and both plate
+sources — anything more is a band out of phase. Each of the three fixes was reverted in turn and
+watched to go red before being believed.
+
+## D97 — The 22 mm mouth goes against the WALL, and the insert is what proves it
+
+Reported as "all panels are the wrong way, the tapered part should be towards the wall".
+
+**The plate was drawn turned over, and the evidence was already in the spec.** A cell's bore is
+stepped: a 22.0 mm mouth 2.0 deep, a 48° lead-in, the 20.0 throat, and a 0.5 mm entry flare to 20.8.
+The app put the mouth on the ROOM side — so you looked at a countersunk hole that narrowed as it went
+in. Which way round it really goes is decided by the INSERT, not by the plate. HSW-SPEC §5 measures
+`insert-empty`: flange 0.3–2.5, body 2.5–6.5, snap barbs 6.5–9.6 peaking at **20.735 mm across flats
+at z = 8.2–8.6**. With the flange seated on the face those barbs sit **5.7–6.1 mm into the plate**.
+
+- Entered from the FLARE face that is 0.5 + 4.6 + 0.9 = exactly where the bore opens to 21.3–22.0.
+  The barbs spring out and catch. That is the sentence §5 already had.
+- Entered from the MOUTH face the same barbs are at 5.7–6.1 mm, which is inside the 20.0 throat.
+  Compressed, gripping nothing.
+
+So `BORE_PROFILE` runs mouth-first from z = 0, and z = 0 is the wall face. The plate prints mouth-down
+as a result, which trades the 38.7° flare for the 48° lead-in as the only overhang, over 0.9 mm —
+against a plate you cannot clip an insert into, that is not a trade.
+
+`tests/honeycomb-model.test.ts` states it as physics rather than as a constant: it finds the barbs on
+the real `insert-empty.stl` by looking for material wider than the throat past the flange, and
+requires the plate's bore at that depth to be wider still. On the old profile it reads 20.0 against a
+20.735 barb and fails.
+
+**A printed plate cannot simply be turned over, which is why every plate is now GENERATED.** The
+3D view drew a stock plate from its shipped STL. Turning that mesh over mirrors its cell block —
+`panelCells` staggers by −floor(dq/2) and the flip wants the other parity — so its holes land between
+the cells everything else is drawn on: measured, **48 of the 56 cell centres** of `wall-honeycomb-part`
+fall in solid material once it is flipped, and the odd-column plate (9 wide) is the only one that
+survives it. The generator has no such problem, because it BUILDS the plate from the cells it is
+given. So `WallView3D` asks the generator first for every plate, stock included, and keeps the
+shipped mesh only as the fallback for a shape the generator refuses.
+
+That also retires the reason the STL was there: "the generated geometry cannot show the entry flare,
+the lead-in chamfer, or anything the designer put there". True of the drawn two-layer approximation;
+not true of `honeycomb.ts`, which carries the whole measured bore and reproduces all seven shipped
+plates to 0.0025 % of volume. One source for every plate is also what stops a cut plate and its stock
+neighbour disagreeing about which way the bore runs on the same wall.
+
+**`PartInspector`'s wall patch had the same two problems and takes the same answer** (`plateGeometry`
+in `meshLibrary`, cached per size). It was the smallest shipped plate through `loadPartMesh`; it is
+now that plate's block from the generator. The dialog is where a person lines a part up against a
+socket, so a patch drawn with the bore the wrong way round is exactly the tool-and-wall disagreement
+D50, D52 and D66 are each an instance of. It is synchronous now as well, so the plate can no longer
+arrive after the part standing on it.
+
+**Two tests moved with the fact, and neither was wrong before.** `plate-edge.test.ts` slices "in the
+MOUTH band" to check the cut cells are open — the mouth band is z 0.0–2.0 now, not 6.0–8.0, and
+slicing at the old height put every probe in the throat and reported two filled cells that are not
+filled. `honeycomb-model.test.ts` asserted the mouth was on the printed bottom, with a reason —
+"the insert's 22.5 flange cannot enter a 22.0 mouth" — that never distinguished the two cases: a
+22.5 flange cannot enter a 20.8 flare either, so it seats proud whichever way round the plate goes.
+
+**What is still the old way round: the shipped STL, as a file.** `models/` is drawn flare-down and
+the app's footprints were measured in that frame, so the app's lattice chirality is the mirror of a
+wall built from shipped plates hung the right way round. It is unobservable on a plain wall — a
+mirrored honeycomb is a honeycomb — and a plate the app has to CUT is generated from the plan's own
+cells, so it is correct by construction. Fixing it properly means flipping `panelCells` and every
+parity pinned to it (`panel-parity`, the customiser round-trip, the band phase in `tiling.ts`), which
+is a bigger change than the picture that was reported. PARKED.
+
+## D98 — The wall plates are not on sale
+
+"Please remove the panels from the parts list as we do generate them with the software."
+
+Asked which list, because the app has two and only one of them is safe to take plates out of: the
+PARTS LIST counts what you have to print and the plates are most of it, while the LIBRARY is a shop.
+The answer was the shop, and it is the right one — since D97 the app sizes and generates every plate
+it draws, so a shipped plate is not something anyone picks. The parts list still counts every plate,
+with its printed counter and its filament.
+
+`isShoppable` in `projectParts.ts` is the single statement of it, and the rail has been applying that
+rule since D71 — it just had its own copy of it (`part.type !== 'panel'` inline). Now the library's
+shelves, its search, its "n parts to choose from", the rail's `Browse n parts` and the rail's own
+contents all ask the same function. 54 becomes 47, and the Panels shelf goes.
+
+**They stay in the CATALOGUE, and three things would break if they did not:** the solver reads their
+footprints when "Fit to printer" is off, `bom.ts` costs a generated plate against the biggest shipped
+plate per cell (D61), and `PartInspector` sizes its wall patch from the smallest one that covers the
+patch. This is a rule about the shelves, not about the catalogue.
+
+**A plate you imported is still yours.** `typeFromName` types anything called `wall-honeycomb…` or
+`220x220…` as a panel, and `ImportDialog` says in as many words that a plate the tiler cannot lay out
+can still be placed by hand. Hiding those would take somebody's own upload off the only surface that
+can show or delete it — "My uploads" — which is the same class of mistake as `sweepOrphans` deleting
+imports on an unreadable store. So the rule reads "a SHIPPED plate", not "a panel".
+
+## D99 — A printer that is not on the list
+
+"I want an option called custom printer where I can put the size of my build plate and generate from
+that."
+
+**`bedFor` is the one resolver, and that is the whole design.** `bedId` used to be a key into `BEDS`
+and every reader looked it up for itself — the solver, the plate sizes, the blocked-zone rail, the
+export header. A typed size breaks that, because `bedId` alone no longer says how big the plate is,
+and a reader still doing its own lookup gets `undefined` and quietly falls back to "unknown printer",
+which in the solver's case is a wall with no panels on it. So `bedFor(bedId, customBed)` in
+`constants.ts` is the only thing that turns a document's choice into a `Bed`, and everything asks it.
+It returns undefined for an id it does not know AND for `custom` with no size, which is what keeps
+`solveTiling`'s refusal honest rather than a guess.
+
+**The size is on the DOCUMENT, not beside "Fit to printer" in the shell.** A saved layout's plates
+were cut to a particular bed; a reload that forgot it would show plates it could no longer explain,
+and the parts list would cost them against a printer nobody chose. So `LayoutDoc.customBed`, which
+also means it travels down a share link and undoes like every other edit. "Fit to printer" stays in
+the shell for the reason D-none-of-them gave originally: it changes what the NEXT solve produces,
+and a saved layout already records what it produced.
+
+**Bounds, and why there is a ceiling at all.** 40 mm is one whole cell — `plateFootprintMm(1, 1)` is
+27.25 × 35.4 — and below it there is nothing to generate. 1000 mm is a bound on a typed number rather
+than a claim about printers: the grid of plate sizes the solver considers is columns × rows and grows
+with the bed's AREA, so 1000 × 1000 already offers 48 × 41 = 1968 of them and a stray digit would
+offer half a million. `clampBedMm` is applied in the store command AND again in `deserialize`,
+because a stored document is user input by the time it comes back.
+
+**Choosing "Custom…" seeds the fields from the printer that was chosen before** and ticks "Fit to
+printer". The seed is so the two fields open on real numbers — widening a bed by 20 mm should not
+mean typing both from scratch — and the tick is because typing a bed size is only ever a request to
+GENERATE for it: with the checkbox off the size would merely filter the seven shipped plates and the
+solve would look as if the number had been ignored. Both are visible and reversible.
+
+**The fields commit on CONFIRM, like a blocked zone's size** (D67). There is no live preview to
+watch, so committing per keystroke would put `3`, `38` and `380` into the undo stack on the way to a
+number nobody typed.
+
+### The parts list said "1 cells", and had done for every big printer
+
+Typing 380 × 340 makes 18 × 13 plates, and the parts list costed one at **5.1 g**. The line's cell
+count read `group.params?.cellCount ?? stock?.footprint.length`, and for a big generated plate BOTH
+arms are absent: `toCustomiserPanel` returns null above the customiser's own 13 × 12, and a
+`generated/…` id has no catalogue entry by design (D61). So it fell through to `Math.max(1, 0)` — one
+cell, and filament scaled by 1/288 of a reference plate. It counts `placedPanelCells(first).length`
+now, which is what `params.cellCount` always was anyway.
+
+Not a regression from the custom bed: a 350 or 400 mm preset has made plates past 13 × 12 since
+plates were generated at all, and reported every one of them as "1 cells". A 256 mm printer never
+could, which is why it survived — the failure needed a bed big enough to leave the customiser's
+range, and the default bed is inside it.
+
+## D100 — The chrome was a list, not a hierarchy
+
+The token layer has been right for a long time — one ramp, measured contrast, no literals outside
+`tokens.css` — and the product still read as a prototype. The reason was composition, not colour:
+**the top bar was twenty controls in one row at one weight.** Undo sat at the same visual strength as
+`Setup (33)`, which is a developer's export; the wall size, the printer, the primary action and the
+view switch were separated from each other by nothing but a gap. A row in which everything is equally
+emphasised is a list, and a list is what you read when you do not know which thing matters.
+
+**Two tiers, split by what the controls DO.** The title bar says what this DOCUMENT is — the mark,
+the layout name, and the wall's own figures under it — with the app-level actions at the far end.
+The toolbar carries the parameters the next solve reads. Nothing in the first tier changes what gets
+printed; everything in the second does. `--titlebar-height` and `--toolbar-height` are separate
+tokens for the same reason: they are not one thing that got taller.
+
+**The toolbar's controls are clustered into wells, because they are not a list either** — they are
+three questions (how big is the wall, what can you print, what colour) with one answer button between
+them. A well is `--surface-0`, which is the shell's ground and therefore DARKER than the bar in both
+themes, so one token reads as "set into the bar" either way round.
+
+**Three actions moved into an overflow menu and nothing was removed.** Align, Setup (n) and Mine (n)
+are the catalogue-maintenance channel; a person planning a wall never opens them, and they were
+taking a third of the bar. They are one `⋯` away, still counted, still labelled. `ToolMenu` closes on
+`pointerdown` rather than on `click` — the wall is a drag surface, and a menu that waits for the
+button to come up stays open across the whole of the first drag under it — and Escape returns focus
+to the trigger.
+
+**An icon set, at last.** The product had two glyphs, both typed as text. `Icon.tsx` is 27 of them on
+one grid at one weight, and the rule that makes it maintainable is that colour is always the parent's
+job: `fill: none; stroke: currentColor`, so one glyph works in a ghost button, a primary button and a
+danger row without three variants. Icons that mean something in this product are drawn FROM it — the
+view switch's marks are a real flat-top hexagon and three of them in the lattice's own stagger.
+
+**`fill: none` has to be a RULE, not the attribute.** `base.css` carries `svg { fill: currentColor }`
+for the app's other inline SVG, and a presentation attribute loses to any stylesheet declaration — so
+the first render of every stroked icon came out as a solid blob. An `undo` arrow filled in is not
+subtly wrong, it is unreadable, and it looked like a bad icon rather than a specificity bug.
+
+**Four button weights, and the point is choosing between them.** `--primary` for the one action a
+region exists for, the default bordered secondary, `--subtle` (tinted, no border) for something
+always available that is not why you came, `--ghost` for toolbar and list-row actions. Two of the
+changes that followed are just this rule applied: the rail's `Browse parts…` stopped being a
+full-width filled blue bar (it put a second primary on screen beside `Solve panels`, and two
+primaries mean neither is), and the parts list's four export buttons became one segmented strip
+(exporting is a utility, and a filled `Print` at the front carried the weight of the panel's main
+action).
+
+**The wall got a backdrop.** It is the subject and it was standing on a flat rectangle of
+`--canvas-wall`, edge to edge — the largest surface in the product, one value, which is what made a
+lit 3D object look like a screenshot pasted onto a swatch. The renderer is now built with
+`alpha: true` and the scene sets no background of its own; the ground is a radial gradient on the
+host, from `--canvas-wall` at the edges to the PLATE's own tint under the subject. That relationship
+is right in both themes — the ground behind the wall is the same material, further away and out of
+the light — and it is one definition in tokens rather than a second copy in three.js.
+
+### What the overhaul found
+
+Four defects, all of them things only a running app shows:
+
+- **`To prinPart`.** `.bom-table__num` sets `white-space: nowrap` so a measurement is never broken
+  across lines, and the HEADER cells carry that class too. Under `table-layout: fixed` in a 32px
+  column, "To print" ran straight over the Part column beside it. Headers wrap now; figures still do
+  not. Widening the column was tried and rejected — at 40px it still wrapped, and the 8px came off
+  the name column, which is the one carrying a real part name.
+- **Step 2 of the first-run card, on three lines.** The `<li>` was a two-column grid, so every child
+  of it became a grid item — including a `<strong>` in the middle of a sentence, which was torn out
+  of the running text and given its own row. The marker is absolutely positioned now and the item is
+  an ordinary block.
+- **Two toolbars printed on top of themselves.** Flex's default `min-width: auto` only protects a
+  shrunk item as far as its own content box. Squeezed, the printer well rendered
+  "Custom…380 340mm" in one 90px run and the plan's four tool buttons overlapped each other. Both
+  groups wrap now and their children never shrink — a squeezed bar goes taller instead of going
+  wrong.
+- **`var(--radius-xs, 3px)`.** `--radius-xs` has never existed, so five rules across two files
+  resolved to the 3px LITERAL in the fallback slot. This is the exact drift the token layer exists to
+  prevent and it is invisible, because the CSS reads as though it were tokenised. A fallback is for a
+  token that might not be defined yet, not for one that does not exist.
+
+## D101 — The Plan was invisible twice over
+
+"Make the plan more visible" turned out to be two separate faults with the same
+symptom, one in the palette and one in the chrome.
+
+### The wall was drawn, and you could not see it
+
+A solved 2400 × 1200 wall is 3,472 cells. In the dark theme the plan drew every
+one of them and the result read as a faint smudge — you could just make out the
+wall's dashed outline and nothing inside it.
+
+`--canvas-*` states its contract in the token file: **depth reads inward, wall
+(the void) < panel tint (the plate) < cell (the opening)**. Light obeys it —
+measured luminance 0.6905 < 0.8037 < 0.8856. Dark had two of the three the wrong
+way round: wall 0.0042 < **cell 0.0132** < **plate 0.0196**. The opening was
+darker than the material it is cut through, the reverse of the other theme, and
+the pair that carries the honeycomb was 0.006 apart.
+
+`--canvas-cell` is `--neutral-800` in dark now, which restores the progression
+(0.0042 < 0.0196 < 0.0411) with the larger steps a dark ground needs. The row in
+TOKENS.md that measures exactly this — "cell vs wall (field separation)" — goes
+from **1.17:1 to 1.68:1**.
+
+**And `--canvas-grid` stopped being theme-invariant, because its premise went
+with the cell.** That token was one value for both themes on the stated grounds
+that the rung cleared 3:1 against the canvas colours of each. Against the new
+cell, `--neutral-550` measures 2.48:1. Dark takes `--neutral-450`: every pair in
+the table clears 3:1 again, several by a wide margin (grid on wall 4.20 → 6.22),
+and a lighter lattice line is the second reason the wall is now legible.
+
+Both dark blocks in `tokens.css` carry the override, and `--blue-tint-dark` was
+recomputed — it is documented as "accent @ 10% over the theme's cell colour", and
+the cell it was composited over no longer exists.
+
+The light theme is untouched. Its ordering was already correct and every one of
+its pairs already passed; re-tuning a measured palette that nobody reported is
+how a fix becomes a regression.
+
+### Half the product was one grey word in the corner
+
+The view switch sat at the far end of the toolbar, behind the colour swatches,
+as two 12px words — and the inactive half was drawn in `--text-tertiary`, which
+is the METADATA colour. A tab in the colour used for units and hints reads as one
+you are not allowed to press.
+
+That is the wrong weight for what it selects. The Plan is not a lesser view of
+the same thing: it is where you measure, block out a light switch, set the
+border and lay a photograph of your actual wall under the lattice. None of those
+exist in 3D.
+
+So the switch moved next to `Solve panels`, took `--control-height-lg` and the
+body type size, gained a `VIEW` label — a pair of segments only explains itself
+once you already know there are two views, which is the one thing it has to say
+to somebody who has never pressed it — and the inactive half is `--text-secondary`.
+
+**It is raised, not accent-filled.** `Solve panels` is accent-filled and now
+stands directly beside it; two filled controls side by side make neither of them
+the primary action. The active segment takes `--surface-2` and a small shadow,
+and the accent goes on its icon.
+
+## D102 — The logo, and the artwork the dark theme needed
+
+The wordmark in the title bar is the supplied logo, and it is TWO files.
+
+**The lettering is dark grey.** That is correct on a white page and invisible on
+this app's own title bar, which is `#14181B`. So `src/ui/assets/` holds a light
+artwork and a dark one, and `App.css` chooses between them with the same
+`prefers-color-scheme` + `[data-theme]` pair every themed token uses.
+
+**A `background-image` on a labelled box, not an `<img>`.** Two artworks means
+something has to choose, and only CSS can see the theme; two `<img>` tags with
+one hidden would fetch both. It carries `role="img"` and an `aria-label`, so the
+accessible name survives the technique.
+
+**Deliberately not a link** — same rule as everything else in this bar. The
+document lives in memory, an unsaved layout is one click from gone, and it would
+be navigating to the page it is already on.
+
+**Only the NEUTRALS differ between the two files, and the transform is
+`v -> max(v, 255 - v)`.** It lifts a dark grey into the light half of the ramp
+and leaves anything already light exactly where it is, which matters in three
+places at once: the wordmark becomes legible on a near-black bar, the pale
+honeycomb inside the two O's stays pale, and PLANNER stays a step quieter than
+HONEYCOMB. A plain inversion (`255 - v`) would have blacked out that texture and
+swapped the two words' relationship. The gold is the brand and never moves;
+pixels are blended toward "leave alone" by SATURATION rather than switched at a
+threshold, so the anti-aliased fringe between a gold hexagon and a grey letter
+has no hard edge in it.
+
+**`tools/logo.py` is that transform, and it exists so the derived file cannot
+rot.** It also crops to the alpha bounding box — the master carries a 31 × 64 px
+transparent border, and a logo sized by its box rather than its content spends a
+chunk of every pixel it is given on nothing. Re-running it reproduces the
+committed assets byte for byte. **If the master changes, run it**; nothing else
+regenerates them, and the ratio it prints is the one `--app-logo-ratio` in
+`App.css` has to agree with.
+
+`--titlebar-height` went 48 → 56px to hold a 48px logo. Leaving it at 48 would
+not have cropped anything — `min-block-size` would simply have been overrun and
+the token would have been describing a bar that no longer existed.
+
+### The support link is the one control that is not on the palette
+
+Buy Me a Coffee, in the service's own yellow, in both themes. A brand mark that
+follows the page's theme stops being recognisable, which is the only thing it is
+for — so it does not take `.button`, whose entire job is to look like the rest of
+this app. Its colours are `--bmc-yellow` / `--bmc-ink` in `tokens.css`, marked as
+belonging to somebody else and having exactly one legitimate consumer. They live
+there rather than inline for the usual reason: that file is the only one allowed
+to hold a colour literal, and an exception smuggled into a component is how a
+palette starts to leak.
+
+Hover is a brightness change rather than a second colour, because there is no
+other yellow that is still their yellow.
+
+The title bar needs **1095px** to hold brand + logo + actions on one row, which
+is within a few pixels of the 68rem tablet breakpoint — so past it the label is
+what gives and the yellow square keeps the cup. The words stay in the DOM: they
+are the link's accessible name.

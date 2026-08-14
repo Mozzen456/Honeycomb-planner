@@ -33,11 +33,23 @@ const DB_NAME = 'hsw-models';
 const DB_STORE = 'stl';
 const PHOTO_STORE = 'photos';
 /**
- * Bumped from 1 when photos arrived. `onupgradeneeded` creates whichever stores
- * are missing rather than assuming a fresh database, so a browser that already
- * holds someone's imported STLs gains the photo store and keeps the models.
+ * The photograph of the WALL, which is a different thing from a photo of a part.
+ *
+ * Its own store rather than a `wall/…` key in `photos`, because the two are
+ * swept on opposite rules: a part photo is orphaned the moment no part claims
+ * it, and `sweepOrphans` deletes it against the whole catalogue. A wall photo is
+ * claimed by a DOCUMENT, and the documents this browser cannot see — a saved
+ * file on disk, one in another tab — are exactly the ones that still need it. So
+ * it must never come within reach of that sweep.
  */
-const DB_VERSION = 2;
+const WALL_PHOTO_STORE = 'wallPhotos';
+/**
+ * Bumped from 1 when photos arrived, and from 2 for the wall photograph.
+ * `onupgradeneeded` creates whichever stores are missing rather than assuming a
+ * fresh database, so a browser that already holds someone's imported STLs gains
+ * the new store and keeps the models.
+ */
+const DB_VERSION = 3;
 
 // ---------------------------------------------------------------------------
 // Validation
@@ -223,6 +235,7 @@ function openDb(): Promise<IDBDatabase | null> {
       const db = request.result;
       if (!db.objectStoreNames.contains(DB_STORE)) db.createObjectStore(DB_STORE);
       if (!db.objectStoreNames.contains(PHOTO_STORE)) db.createObjectStore(PHOTO_STORE);
+      if (!db.objectStoreNames.contains(WALL_PHOTO_STORE)) db.createObjectStore(WALL_PHOTO_STORE);
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => resolve(null);
@@ -317,6 +330,75 @@ export const deletePhoto = (id: string): Promise<void> => remove(PHOTO_STORE, id
  */
 export async function listPhotoIds(): Promise<ReadonlySet<string>> {
   return keysOf(PHOTO_STORE);
+}
+
+// ---------------------------------------------------------------------------
+// The wall photograph — a picture of the room, under the plan
+// ---------------------------------------------------------------------------
+
+/**
+ * The photograph of the real wall, as an image Blob, keyed by `WallPhoto.id`.
+ *
+ * Never swept against the open document, unlike a part's photo. The layout
+ * holding this id may be a file on disk or a share link nobody has opened yet,
+ * and this app keeps no list of the layouts that exist — so "no open document
+ * claims it" is not evidence that nothing does.
+ *
+ * Nor are the bytes dropped when the photo is removed or replaced, which looks
+ * like the obvious moment and is not: both are ORDINARY UNDOABLE EDITS, and
+ * undo has to give back the picture, not a layout that remembers where a
+ * photograph went and cannot show it. `pruneWallPhotos` bounds the store
+ * instead.
+ */
+export const putWallPhoto = (id: string, image: Blob): Promise<boolean> =>
+  put(WALL_PHOTO_STORE, id, image);
+
+export const getWallPhoto = (id: string): Promise<Blob | null> =>
+  get<Blob>(WALL_PHOTO_STORE, id);
+
+export const deleteWallPhoto = (id: string): Promise<void> => remove(WALL_PHOTO_STORE, id);
+
+/** How many wall photographs are kept. A few sessions' worth, at ~300 kB each. */
+export const WALL_PHOTOS_KEPT = 8;
+
+/**
+ * Which stored wall photographs to drop, keeping the newest `keep` of them.
+ *
+ * A CACHE bound rather than a garbage collector, and the distinction is the
+ * whole safety argument. Nothing here asks whether a photo is still referenced,
+ * because that question cannot be answered — so instead the ones most likely to
+ * be wanted are the ones that survive, and anything protected by the caller is
+ * kept whatever its age. A layout that names a photo old enough to have been
+ * pruned still opens, still knows exactly where the picture goes, and asks for
+ * it by name.
+ *
+ * Ordered by KEY, which works because an id is `wallphoto` + the base-36
+ * milliseconds it was made at: shorter is older, and equal lengths sort
+ * lexicographically in time order. Compared by length first so the ordering
+ * cannot invert on the day that stamp gains a digit.
+ *
+ * Pure, so the rule is testable without a database.
+ */
+export function staleWallPhotoIds(
+  stored: Iterable<string>,
+  keep: number = WALL_PHOTOS_KEPT,
+  protect: Iterable<string> = [],
+): string[] {
+  const safe = new Set(protect);
+  const ordered = [...stored]
+    .filter((id) => !safe.has(id))
+    .sort((a, b) => (a.length - b.length) || (a < b ? -1 : a > b ? 1 : 0));
+  return ordered.slice(0, Math.max(0, ordered.length - Math.max(0, keep)));
+}
+
+/** Apply that bound, and report how many were dropped. */
+export async function pruneWallPhotos(
+  keep: number = WALL_PHOTOS_KEPT,
+  protect: Iterable<string> = [],
+): Promise<number> {
+  const dead = staleWallPhotoIds(await keysOf(WALL_PHOTO_STORE), keep, protect);
+  await Promise.all(dead.map((id) => remove(WALL_PHOTO_STORE, id)));
+  return dead.length;
 }
 
 async function keysOf(store: string): Promise<ReadonlySet<string>> {

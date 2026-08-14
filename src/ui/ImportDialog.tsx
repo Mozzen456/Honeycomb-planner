@@ -51,11 +51,6 @@ const TYPES: { value: PartType; label: string; note: string }[] = [
 
 const fmt = (v: number, dp = 1): string => v.toFixed(dp);
 
-function formatMinutes(total: number): string {
-  const m = Math.round(total);
-  return m < 60 ? `${m} m` : `${Math.floor(m / 60)} h ${m % 60} m`;
-}
-
 export function ImportDialog({ proposal, catalog, onCancel, onConfirm }: ImportDialogProps) {
   const [name, setName] = useState(proposal.part.name);
   const [type, setType] = useState<PartType>(proposal.part.type);
@@ -277,9 +272,9 @@ export function ImportDialog({ proposal, catalog, onCancel, onConfirm }: ImportD
               <div><dt>Stands off</dt><dd>{fmt(proposal.part.projectionMm)} mm</dd></div>
               <div><dt>Method</dt><dd>{measured.method}</dd></div>
               <div>
-                <dt>Print (est.)</dt>
+                <dt>Filament (est.)</dt>
                 <dd>
-                  {formatMinutes(proposal.part.print.minutes)} · {fmt(proposal.part.print.grams)} g
+                  {fmt(proposal.part.print.grams)} g
                   {proposal.part.print.supports ? ' · needs supports' : ''}
                 </dd>
               </div>

@@ -24,6 +24,7 @@
  */
 
 import type { Catalog, CatalogPart, LayoutDoc } from './types';
+import { isImported } from './userCatalog';
 
 /**
  * Ceiling on the list. The whole shipped catalogue is 51 parts and the point of
@@ -31,6 +32,35 @@ import type { Catalog, CatalogPart, LayoutDoc } from './types';
  * rather than a limit anyone will meet.
  */
 export const MAX_PROJECT_PARTS = 500;
+
+/**
+ * Can this part be CHOSEN from the catalogue?
+ *
+ * Everything but a plate. The app sizes and generates every plate it draws
+ * (D97), so the seven shipped panel entries are not things anyone picks: the
+ * tiler decides which plates a wall needs from the wall size and the printer,
+ * and what you print is the file the app writes, not the file in `models/`.
+ * They stay IN the catalogue — the solver reads their sizes when "Fit to
+ * printer" is off, the parts list costs a generated plate against the biggest
+ * of them, and `PartInspector` sizes its wall patch from the smallest — so this
+ * is the one place that says they are not on sale.
+ *
+ * The rail has always applied it (a plate is not something you drag off a
+ * shelf); the library now applies the same rule rather than its own.
+ *
+ * **A plate you IMPORTED is still yours.** `typeFromName` calls anything named
+ * `wall-honeycomb…` or `220x220…` a panel, and the import dialog tells you a
+ * plate the tiler cannot lay out can still be placed by hand — so hiding it
+ * would take somebody's own upload off the shelves, and "My uploads" in the
+ * library is the only place it can be looked at or deleted. The rule is about
+ * the SHIPPED plates the app now generates for itself, not about the type.
+ */
+export const isShoppable = (part: CatalogPart): boolean =>
+  part.type !== 'panel' || isImported(part);
+
+/** The catalogue as a SHOP: everything a person can actually choose. */
+export const shoppableParts = (catalog: Catalog): CatalogPart[] =>
+  (catalog.parts ?? []).filter(isShoppable);
 
 /**
  * Every part id this project uses: the ones chosen, plus the ones placed.
@@ -71,10 +101,10 @@ export interface ProjectParts {
 /**
  * The project's parts as real catalogue entries.
  *
- * Panels are excluded on purpose: the tiler chooses those from the wall size
- * and the printer, and a plate is not something you drag off a shelf. Putting
- * them in the rail would mean "Solve panels" silently filling the basket with
- * seven plates nobody picked.
+ * Plates are excluded by `isShoppable`: the tiler chooses those from the wall
+ * size and the printer, and a plate is not something you drag off a shelf.
+ * Putting them in the rail would mean "Solve panels" silently filling the basket
+ * with plates nobody picked.
  */
 export function resolveProjectParts(doc: LayoutDoc, catalog: Catalog): ProjectParts {
   const index = new Map(catalog.parts.map((p) => [p.id, p]));
@@ -83,7 +113,7 @@ export function resolveProjectParts(doc: LayoutDoc, catalog: Catalog): ProjectPa
   for (const id of projectPartIds(doc)) {
     const part = index.get(id);
     if (part === undefined) missing.push(id);
-    else if (part.type !== 'panel') parts.push(part);
+    else if (isShoppable(part)) parts.push(part);
   }
   return { parts, missing };
 }

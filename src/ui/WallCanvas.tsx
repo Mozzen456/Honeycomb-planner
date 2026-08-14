@@ -23,7 +23,8 @@ import {
   placedPanelCells,
   type Point,
 } from '../core/hex';
-import { itemCells } from '../core/bom';
+import { itemCells, panelLineKeys } from '../core/bom';
+import { colorOfItem, colorOfPanel } from '../core/colors';
 import {
   formatMm,
   handlePoint,
@@ -45,22 +46,28 @@ import {
   borderPolygons, DEFAULT_BORDER_MM, MAX_BORDER_MM, MIN_BORDER_MM, plateEdgeShapes,
 } from '../core/honeycomb';
 import { MAX_WALL_MM } from '../core/store';
+import { Icon, type IconName } from './Icon';
 import { NumberField } from './NumberField';
 import { obstacleRects } from '../core/obstacles';
 import { partCells } from '../core/store';
+import {
+  calibratePhoto, MAX_PHOTO_OPACITY, MIN_PHOTO_OPACITY, movePhoto, photoHit, photoRectMm,
+} from '../core/wallPhoto';
+import { attachWallPhoto, peekWallPhotoImage, wallPhotoImage } from './wallPhotoImage';
 import type {
-  Catalog, Hex, LayoutDoc, Obstacle, PlacedItem, Rotation, WallFrame,
+  Catalog, Hex, LayoutDoc, Obstacle, PlacedItem, Rotation, WallFrame, WallPhoto,
 } from '../core/types';
 import './WallCanvas.css';
 
 /**
  * What the pointer does on the plan.
  *
- * Modal rather than modifier-based because two of the three are DRAGS on empty
- * wall, and a marquee, a measurement and a new zone cannot all be "drag on empty
- * wall at once". The mode is shown, and Escape always returns to Select.
+ * Modal rather than modifier-based because most of these are DRAGS on empty
+ * wall, and a marquee, a measurement, a new zone and a photograph being slid
+ * about cannot all be "drag on empty wall at once". The mode is shown, and
+ * Escape always returns to Select.
  */
-export type PlanTool = 'select' | 'measure' | 'zone';
+export type PlanTool = 'select' | 'measure' | 'zone' | 'photo';
 
 export interface DragPayload {
   /** Dragging a new part from the catalogue. */
@@ -89,6 +96,12 @@ export interface WallCanvasProps {
   dragRef: { current: DragPayload | null };
   /** Cells that failed the last placement check, highlighted in red. */
   invalidCells?: readonly Hex[];
+  /**
+   * Panel ids to light up — the plates a parts-list line is talking about.
+   * Ids rather than a partId, because `bom.panelsForLine` owns which plates a
+   * line means, and both views take the same answer.
+   */
+  litPanelIds?: ReadonlySet<string>;
   onDragMove: (cell: Hex) => void;
   onDrop: (cell: Hex) => void;
   onDragCancel: () => void;
@@ -105,6 +118,16 @@ export interface WallCanvasProps {
   onObstaclesChange: (obstacles: Obstacle[]) => void;
   /** Put an edge round the wall, or take it off. Undefined means none. */
   onFrameChange: (frame: WallFrame | undefined) => void;
+  /**
+   * The wall photograph, moved or re-scaled.
+   *
+   * Called ONCE per gesture, on release — never per pointer move. A zone commits
+   * on every frame and gets away with it because a zone drag is a few
+   * centimetres; a photograph is dragged the width of the wall, which would be
+   * two hundred undo steps and would push the user's real history off the end of
+   * `HISTORY_LIMIT`. The live position is local until the pointer comes up.
+   */
+  onPhotoChange: (photo: WallPhoto | undefined) => void;
 }
 
 interface View {
@@ -126,6 +149,7 @@ export function WallCanvas(props: WallCanvasProps) {
     drag,
     dragRef,
     invalidCells,
+    litPanelIds,
     onDragMove,
     onDrop,
     onDragCancel,
@@ -134,7 +158,14 @@ export function WallCanvas(props: WallCanvasProps) {
     placementValid,
     onObstaclesChange,
     onFrameChange,
+    onPhotoChange,
   } = props;
+
+  /**
+   * Panel id -> the parts-list line it is counted on: what a plate's colour is
+   * keyed by, through the one function that decides it (D92).
+   */
+  const panelLines = useMemo(() => panelLineKeys(doc), [doc]);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -177,6 +208,65 @@ export function WallCanvas(props: WallCanvasProps) {
   const zoneDragRef = useRef<
     { id: string; origin: Obstacle; grab: Point; handle: { hx: number; hy: number } | null } | null
   >(null);
+
+  // --- the wall photograph -------------------------------------------------
+
+  const photo = doc.photo;
+  /**
+   * The decoded picture, or null while it loads — or for good, if this browser
+   * does not have its bytes (a layout that arrived down a share link).
+   *
+   * Seeded from `peekWallPhotoImage` so a photo already decoded by the 3D view,
+   * or by an earlier visit to this one, is on screen in the FIRST frame rather
+   * than one asynchronous round trip later.
+   */
+  const [photoImg, setPhotoImg] = useState<HTMLImageElement | null>(() =>
+    photo ? peekWallPhotoImage(photo.id) : null);
+
+  const photoId = photo?.id;
+  useEffect(() => {
+    if (photoId === undefined) { setPhotoImg(null); return; }
+    let live = true;
+    setPhotoImg(peekWallPhotoImage(photoId));
+    void wallPhotoImage(photoId).then((img) => { if (live) setPhotoImg(img); });
+    return () => { live = false; };
+  }, [photoId]);
+
+  /**
+   * A photograph being slid about right now.
+   *
+   * The live position is LOCAL and the document is written once on release —
+   * see `onPhotoChange`.
+   *
+   * **`moved` is in the REF, not in the state beside it**, and that is the whole
+   * point of the ref. The release handler is the thing that commits, and it
+   * closes over the render it was created in: read from state, `photoPreview` is
+   * still null there for any gesture whose pointerup arrives before React has
+   * committed a render, so the drag silently does nothing. Written that way it
+   * worked for a slow human drag and lost every quick flick — which is D58
+   * exactly, and it was caught here by driving the app rather than by any test.
+   * The state copy exists only so the draw effect re-runs.
+   */
+  const photoDragRef = useRef<
+    { origin: WallPhoto; grab: Point; moved: WallPhoto | null } | null
+  >(null);
+  const [photoPreview, setPhotoPreview] = useState<WallPhoto | null>(null);
+  /**
+   * The scale gesture, in its two halves.
+   *
+   * `armed` means the next drag is a calibration rather than a move; `pair` is
+   * the two points it produced, held on screen while the real distance between
+   * them is typed. Kept apart because between them the user has to reach the
+   * keyboard, and the marks must not vanish when the pointer leaves the canvas.
+   */
+  const [scaleArmed, setScaleArmed] = useState(false);
+  const [scalePair, setScalePair] = useState<{ from: Snap; to: Snap } | null>(null);
+  const [scaleMm, setScaleMm] = useState(1000);
+  /** Why the last thing asked of the photograph could not be done, as a sentence. */
+  const [photoProblem, setPhotoProblem] = useState<string | null>(null);
+
+  /** What to DRAW: the live drag if there is one, otherwise the document's. */
+  const shownPhoto = photoPreview ?? photo;
   /**
    * Bumped whenever the theme changes, purely to force a repaint.
    *
@@ -456,6 +546,16 @@ export function WallCanvas(props: WallCanvasProps) {
     ctx.strokeRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y);
     ctx.setLineDash([]);
 
+    // 0. The photograph, when it goes BEHIND the honeycomb.
+    //
+    //    Drawn after the wall is filled and before the static layer is blitted,
+    //    which is exactly what "behind" means here: the static layer is
+    //    transparent except where there is plate, so the room shows through
+    //    every open cell and the honeycomb reads as a mask over it. That is the
+    //    view you place a blocked zone in.
+    if (shownPhoto && shownPhoto.visible && photoImg && shownPhoto.depth === 'behind') {
+      drawPhoto(ctx, shownPhoto, photoImg, toScreen);
+    }
 
     const cellPx = PITCH / view.scale;
     const drawGrid = cellPx > 6;
@@ -491,6 +591,56 @@ export function WallCanvas(props: WallCanvasProps) {
       return p;
     };
 
+    /*
+     * With a photograph BEHIND it, a cell has to be a hole.
+     *
+     * In 3D it already is one and the room shows through for free. Here a cell
+     * is a filled hexagon in an opaque colour, drawn to give the plate depth
+     * against the wall behind it — so a photo laid under the plan was drawn
+     * faithfully and then painted over completely, cell for cell. "Behind" came
+     * out as "not shown at all".
+     *
+     * So the opening is simply not filled while the photo is under it: the plate
+     * stays opaque, the grid stays drawn, and the hexagons become the windows
+     * they are on the real wall. That is also the view the whole feature is for
+     * — a light switch seen through the honeycomb that has to miss it.
+     */
+    const showThrough =
+      shownPhoto !== undefined && shownPhoto.visible && photoImg !== null &&
+      shownPhoto.depth === 'behind';
+
+    /*
+     * The plates a parts-list line is pointing at, as CELLS.
+     *
+     * Through `placedPanelCells`, so a cut plate lights the cells it really has
+     * and not the block it was cut from — the same rule the honeycomb itself is
+     * drawn by (D57).
+     */
+    const litCells = new Set<string>();
+    if (litPanelIds && litPanelIds.size > 0) {
+      for (const p of doc.panels) {
+        if (!litPanelIds.has(p.id)) continue;
+        for (const c of placedPanelCells(p)) litCells.add(hexKey(c));
+      }
+    }
+
+    /*
+     * cell -> the colour its plate is printed in, for the cells that have one.
+     *
+     * Only the coloured plates go in the map: an untouched wall builds nothing
+     * and draws exactly the one path it always did. A plate's colour is keyed by
+     * the LINE it is counted on (`bom.panelLineKeys`), so a plate cut round a
+     * switch takes the colour of the generated plate it really is.
+     */
+    const cellColors = new Map<string, string>();
+    if (doc.colors) {
+      for (const p of doc.panels) {
+        const colour = colorOfPanel(doc.colors, panelLines.get(p.id));
+        if (colour === undefined) continue;
+        for (const c of placedPanelCells(p)) cellColors.set(hexKey(c), colour);
+      }
+    }
+
     // 1 + 2. The static layer: panel cells and seams. Rebuilt only when the
     //        view, the panels or the theme change; otherwise blitted.
     const staticKey = [
@@ -498,6 +648,17 @@ export function WallCanvas(props: WallCanvasProps) {
       view.scale.toFixed(6), view.originX.toFixed(3), view.originY.toFixed(3),
       panelIndex.size, seamEdges.length, doc.panels.length,
       doc.wall.widthMm, doc.wall.heightMm, C.cell, C.grid, C.seam, C.panel,
+      // The plate colours join the key for the same reason the lit plates do:
+      // they are painted onto the CACHED layer, and a cache that does not know
+      // about them serves the picture from before the colour was chosen.
+      cellColors.size, [...new Set(cellColors.values())].sort().join(','),
+      // The lit plates join the key, or clicking a line repaints nothing: the
+      // panel cells live on the CACHED layer, and a cache that does not know
+      // about the highlight serves the picture from before it.
+      litCells.size, [...litCells].join(','),
+      // Or the layer keeps its opaque cells from before the photo arrived, and
+      // the picture stays invisible until something else forces a rebuild.
+      showThrough,
     ].join('|');
 
     if (staticKeyRef.current !== staticKey || !staticRef.current) {
@@ -524,18 +685,102 @@ export function WallCanvas(props: WallCanvasProps) {
           // the honeycomb looking like a flat wireframe with nothing behind it.
           const plate = new Path2D();
           const field = new Path2D();
+          /*
+           * The lit plates get their OWN pair of paths — material and openings —
+           * built in the same pass. Not "the plate minus the lit cells": with a
+           * photo behind, the plate is filled even-odd against its own openings
+           * so the hexagons stay transparent, and a lit hexagon that appears in
+           * only one of the two paths flips that parity and fills the hole back
+           * in. Two complete pairs, each punched against itself.
+           */
+          const litPlate = new Path2D();
+          const litField = new Path2D();
+          /*
+           * One path per COLOUR, built in the same pass. A handful of colours is
+           * a handful of fills; the alternative — a fill per plate — is 67 fills
+           * of a few hundred hexagons each on a garage wall, every time the
+           * static layer is rebuilt.
+           */
+          const painted = new Map<string, { plate: Path2D; field: Path2D }>();
           let count = 0;
+          let litCount = 0;
           for (const c of visible) {
-            if (panelIndex.size > 0 && !panelIndex.has(hexKey(c))) continue;
+            const key = hexKey(c);
+            if (panelIndex.size > 0 && !panelIndex.has(key)) continue;
+            const colour = cellColors.get(key);
+            if (colour !== undefined) {
+              let paths = painted.get(colour);
+              if (!paths) { paths = { plate: new Path2D(), field: new Path2D() }; painted.set(colour, paths); }
+              addHex(paths.plate, c, 0);
+              addHex(paths.field, c, 1.6);
+            }
             addHex(plate, c, 0);      // full cell footprint: the plate
             addHex(field, c, 1.6);    // inset: the opening
+            if (litCells.has(key)) {
+              addHex(litPlate, c, 0);
+              addHex(litField, c, 1.6);
+              litCount++;
+            }
             count++;
           }
           if (count > 0) {
             lc.fillStyle = C.panel;
-            lc.fill(plate);
-            lc.fillStyle = C.cell;
-            lc.fill(field);
+            if (showThrough) {
+              /*
+               * The plate with its openings punched OUT, in one even-odd fill.
+               *
+               * NOT "skip the cell fill": the plate path already covers the
+               * whole hexagon out to its corners — the opening is painted ON
+               * TOP of it — so leaving the opening unpainted leaves plate there
+               * and the photograph stays hidden. The hole has to be taken out
+               * of the material, which is what it is on the real plate.
+               *
+               * Even-odd is safe here because the plate hexagons tile without
+               * overlapping and each opening lies strictly inside its own cell,
+               * so every point has an unambiguous parity. Same trick as the
+               * cut cells in `drawBorder`.
+               */
+              const holed = new Path2D();
+              holed.addPath(plate);
+              holed.addPath(field);
+              lc.fill(holed, 'evenodd');
+            } else {
+              lc.fill(plate);
+              lc.fillStyle = C.cell;
+              lc.fill(field);
+            }
+            // The coloured plates, over the theme's plate and under the lit
+            // tint: a highlight has to stay visible whatever the filament is.
+            for (const [colour, paths] of painted) {
+              lc.fillStyle = colour;
+              if (showThrough) {
+                const holed = new Path2D();
+                holed.addPath(paths.plate);
+                holed.addPath(paths.field);
+                lc.fill(holed, 'evenodd');
+              } else {
+                lc.fill(paths.plate);
+                lc.fillStyle = C.cell;
+                lc.fill(paths.field);
+              }
+            }
+
+            // The plates a parts-list line is pointing at, over the plate and
+            // under the grid, so a lit plate still reads as a plate with holes
+            // rather than as a solid slab of colour.
+            if (litCount > 0) {
+              lc.fillStyle = C.selection;
+              lc.globalAlpha = 0.72;
+              if (showThrough) {
+                const holed = new Path2D();
+                holed.addPath(litPlate);
+                holed.addPath(litField);
+                lc.fill(holed, 'evenodd');
+              } else {
+                lc.fill(litPlate);
+              }
+              lc.globalAlpha = 1;
+            }
             lc.strokeStyle = C.grid;
             lc.lineWidth = Math.max(0.5, Math.min(1.25, cellPx / 30));
             lc.globalAlpha = 0.3;
@@ -544,13 +789,45 @@ export function WallCanvas(props: WallCanvasProps) {
           }
         } else if (panelIndex.size > 0) {
           // Too zoomed out for individual cells: fill panel areas as blocks.
-          lc.fillStyle = C.panel;
+          // Over a photo those blocks have no holes to see through, so they are
+          // let down to a tint instead — otherwise zooming out to find the
+          // picture is what hides it.
+          lc.globalAlpha = showThrough ? 0.55 : 1;
           for (const p of doc.panels) {
             const b = cellsBounds(panelCells(p.origin, p.columns, p.rows));
             const a = toScreen({ x: b.minX, y: b.minY });
             const d = toScreen({ x: b.maxX, y: b.maxY });
+            lc.fillStyle = colorOfPanel(doc.colors, panelLines.get(p.id)) ?? C.panel;
             lc.fillRect(a.x, a.y, d.x - a.x, d.y - a.y);
           }
+          /*
+           * Lit here too, and this is the view it matters most in: a whole wall
+           * zoomed out is exactly when you ask "which plates are those?", and it
+           * is drawn as blocks rather than cells, so a highlight that only knew
+           * about the cell branch would light nothing at all.
+           *
+           * A TINT over the plate and an outline round each block, not a solid
+           * fill. Filled outright, forty lit plates came out as one flat slab of
+           * colour across most of the wall — which says "somewhere here" when
+           * the question was "which ones". The outline is what lets you count
+           * them.
+           */
+          if (litPanelIds && litPanelIds.size > 0) {
+            lc.lineWidth = 1;
+            for (const p of doc.panels) {
+              if (!litPanelIds.has(p.id)) continue;
+              const b = cellsBounds(panelCells(p.origin, p.columns, p.rows));
+              const a = toScreen({ x: b.minX, y: b.minY });
+              const d = toScreen({ x: b.maxX, y: b.maxY });
+              lc.globalAlpha = showThrough ? 0.3 : 0.45;
+              lc.fillStyle = C.selection;
+              lc.fillRect(a.x, a.y, d.x - a.x, d.y - a.y);
+              lc.globalAlpha = 1;
+              lc.strokeStyle = C.selection;
+              lc.strokeRect(a.x + 0.5, a.y + 0.5, d.x - a.x - 1, d.y - a.y - 1);
+            }
+          }
+          lc.globalAlpha = 1;
         }
 
         // Panel seams — the classic HSW mistake is spanning one unknowingly.
@@ -611,7 +888,11 @@ export function WallCanvas(props: WallCanvasProps) {
       ctx.globalAlpha = dragging.has(it.id) ? 0.25 : 1;
       const body = new Path2D();
       for (const c of cells) addHex(body, c, 1.6);
-      ctx.fillStyle = C.item;
+      // The user's colour, or the theme's item fill. Selection is drawn as the
+      // OUTLINE here rather than as the fill, so a coloured part stays its own
+      // colour while selected — the plan can afford that; the 3D view cannot,
+      // because a solid body has no outline to spare.
+      ctx.fillStyle = colorOfItem(doc.colors, it) ?? C.item;
       ctx.fill(body);
       ctx.strokeStyle = isSel ? C.selection : C.itemEdge;
       ctx.lineWidth = isSel ? Math.max(2, cellPx / 12) : Math.max(1, cellPx / 22);
@@ -659,6 +940,29 @@ export function WallCanvas(props: WallCanvasProps) {
     drawZones(ctx, doc, toScreen, C, zoneSel, tool);
     drawBorder(ctx, plateEdge, toScreen, C);
 
+    // 5c. The photograph, when it goes IN FRONT — over the plate, under the
+    //     measuring tools, which have to stay readable whatever is behind them.
+    if (shownPhoto && shownPhoto.visible && photoImg && shownPhoto.depth === 'front') {
+      drawPhoto(ctx, shownPhoto, photoImg, toScreen);
+    }
+
+    // 5d. Its outline, while the photo tool is up: the picture is the thing you
+    //     are grabbing, and at low opacity over a busy wall its edges are not
+    //     obvious enough to aim at.
+    if (tool === 'photo' && shownPhoto) {
+      const r = photoRectMm(shownPhoto);
+      const pa = toScreen({ x: r.xMm, y: r.yMm });
+      const pb = toScreen({ x: r.xMm + r.widthMm, y: r.yMm + r.heightMm });
+      ctx.strokeStyle = C.measure;
+      ctx.lineWidth = 1.25;
+      ctx.setLineDash([7, 5]);
+      ctx.strokeRect(
+        Math.min(pa.x, pb.x), Math.min(pa.y, pb.y),
+        Math.abs(pb.x - pa.x), Math.abs(pb.y - pa.y),
+      );
+      ctx.setLineDash([]);
+    }
+
     // 6. Marquee.
     if (marquee) {
       const a = toScreen(marquee.a);
@@ -692,7 +996,16 @@ export function WallCanvas(props: WallCanvasProps) {
     }
 
     // 6c. The tape: the one being dragged, or the last one taken.
-    const shown = tool === 'measure' ? (sketch ?? tape) : tape;
+    //
+    //     The scale gesture borrows the same drawing, because it IS a
+    //     measurement — the only difference is which end supplies the answer.
+    //     The number it paints is what the app currently believes those two
+    //     points are apart; the field in the toolbar is what they really are,
+    //     and applying it makes the two agree.
+    const shown =
+      tool === 'measure' ? (sketch ?? tape)
+      : tool === 'photo' ? (sketch ?? scalePair)
+      : tape;
     if (shown) drawTape(ctx, shown, toScreen, C, size);
 
     // 6d. The snap crosshair, so you can see WHAT it caught before committing.
@@ -725,6 +1038,13 @@ export function WallCanvas(props: WallCanvasProps) {
     doc, catalog, selection, drag, hover, marquee, invalidCells, placementValid,
     size, view, toScreen, toWall, panelIndex, partOf, seamEdges, themeTick,
     tool, tape, sketch, zoneSel, cursor, plateEdge,
+    shownPhoto, photoImg, scalePair,
+    // The lit plates. A prop the draw effect READS has to be a dependency of it
+    // — left out, clicking a parts-list line changed the row and repainted
+    // nothing, which looks exactly like a highlight that does not work.
+    litPanelIds,
+    // The colours, and the map from a plate to the line whose colour it takes.
+    doc.colors, panelLines,
   ]);
 
   // --- interaction --------------------------------------------------------
@@ -852,6 +1172,29 @@ export function WallCanvas(props: WallCanvasProps) {
       return;
     }
 
+    if (tool === 'photo') {
+      if (!photo) return;
+      /*
+       * Armed: this drag is the scale gesture, and it snaps to NOTHING.
+       *
+       * The two points are features in the PHOTOGRAPH — the corner of a switch
+       * plate, the edge of a door frame — and the lattice knows nothing about
+       * where those are. Snapping would drag each click onto the nearest cell
+       * centre, quietly measuring something up to half a cell from what was
+       * pointed at and scaling the picture by the error.
+       */
+      if (scaleArmed) {
+        const free = snapAt(at, true);
+        setPhotoProblem(null);
+        setSketch({ from: free, to: free });
+        return;
+      }
+      // Otherwise slide the picture, but only by grabbing the picture itself:
+      // a press on bare wall is how you find out you have missed it.
+      if (photoHit(photo, at)) photoDragRef.current = { origin: photo, grab: at, moved: null };
+      return;
+    }
+
     // Select: a zone comes first, but only where it can be grabbed — its own
     // rectangle or a handle. Nothing can be placed inside a zone (its cells are
     // cut), so this can never steal a click meant for a part.
@@ -913,6 +1256,23 @@ export function WallCanvas(props: WallCanvasProps) {
       return;
     }
 
+    // A photograph being slid, or the scale gesture being dragged out. The move
+    // is LOCAL — `setPhotoPreview`, not `onPhotoChange` — so one drag costs one
+    // undo step rather than one per frame.
+    const pd = photoDragRef.current;
+    if (pd) {
+      // Always from the ORIGINAL and the total delta, never accumulated — the
+      // same rule the zone drag follows, for the same reason.
+      pd.moved = movePhoto(pd.origin, at.x - pd.grab.x, at.y - pd.grab.y);
+      setPhotoPreview(pd.moved);
+      return;
+    }
+    if (tool === 'photo') {
+      const live = sketchRef.current;
+      if (live) setSketch({ ...live, to: snapAt(at, true) });
+      return;
+    }
+
     if (tool === 'measure' || tool === 'zone') {
       const snapped = snapAt(at, ev.shiftKey);
       setCursor(snapped);
@@ -962,6 +1322,27 @@ export function WallCanvas(props: WallCanvasProps) {
     // `sketchRef`, never the state: see the note where it is declared. The
     // release can arrive before the render that would make `sketch` visible.
     const live = sketchRef.current;
+
+    // The photograph: one commit for the whole drag, here. `pd.moved`, never
+    // `photoPreview` — see the note where the ref is declared.
+    const pd = photoDragRef.current;
+    if (pd) {
+      photoDragRef.current = null;
+      setPhotoPreview(null);
+      if (pd.moved) onPhotoChange(pd.moved);
+      return;
+    }
+
+    if (tool === 'photo') {
+      if (live) {
+        // Held on screen rather than applied: the distance between them is a
+        // number off a tape measure, and it is typed next.
+        setScalePair(live);
+        setScaleArmed(false);
+      }
+      setSketch(null);
+      return;
+    }
 
     if (tool === 'measure') {
       // Keep it, however short. A zero-length tape is a legitimate thing to
@@ -1065,12 +1446,34 @@ export function WallCanvas(props: WallCanvasProps) {
         setSketch(null);
         setTape(null);
         setZoneSel(null);
+        setScaleArmed(false);
+        setScalePair(null);
+        setPhotoProblem(null);
+        setPhotoPreview(null);
+        photoDragRef.current = null;
         return;
       }
       if ((e.key === 'Delete' || e.key === 'Backspace') && zoneSel !== null) {
         e.preventDefault();
         onObstaclesChange((doc.obstacles ?? []).filter((o) => o.id !== zoneSel));
         setZoneSel(null);
+        return;
+      }
+      /*
+       * Backspace takes the photograph off, but only in the Photo tool and only
+       * with nothing else selected.
+       *
+       * The tool is the scope, the way a selected zone is the scope above: the
+       * same key on the bare plan must not delete a picture somebody spent five
+       * minutes calibrating. And the shell owns this key too — it deletes the
+       * selected ITEMS — so the two are told apart by whether anything is
+       * selected rather than by which handler happens to run first. Both listen
+       * on `window` and their order is not something either can rely on.
+       */
+      if ((e.key === 'Delete' || e.key === 'Backspace') &&
+          tool === 'photo' && doc.photo && selection.length === 0) {
+        e.preventDefault();
+        removePhoto();
         return;
       }
       if (e.key.toLowerCase() === 'e') {
@@ -1087,7 +1490,9 @@ export function WallCanvas(props: WallCanvasProps) {
         );
         return;
       }
-      const keys: Record<string, PlanTool> = { v: 'select', m: 'measure', b: 'zone' };
+      const keys: Record<string, PlanTool> = {
+        v: 'select', m: 'measure', b: 'zone', p: 'photo',
+      };
       const next = keys[e.key.toLowerCase()];
       if (next) {
         setTool(next);
@@ -1097,7 +1502,12 @@ export function WallCanvas(props: WallCanvasProps) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [zoneSel, doc.obstacles, doc.frame, onObstaclesChange, onFrameChange]);
+    // `tool` and `selection` are read by the photo branch, so a stale closure
+    // here would delete the picture from the wrong mode — or refuse to from the
+    // right one.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zoneSel, tool, selection, doc.obstacles, doc.frame, doc.photo,
+      onObstaclesChange, onFrameChange, onPhotoChange]);
 
   const onWheel = (ev: React.WheelEvent<HTMLCanvasElement>) => {
     const rect = canvasRef.current?.getBoundingClientRect();
@@ -1130,14 +1540,69 @@ export function WallCanvas(props: WallCanvasProps) {
 
   const borderOn = frameIsOn(doc.frame);
 
-  const TOOLS: { id: PlanTool; label: string; key: string; hint: string }[] = [
-    { id: 'select', label: 'Select', key: 'V', hint: 'Move parts and zones' },
-    { id: 'measure', label: 'Measure', key: 'M', hint: 'Drag between two points — hold Shift to ignore snapping' },
-    { id: 'zone', label: 'Blocked zone', key: 'B', hint: 'Drag a rectangle the honeycomb must keep out of' },
+  /*
+   * Never disabled, even with no photograph yet — the tool is how you GET one.
+   *
+   * It used to be greyed out until a photo existed in the parts-list rail, which
+   * is at the bottom of a long scroll on a solved wall. So the one control that
+   * names the feature was dead, and the `title` explaining why never appeared:
+   * a browser does not fire a tooltip on a disabled button. A dead control with
+   * no reason given is worse than no control at all.
+   */
+  const TOOLS: { id: PlanTool; label: string; key: string; hint: string; icon: IconName }[] = [
+    { id: 'select', label: 'Select', key: 'V', icon: 'target', hint: 'Move parts and zones' },
+    { id: 'measure', label: 'Measure', key: 'M', icon: 'ruler', hint: 'Drag between two points — hold Shift to ignore snapping' },
+    { id: 'zone', label: 'Blocked zone', key: 'B', icon: 'zone', hint: 'Drag a rectangle the honeycomb must keep out of' },
+    {
+      id: 'photo',
+      label: 'Photo',
+      key: 'P',
+      icon: 'photo',
+      hint: 'Lay a photograph of your wall under the plan, and scale it',
+    },
   ];
 
+  /** Take the typed distance and scale the photograph by it. */
+  const applyScale = (): void => {
+    if (!photo || !scalePair) return;
+    const { photo: next, refusal } = calibratePhoto(photo, scalePair.from, scalePair.to, scaleMm);
+    if (next === null) {
+      setPhotoProblem(refusal);
+      return;
+    }
+    onPhotoChange(next);
+    setScalePair(null);
+    setPhotoProblem(null);
+  };
+
+  /**
+   * Take the photograph off the plan.
+   *
+   * The document only — the stored bytes stay, so undo gives the picture back
+   * rather than a layout that remembers where it went and cannot show it.
+   * `pruneWallPhotos` is what bounds the store.
+   */
+  const removePhoto = (): void => {
+    setScaleArmed(false);
+    setScalePair(null);
+    setPhotoProblem(null);
+    setPhotoPreview(null);
+    photoDragRef.current = null;
+    onPhotoChange(undefined);
+  };
+
+  /** Bring a photograph in from the plan itself, through the one owner. */
+  const takeFile = (file: File | undefined): void => {
+    if (!file) return;
+    setPhotoProblem(null);
+    void attachWallPhoto(file, doc.wall, photo ?? null).then(({ photo: next, refusal }) => {
+      if (next === null) setPhotoProblem(refusal);
+      else onPhotoChange(next);
+    });
+  };
+
   return (
-    <div className="wall-canvas" ref={wrapRef} data-tool={tool}>
+    <div className="wall-canvas" ref={wrapRef} data-tool={tool} data-scaling={scaleArmed || undefined}>
       <div className="wall-canvas__toolbar" role="group" aria-label="Plan tool">
         {TOOLS.map((t) => (
           <button
@@ -1151,6 +1616,7 @@ export function WallCanvas(props: WallCanvasProps) {
               if (t.id !== 'select') setZoneSel(null);
             }}
           >
+            <Icon name={t.icon} />
             {t.label}
             <kbd>{t.key}</kbd>
           </button>
@@ -1196,6 +1662,117 @@ export function WallCanvas(props: WallCanvasProps) {
             />
             <span>mm</span>
           </label>
+        )}
+
+        {/*
+          Setting the photograph's scale: arm, drag, type the distance.
+
+          Three steps and not two, because the number comes off a tape measure
+          and the hand holding it is not on the keyboard. Arming says which drag
+          counts; the drag leaves its two marks ON the picture where they can be
+          checked against the thing that was measured; and the distance is typed
+          afterwards, with both marks still visible. Asking for the number first
+          would mean remembering it while aiming, and a prompt() over the canvas
+          would hide the very points it is asking about.
+        */}
+        {tool === 'photo' && (
+          <span className="wall-canvas__scale">
+            {/*
+              No photograph yet: the tool IS the way to get one. The rail's panel
+              has the fuller controls, but it sits below the whole parts list, and
+              sending someone down there from the wall they are looking at is how
+              this control came to feel broken in the first place.
+            */}
+            {!photo ? (
+              <label className="wall-canvas__scale-go wall-canvas__photopick">
+                Add a photo of your wall…
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => { takeFile(e.target.files?.[0]); e.target.value = ''; }}
+                />
+              </label>
+            ) : scalePair ? (
+              <>
+                <label>
+                  Those two points are
+                  <NumberField
+                    className="tabular-nums"
+                    value={scaleMm}
+                    min={1}
+                    max={MAX_WALL_MM}
+                    step={10}
+                    // `confirm`: every keystroke would otherwise re-scale the
+                    // photograph, so `1200` would fly it across the wall at `1`,
+                    // at `12` and at `120` on the way, and cost three undo steps.
+                    commitOn="confirm"
+                    onCommit={setScaleMm}
+                    aria-label="Real distance between the two points, in millimetres"
+                  />
+                  mm apart
+                </label>
+                <button type="button" className="wall-canvas__scale-go" onClick={applyScale}>
+                  Apply
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setScalePair(null); setPhotoProblem(null); }}
+                >
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  aria-pressed={scaleArmed}
+                  title="Click two points on the photo whose real distance apart you know"
+                  onClick={() => { setScaleArmed((on) => !on); setPhotoProblem(null); }}
+                >
+                  {scaleArmed ? 'Now drag between two points…' : 'Set scale'}
+                </button>
+                {/*
+                  The two things you fiddle with CONSTANTLY while lining a zone
+                  up, kept where the wall is. Everything else about the photo —
+                  replacing it, removing it, typing its position — is a once-per-
+                  session job and stays in the rail.
+                */}
+                <button
+                  type="button"
+                  aria-pressed={photo.depth === 'front'}
+                  title="Show the photo over the honeycomb instead of through it"
+                  onClick={() =>
+                    onPhotoChange({ ...photo, depth: photo.depth === 'front' ? 'behind' : 'front' })}
+                >
+                  {photo.depth === 'front' ? 'In front' : 'Behind'}
+                </button>
+                <label className="wall-canvas__opacity">
+                  <input
+                    type="range"
+                    min={MIN_PHOTO_OPACITY}
+                    max={MAX_PHOTO_OPACITY}
+                    step={0.05}
+                    value={photo.opacity}
+                    onChange={(e) => onPhotoChange({ ...photo, opacity: Number(e.target.value) })}
+                    aria-label="Photo opacity"
+                  />
+                  <span className="tabular-nums">{Math.round(photo.opacity * 100)}%</span>
+                </label>
+                <button
+                  type="button"
+                  className="wall-canvas__scale-drop"
+                  title="Take the photograph off the plan (Backspace) — undo brings it back"
+                  onClick={removePhoto}
+                >
+                  Remove
+                  <kbd>⌫</kbd>
+                </button>
+              </>
+            )}
+            {photoProblem && (
+              <span className="wall-canvas__scale-bad" role="alert">{photoProblem}</span>
+            )}
+          </span>
         )}
 
         {readout && (
@@ -1804,6 +2381,35 @@ function drawBorder(
   ctx.lineWidth = 0.75;
   ctx.globalAlpha = 0.35;
   ctx.stroke(path);
+  ctx.globalAlpha = 1;
+}
+
+/**
+ * The wall photograph, at its calibrated size and its own opacity.
+ *
+ * **The image's top-left on screen is its TOP-left in wall millimetres** — the
+ * corner at `(x, y + height)`, not the stored `(x, y)`. The plan is y-up and
+ * canvas pixels are not (D70), so mapping the stored lower-left corner and
+ * drawing width × height down and right from it puts the photograph below where
+ * it belongs and upside down into the bargain. Both corners are mapped and the
+ * rectangle taken between them, which cannot get that wrong.
+ */
+function drawPhoto(
+  ctx: CanvasRenderingContext2D,
+  photo: WallPhoto,
+  image: HTMLImageElement,
+  toScreen: (p: Point) => Point,
+): void {
+  const r = photoRectMm(photo);
+  const tl = toScreen({ x: r.xMm, y: r.yMm + r.heightMm });
+  const br = toScreen({ x: r.xMm + r.widthMm, y: r.yMm });
+  const w = br.x - tl.x;
+  const h = br.y - tl.y;
+  // Zoomed far enough out to be sub-pixel. `drawImage` with a zero or negative
+  // size throws rather than drawing nothing.
+  if (!(w > 0.5) || !(h > 0.5)) return;
+  ctx.globalAlpha = photo.opacity;
+  ctx.drawImage(image, tl.x, tl.y, w, h);
   ctx.globalAlpha = 1;
 }
 

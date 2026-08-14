@@ -18,7 +18,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 
-import { fasteningPlanFor, fixingPlanFor, itemCells } from '../core/bom';
+import { fasteningPlanFor, fixingPlanFor, itemCells, panelLineKeys } from '../core/bom';
+import { colorOfItem, colorOfLine, colorOfPanel } from '../core/colors';
 import { JUNCTION_FIXING_ID } from '../core/fixings';
 import { CELL, PANEL_DEPTH, PITCH } from '../core/constants';
 import {
@@ -29,10 +30,12 @@ import {
   isGeneratedSize, panelFrameKey, panelIsBordered, panelModelSpecFor,
 } from '../core/panelModel';
 import { partCells } from '../core/store';
+import { photoCentreMm, photoRectMm } from '../core/wallPhoto';
 import type {
   Catalog, CatalogPart, Hex, LayoutDoc, PlacedPanel, Rotation,
 } from '../core/types';
-import { loadPartMesh, type PartMesh } from './meshLibrary';
+import { loadPartMesh, solidToGeometry, type PartMesh } from './meshLibrary';
+import { peekWallPhotoImage, wallPhotoImage } from './wallPhotoImage';
 import './WallView3D.css';
 
 export interface Drag3D {
@@ -54,6 +57,27 @@ export interface WallView3DProps {
   onDragCancel: () => void;
   onSelect: (ids: string[], additive: boolean) => void;
   onStartItemDrag: (itemIds: string[], grabOffset: Hex) => void;
+  /**
+   * The wall fixing the user has picked — a single fixing's cell, or a junction
+   * fastener's ANCHOR. Held by the shell rather than in the store's selection,
+   * because a fixing is not an item: every consumer of `selection` looks its ids
+   * up in `doc.items`, and a cell key in that list would be a stranger to all of
+   * them. Null when nothing is picked.
+   */
+  pickedFixing?: Hex | null;
+  /** Picked, or unpicked with null. Clicking bare wall clears it. */
+  onPickFixing?: (at: Hex | null) => void;
+  /** Dragged from one cell to another. The store refuses what cannot land. */
+  onMoveFixing?: (from: Hex, to: Hex) => void;
+  /**
+   * Panel ids to light up — the plates a parts-list line is talking about.
+   *
+   * Ids and not a partId, because which plates a line means is a rule with one
+   * owner (`bom.panelsForLine`): a cut or bordered plate has left the stock line
+   * for a generated one, and a view deciding for itself would light a plate the
+   * line does not count.
+   */
+  litPanelIds?: ReadonlySet<string>;
 }
 
 /** The six neighbour directions, in the same order as the corner indices below. */
@@ -313,9 +337,12 @@ function buildPanelGeometry(
     return g;
   };
 
-  const back = make(CELL.throatAcrossFlats, PANEL_DEPTH - CELL.mouthDepth);
-  const front = make(CELL.mouthAcrossFlats, CELL.mouthDepth);
-  front.translate(0, 0, PANEL_DEPTH - CELL.mouthDepth);
+  // The 22.0 mouth is the WALL side (z 0…2) and the 20.0 throat is what the room
+  // sees — see BORE_PROFILE, and the insert barbs that prove it. `front` is the
+  // layer you look at, so it keeps the face tone; it is now the throat.
+  const back = make(CELL.mouthAcrossFlats, CELL.mouthDepth);
+  const front = make(CELL.throatAcrossFlats, PANEL_DEPTH - CELL.mouthDepth);
+  front.translate(0, 0, CELL.mouthDepth);
   return { back, front };
 }
 
@@ -340,19 +367,7 @@ function generatedPanelGeometry(
     if (spec.cells.length === 0) return null;
     const mesh = buildHoneycombMesh({ ...spec, originAtZero: false });
     const o = hexToMm(panel.origin);
-    const src = mesh.positions;
-    const pos = new Float32Array(src.length);
-    for (let i = 0; i < src.length; i += 3) {
-      pos[i] = src[i]! - o.x;
-      pos[i + 1] = src[i + 1]! - o.y;
-      pos[i + 2] = src[i + 2]!;
-    }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    // Non-indexed, so this is flat shading per triangle — which is what a
-    // printed plate looks like, and what makes the stepped bore read.
-    geo.computeVertexNormals();
-    return geo;
+    return solidToGeometry(mesh, -o.x, -o.y);
   } catch {
     return null;
   }
@@ -387,6 +402,7 @@ export function WallView3D(props: WallView3DProps) {
   const {
     doc, catalog, selection, drag, dragRef, placementValid,
     onDragMove, onDrop, onDragCancel, onSelect, onStartItemDrag,
+    pickedFixing = null, onPickFixing, onMoveFixing, litPanelIds,
   } = props;
 
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -402,6 +418,7 @@ export function WallView3D(props: WallView3DProps) {
     hoverGroup: THREE.Group;
     obstacleGroup: THREE.Group;
     fixingGroup: THREE.Group;
+    photoGroup: THREE.Group;
     frame: number;
   } | null>(null);
 
@@ -449,7 +466,19 @@ export function WallView3D(props: WallView3DProps) {
   // stand off the wall, not so much that you cannot aim at a cell. phi is the
   // polar angle, so ~1.45 rad is just above eye level with the wall.
   const orbitRef = useRef({ theta: -0.22, phi: 1.42, dist: 2200, tx: 0, ty: 0 });
-  const pressRef = useRef<{ x: number; y: number; cell: Hex; itemId?: string; moved: boolean } | null>(null);
+  const pressRef = useRef<{
+    x: number; y: number; cell: Hex; itemId?: string;
+    /** The wall fixing under the press — its cell, or a junction's anchor. */
+    fixing?: { at: Hex; junction: boolean };
+    moved: boolean;
+  } | null>(null);
+  /**
+   * A fixing being dragged, written synchronously on the first move past the
+   * threshold. A REF and not state, for the reason D58 records twice over: the
+   * release can arrive before React has rendered, and a `pointerup` reading a
+   * state copy of this would find nothing and move nothing.
+   */
+  const fixingDragRef = useRef<{ from: Hex; junction: boolean } | null>(null);
   const panRef = useRef<{ x: number; y: number; mode: 'orbit' | 'pan' } | null>(null);
 
   const partOf = useCallback(
@@ -464,13 +493,30 @@ export function WallView3D(props: WallView3DProps) {
     return m;
   }, [doc.items, catalog]);
 
+  /**
+   * Panel id -> the parts-list line it is counted on, which is what a plate's
+   * colour is keyed by. One walk of the assembly, through `bom.panelLineKeys` —
+   * the one place the stock-versus-generated split is decided (D92).
+   */
+  const panelLines = useMemo(() => panelLineKeys(doc), [doc]);
+
   // --- scene setup --------------------------------------------------------
 
   useLayoutEffect(() => {
     const host = hostRef.current;
     if (!host) return;
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    /*
+     * `alpha: true`, and the scene keeps NO background of its own.
+     *
+     * The wall is the subject and it was standing on a flat rectangle of
+     * `--canvas-wall` — the largest surface in the product, one value, edge to
+     * edge, which is what made a lit 3D object look like a screenshot pasted
+     * onto a swatch. The backdrop is now a CSS gradient on the host (see
+     * `.wall3d` in WallView3D.css), so it is built from the same tokens, follows
+     * the theme with no second definition, and costs the renderer nothing.
+     */
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = false;
     host.appendChild(renderer.domElement);
@@ -499,7 +545,10 @@ export function WallView3D(props: WallView3DProps) {
     const hoverGroup = new THREE.Group();
     const obstacleGroup = new THREE.Group();
     const fixingGroup = new THREE.Group();
-    scene.add(panelGroup, itemGroup, ghostGroup, hoverGroup, obstacleGroup, fixingGroup);
+    const photoGroup = new THREE.Group();
+    scene.add(
+      panelGroup, itemGroup, ghostGroup, hoverGroup, obstacleGroup, fixingGroup, photoGroup,
+    );
 
     stateRef.current = {
       renderer, scene, camera,
@@ -507,7 +556,8 @@ export function WallView3D(props: WallView3DProps) {
       // Picking happens on the panel's FRONT face, which is where the user is
       // pointing — not on z = 0, which would put the cursor behind the plate.
       plane: new THREE.Plane(new THREE.Vector3(0, 0, 1), -PANEL_DEPTH),
-      panelGroup, itemGroup, ghostGroup, hoverGroup, obstacleGroup, fixingGroup, frame: 0,
+      panelGroup, itemGroup, ghostGroup, hoverGroup, obstacleGroup, fixingGroup, photoGroup,
+      frame: 0,
     };
     setReady(true);
 
@@ -604,7 +654,9 @@ export function WallView3D(props: WallView3DProps) {
     const s = stateRef.current;
     if (!s || !ready) return;
     const theme = readTheme();
-    s.scene.background = theme.bg;
+    // No scene background: the host's gradient is the backdrop, and it shows
+    // through because the renderer was made with `alpha: true`.
+    s.scene.background = null;
 
     for (const child of [...s.panelGroup.children]) {
       s.panelGroup.remove(child);
@@ -620,7 +672,7 @@ export function WallView3D(props: WallView3DProps) {
       string,
       {
         partId: string; columns: number; rows: number; omit: Hex[];
-        sample: PlacedPanel; origins: Hex[];
+        sample: PlacedPanel; origins: Hex[]; lit: boolean; colour: string | undefined;
       }
     >();
     for (const p of doc.panels) {
@@ -632,8 +684,24 @@ export function WallView3D(props: WallView3DProps) {
       // cell block and still be different plates, and each has its own mesh.
       // And on the FRAME, because two plates with the same cut can still be
       // mirror images of each other when the border is on opposite edges.
-      const k = `${p.partId}|${p.columns}x${p.rows}|${cut}|${panelFrameKey(p, doc.panels, doc.frame)}`;
+      /*
+        * LIT joins the key, and it has to.
+        *
+        * Every group becomes one `InstancedMesh` sharing a single material, so
+        * two plates of the same shape cannot be drawn in two tones from one
+        * batch. Keying on it splits them into two batches — normally one, since
+        * nothing is lit — which is the only way "these three plates, not those
+        * four" can be said in an instanced draw.
+        */
+      const lit = litPanelIds?.has(p.id) === true;
+      // ...and so does the COLOUR, for exactly the same reason: one batch, one
+      // material. Two plates of a shape printed in different filament are two
+      // draws.
+      const colour = colorOfPanel(doc.colors, panelLines.get(p.id));
+      const k = `${p.partId}|${p.columns}x${p.rows}|${cut}|${panelFrameKey(p, doc.panels, doc.frame)}|${lit ? 'lit' : ''}|${colour ?? ''}`;
       const e = bySize.get(k) ?? {
+        lit,
+        colour,
         partId: p.partId,
         columns: p.columns,
         rows: p.rows,
@@ -660,23 +728,91 @@ export function WallView3D(props: WallView3DProps) {
     const faceMat = new THREE.MeshLambertMaterial({
       color: theme.panel.clone().lerp(new THREE.Color(0xffffff), 0.18),
     });
+    /*
+     * A LIT plate: the plate's own tone carried most of the way to the selection
+     * colour, not replaced by it. Replaced, a highlighted plate stops reading as
+     * a plate at all — the honeycomb disappears into a flat blue slab and you
+     * cannot see which cells it has, which is usually why you clicked. Two tones
+     * again, so the front face and the recessed shoulder stay apart.
+     */
+    const litFace = new THREE.MeshLambertMaterial({
+      color: theme.panel.clone().lerp(theme.selected, 0.62),
+    });
+    const litBody = new THREE.MeshLambertMaterial({
+      color: theme.panel.clone().lerp(theme.selected, 0.62).lerp(new THREE.Color(0x000000), 0.28),
+    });
 
-    for (const { partId, columns, rows, omit, sample, origins } of bySize.values()) {
+    for (const { partId, columns, rows, omit, sample, origins, lit, colour } of bySize.values()) {
       /*
-       * The real plate, when there is one AND this is a stock plate.
-       *
-       * `omit` is the gate, and it is not an optimisation: a panel with cells
-       * left out is a CUSTOM panel generated from the OpenSCAD customiser, not
-       * the shipped STL any more (see `src/core/customiser.ts`). Drawing the
-       * stock mesh for it would show a plate with no hole where the light
-       * switch goes, which is precisely the thing the customiser exists to cut.
+       * The user's colour wins over the theme's plate tone, and the LIT tint
+       * wins over both — a highlight has to be visible whatever the plate is
+       * printed in, or clicking a line in the parts list does nothing for the
+       * one wall where you most need it. The two tones are kept: the front face
+       * is the colour, the recessed shoulder the same colour in shadow, so a
+       * coloured plate still reads as a plate rather than a flat card.
        */
-      // The shipped mesh, and ONLY when this really is the shipped plate.
-      //
-      // Three things stop it being one, and all three have to be checked here:
-      // cells cut out, a size the app chose, and an EDGE. Missing the edge drew
-      // the stock STL for every bordered plate, so the plan showed a border, the
-      // parts list said "edged top + left", and the wall in 3D had none (D66).
+      const own = colour === undefined ? undefined : new THREE.Color(colour);
+      const face = lit
+        ? litFace
+        : own
+          ? new THREE.MeshLambertMaterial({ color: own })
+          : faceMat;
+      const body = lit
+        ? litBody
+        : own
+          ? new THREE.MeshLambertMaterial({
+              color: own.clone().lerp(new THREE.Color(0x000000), 0.28),
+            })
+          : bodyMat;
+      /*
+       * EVERY plate is drawn from the generator, stock ones included.
+       *
+       * It used to be the shipped STL for a plate the app had not had to make,
+       * on the grounds that the generated geometry "cannot show the entry flare,
+       * the lead-in chamfer, or anything the designer put there". That was true
+       * of the drawn approximation below; it has not been true since
+       * `honeycomb.ts` learnt the whole measured bore, which it reproduces to
+       * 0.0025 % of volume and 0.0004 mm of bounding box on all seven plates
+       * (`tests/honeycomb-model.test.ts`).
+       *
+       * And it is now load-bearing rather than tidy. The 22.0 mouth goes against
+       * the WALL (see BORE_PROFILE), so a stock plate has to be drawn turned
+       * over from the way the app used to hang it — and a printed plate turned
+       * over is a MIRRORED cell block: measured, 48 of the 56 cell centres of
+       * `wall-honeycomb-part` land in solid material once it is flipped, because
+       * `panelCells` staggers by −floor(dq/2) and the flip wants +. The
+       * generator has no such problem: it BUILDS the plate from the cells it is
+       * given, so it makes the plate this wall needs rather than a picture of a
+       * plate hung the wrong way round. One source for every plate on the wall
+       * is also what stops a cut plate and its stock neighbour disagreeing about
+       * which way the bore runs.
+       */
+      const generated = generatedPanelGeometry(sample, doc);
+      if (generated) {
+        const mesh = new THREE.InstancedMesh(generated, face, origins.length);
+        const m4 = new THREE.Matrix4();
+        origins.forEach((o, i) => {
+          const p = hexToMm(o);
+          m4.makeTranslation(p.x, p.y, 0);
+          mesh.setMatrixAt(i, m4);
+        });
+        mesh.instanceMatrix.needsUpdate = true;
+        mesh.frustumCulled = false;
+        s.panelGroup.add(mesh);
+        continue;
+      }
+
+      /*
+       * The shipped mesh, kept as the FALLBACK for a shape the generator
+       * refuses — better a plate hung the wrong way round than a hole in the
+       * wall with no explanation.
+       *
+       * Still gated on this really being the shipped plate, and all three gates
+       * matter: cells cut out, a size the app chose, and an EDGE. Missing the
+       * edge drew the stock STL for every bordered plate, so the plan showed a
+       * border, the parts list said "edged top + left", and the wall in 3D had
+       * neither (D66).
+       */
       const stock =
         omit.length === 0 &&
         !isGeneratedSize(partId) &&
@@ -705,7 +841,7 @@ export function WallView3D(props: WallView3DProps) {
          * out 170.317 × 177.000 against a block of exactly the same size
          * (HSW-SPEC §4, `tests/plate-alignment.test.ts`).
          */
-        const mesh = new THREE.InstancedMesh(real.geometry, faceMat, origins.length);
+        const mesh = new THREE.InstancedMesh(real.geometry, face, origins.length);
         const m4 = new THREE.Matrix4();
         origins.forEach((o, i) => {
           const c = cellsCentreMm(panelCells(o, columns, rows));
@@ -722,42 +858,14 @@ export function WallView3D(props: WallView3DProps) {
       }
 
       /*
-       * A CUT plate is drawn from the generator — the same triangles the
-       * Download STL button writes.
+       * Last resort: cells and holes, two tones, no bore.
        *
-       * This used to be the drawn approximation below, which knows about cells
-       * and holes but not about a framed edge: a border cuts its outermost cells
-       * in HALF and walls them off, and `omit` carries those cells, so the wall
-       * came up with a column of hexagons simply missing along every framed edge.
-       * It looked like damage. Drawing the real plate means what you see is what
-       * you print, frame and all, and the stepped bore is genuinely there rather
-       * than suggested by two tones.
+       * Reached only when the generator refused the shape AND there is no
+       * shipped mesh to fall back on — a plate that would otherwise simply not
+       * be on the wall, with nothing to say why.
        */
-      // Anything the app has to MAKE — cut round a zone, sized for the printer,
-      // or carrying an edge — is drawn from the generator, so what is on screen
-      // is what the Download STL button writes.
-      if (omit.length > 0 || isGeneratedSize(partId) || panelIsBordered(sample, doc.panels, doc.frame)) {
-        const geo = generatedPanelGeometry(sample, doc);
-        if (geo) {
-          const mesh = new THREE.InstancedMesh(geo, faceMat, origins.length);
-          const m4 = new THREE.Matrix4();
-          origins.forEach((o, i) => {
-            const p = hexToMm(o);
-            m4.makeTranslation(p.x, p.y, 0);
-            mesh.setMatrixAt(i, m4);
-          });
-          mesh.instanceMatrix.needsUpdate = true;
-          mesh.frustumCulled = false;
-          s.panelGroup.add(mesh);
-          continue;
-        }
-        // Fall through to the drawn plate if the generator refuses this shape,
-        // so an un-generatable plate still appears on the wall instead of
-        // leaving a hole with no explanation.
-      }
-
       const { back, front } = buildPanelGeometry(columns, rows, omit);
-      for (const [geo, mat] of [[back, bodyMat], [front, faceMat]] as const) {
+      for (const [geo, mat] of [[back, body], [front, face]] as const) {
         const mesh = new THREE.InstancedMesh(geo, mat, origins.length);
         const m4 = new THREE.Matrix4();
         origins.forEach((o, i) => {
@@ -770,7 +878,8 @@ export function WallView3D(props: WallView3DProps) {
         s.panelGroup.add(mesh);
       }
     }
-  }, [doc.panels, panelMeshes, ready, readTheme, themeTick]);
+  }, [doc.panels, doc.frame, doc.colors, panelLines, panelMeshes, ready, readTheme, themeTick,
+      litPanelIds]);
 
   // --- build the placed items --------------------------------------------
 
@@ -788,6 +897,23 @@ export function WallView3D(props: WallView3DProps) {
     () => fasteningPlanFor(doc, catalog, fixingPlan),
     [doc, catalog, fixingPlan],
   );
+
+  /**
+   * Cell -> the wall fixing you would be pointing at.
+   *
+   * Every cell of a junction maps to that junction's ANCHOR, so clicking any of
+   * its four hexagons picks the one fastener rather than nothing. Built from the
+   * same plan the view draws, or the thing you can click and the thing you can
+   * see would be different objects.
+   */
+  const fixingIndex = useMemo(() => {
+    const m = new Map<string, { at: Hex; junction: boolean }>();
+    for (const cell of fixingPlan.cells) m.set(hexKey(cell), { at: cell, junction: false });
+    for (const j of fixingPlan.junctions) {
+      for (const c of j.cells) m.set(hexKey(c), { at: j.anchor, junction: true });
+    }
+    return m;
+  }, [fixingPlan]);
 
   /**
    * Bumped when a part's real mesh finishes loading, to rebuild the item group.
@@ -841,7 +967,18 @@ export function WallView3D(props: WallView3DProps) {
       const cells = itemCells(it, catalog);
       if (cells.length === 0) continue;
       const { depth, w, h } = partBox(part);
-      const colour = sel.has(it.id) ? theme.selected : theme.item;
+      /*
+       * Selected beats coloured: while something is selected, the wall's job is
+       * to say WHICH, and a part painted the same blue as the selection colour
+       * would be indistinguishable from a selected one. The colour comes back
+       * the moment the selection moves on.
+       */
+      const own = colorOfItem(doc.colors, it);
+      const colour = sel.has(it.id)
+        ? theme.selected
+        : own !== undefined
+          ? new THREE.Color(own)
+          : theme.item;
       const mat = new THREE.MeshLambertMaterial({ color: colour });
 
       // The body: the part's own mesh where we have it, otherwise a box at its
@@ -906,9 +1043,27 @@ export function WallView3D(props: WallView3DProps) {
      * builder reading the picture should see the same family of parts in the
      * seams and under the hooks.
      */
-    const fittingMat = new THREE.MeshLambertMaterial({
-      color: theme.panel.clone().lerp(new THREE.Color(0xffffff), 0.35),
-    });
+    /*
+      * ...and in the COLOUR chosen for that fastener, when one has been.
+      *
+      * These are printed parts with a line of their own in the list, so the
+      * swatch on that line has to reach them — and so does the `Parts` default,
+      * which is what "the fasteners that are already there" means: the inserts
+      * the app puts in are as much a part of the build as the hooks. Per part
+      * id, because a wall can carry several kinds at once.
+      */
+    const fittingTone = theme.panel.clone().lerp(new THREE.Color(0xffffff), 0.35);
+    const fittingMats = new Map<string, THREE.MeshLambertMaterial>();
+    const fittingMat = (partId: string): THREE.MeshLambertMaterial => {
+      const held = fittingMats.get(partId);
+      if (held) return held;
+      const own = colorOfLine(doc.colors, partId, false);
+      const made = new THREE.MeshLambertMaterial({
+        color: own === undefined ? fittingTone : new THREE.Color(own),
+      });
+      fittingMats.set(partId, made);
+      return made;
+    };
     for (const f of fastenings) {
       const part = partOf(f.partId);
       if (!part || f.cells.length === 0) continue;
@@ -930,8 +1085,8 @@ export function WallView3D(props: WallView3DProps) {
         if (covered.length === 0) continue;
         const { x: fx, y: fy } = cellsCentreMm(covered);
         const mesh = loaded
-          ? new THREE.Mesh(loaded.geometry, fittingMat)
-          : new THREE.Mesh(cellPrism(CELL.mouthAcrossFlats / Math.sqrt(3), PANEL_DEPTH), fittingMat);
+          ? new THREE.Mesh(loaded.geometry, fittingMat(f.partId))
+          : new THREE.Mesh(cellPrism(CELL.mouthAcrossFlats / Math.sqrt(3), PANEL_DEPTH), fittingMat(f.partId));
         mesh.rotation.z = (Math.PI / 3) * f.rotation;
         mesh.position.set(fx, fy, loaded ? seatedZ(loaded, true) : PANEL_DEPTH / 2);
         // Selecting the part it holds, not itself: it is not a placed item.
@@ -940,7 +1095,13 @@ export function WallView3D(props: WallView3DProps) {
         s.itemGroup.add(mesh);
       }
     }
-  }, [doc.items, fastenings, selection, catalog, partOf, ready, readTheme, themeTick, meshTick]);
+    // `doc.colors` is READ above, so it belongs here. Left out, colouring a part
+    // changed the document, the parts list and nothing on the wall — the plates
+    // repainted (their effect lists it) and the parts did not, which is exactly
+    // how it was reported: "the colour selector on the part is not working, but
+    // it is on the panels".
+  }, [doc.items, doc.colors, fastenings, selection, catalog, partOf, ready, readTheme, themeTick,
+      meshTick]);
 
   // --- wall fixings -------------------------------------------------------
 
@@ -1034,14 +1195,47 @@ export function WallView3D(props: WallView3DProps) {
     // accessory — but drawn 50% toward black they vanished into a dark theme's
     // plate entirely, which defeats the point of drawing them at all. Lifting
     // them off the plate reads as a part seated in the hole.
-    const mat = new THREE.MeshLambertMaterial({
-      color: theme.panel.clone().lerp(new THREE.Color(0xffffff), 0.35),
-    });
+    /*
+     * The colour these are printed in, when one has been chosen.
+     *
+     * A wall fixing is a printed part with its own line in the parts list — the
+     * countersunk insert, and the four-cell one at the junctions — so both the
+     * swatch on that line and the `Parts` default have to reach it. They are the
+     * fasteners "already there": the app put them in rather than the user, and
+     * that is no reason for them to be the one thing on the wall that ignores
+     * the colour chosen for everything of their kind.
+     */
+    const tone = theme.panel.clone().lerp(new THREE.Color(0xffffff), 0.35);
+    const toneFor = (partId: string | undefined): THREE.MeshLambertMaterial => {
+      const own = partId === undefined ? undefined : colorOfLine(doc.colors, partId, false);
+      return new THREE.MeshLambertMaterial({
+        color: own === undefined ? tone : new THREE.Color(own),
+      });
+    };
+    const mat = toneFor(fixingPart?.id);
+    const junctionMat = toneFor(junctionPart?.id);
+    /*
+     * The one you have picked, in the selection colour — the same signal a
+     * selected part gets, because it is the same question ("which of these am I
+     * about to move or delete?"). A fixing being DRAGGED is drawn picked too:
+     * the ghost is the hover highlight the wall already draws under the pointer.
+     *
+     * Picked beats coloured, for the same reason selected beats coloured on a
+     * placed part: while you are holding one, the wall's job is to say which.
+     */
+    const pickedKey = pickedFixing ? hexKey(pickedFixing) : null;
+    const picked = new THREE.MeshLambertMaterial({ color: theme.selected });
+    const matFor = (at: Hex, base: THREE.MeshLambertMaterial): THREE.MeshLambertMaterial =>
+      pickedKey !== null && hexKey(at) === pickedKey ? picked : base;
+
     for (const cell of plan.cells) {
       const p = hexToMm(cell);
       const mesh = fixingMesh
-        ? new THREE.Mesh(fixingMesh.geometry, mat)
-        : new THREE.Mesh(cellPrism(CELL.mouthAcrossFlats / Math.sqrt(3), PANEL_DEPTH), mat);
+        ? new THREE.Mesh(fixingMesh.geometry, matFor(cell, mat))
+        : new THREE.Mesh(
+            cellPrism(CELL.mouthAcrossFlats / Math.sqrt(3), PANEL_DEPTH),
+            matFor(cell, mat),
+          );
       // Seated in the cell: the body drops into the hole and the flange sits
       // proud of the front face, which is what the photographs show — and, now
       // that the flange is measured rather than assumed away, what this draws.
@@ -1072,14 +1266,21 @@ export function WallView3D(props: WallView3DProps) {
       cy /= junction.cells.length;
 
       const mesh = junctionMesh
-        ? new THREE.Mesh(junctionMesh.geometry, mat)
-        : new THREE.Mesh(cellPrism((CELL.mouthAcrossFlats * 1.6) / Math.sqrt(3), PANEL_DEPTH), mat);
+        ? new THREE.Mesh(junctionMesh.geometry, matFor(junction.anchor, junctionMat))
+        : new THREE.Mesh(
+            cellPrism((CELL.mouthAcrossFlats * 1.6) / Math.sqrt(3), PANEL_DEPTH),
+            matFor(junction.anchor, junctionMat),
+          );
       mesh.rotation.z = (Math.PI / 3) * junction.rotation;
       mesh.position.set(cx, cy, junctionMesh ? seatedZ(junctionMesh, true) : PANEL_DEPTH / 2);
       mesh.userData['ownGeometry'] = junctionMesh === null;
       s.fixingGroup.add(mesh);
     }
-  }, [doc, catalog, fixingPlan, ready, readTheme, themeTick, fixingMesh, junctionMesh]);
+    // `doc` covers `doc.colors` here — this effect takes the whole document —
+    // but the fixing PARTS do not, so they are listed: the tone is read off
+    // their own parts-list lines.
+  }, [doc, catalog, fixingPlan, ready, readTheme, themeTick, fixingMesh, junctionMesh,
+      fixingPart, junctionPart, pickedFixing]);
 
   /*
    * --- obstacles: NOT drawn ------------------------------------------------
@@ -1102,6 +1303,100 @@ export function WallView3D(props: WallView3DProps) {
    * you position them. `obstacleGroup` is kept in the scene so nothing else has
    * to change shape; it simply stays empty.
    */
+
+  // --- the wall photograph -------------------------------------------------
+
+  /**
+   * The decoded picture, shared with the plan view through one cache.
+   *
+   * State rather than a ref because arriving is what has to rebuild the plane:
+   * the image loads asynchronously and the effect below has already run once by
+   * the time it does.
+   */
+  const [photoImg, setPhotoImg] = useState<HTMLImageElement | null>(() =>
+    doc.photo ? peekWallPhotoImage(doc.photo.id) : null);
+  const photoId = doc.photo?.id;
+
+  useEffect(() => {
+    if (photoId === undefined) { setPhotoImg(null); return; }
+    let live = true;
+    setPhotoImg(peekWallPhotoImage(photoId));
+    void wallPhotoImage(photoId).then((img) => { if (live) setPhotoImg(img); });
+    return () => { live = false; };
+  }, [photoId]);
+
+  /**
+   * The GPU texture, kept across rebuilds and keyed on the photo it holds.
+   *
+   * A fresh `THREE.Texture` per rebuild would re-upload a 2048 px photograph to
+   * the GPU every time anything about the photo changed — and the thing that
+   * changes most is the opacity slider, which fires per frame while it is being
+   * dragged. The plane, its geometry and its material are cheap and are rebuilt;
+   * the texture is not, so it outlives them and is disposed only when the
+   * picture itself goes.
+   */
+  const photoTexRef = useRef<{ id: string; tex: THREE.Texture } | null>(null);
+
+  useEffect(() => {
+    const s = stateRef.current;
+    if (!s || !ready) return;
+    for (const child of [...s.photoGroup.children]) {
+      s.photoGroup.remove(child);
+      const m = child as THREE.Mesh;
+      m.geometry?.dispose();
+      (m.material as THREE.Material)?.dispose?.();
+    }
+
+    const photo = doc.photo;
+    const held = photoTexRef.current;
+    if (held && (!photo || held.id !== photo.id || photoImg === null)) {
+      held.tex.dispose();
+      photoTexRef.current = null;
+    }
+    if (!photo || !photo.visible || photoImg === null) return;
+
+    let tex = photoTexRef.current?.tex;
+    if (!tex) {
+      tex = new THREE.Texture(photoImg);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.needsUpdate = true;
+      photoTexRef.current = { id: photo.id, tex };
+    }
+
+    const rect = photoRectMm(photo);
+    const centre = photoCentreMm(photo);
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(rect.widthMm, rect.heightMm),
+      new THREE.MeshBasicMaterial({
+        map: tex,
+        transparent: true,
+        opacity: photo.opacity,
+        // Unlit and untone-mapped: a photograph already carries its own light,
+        // and running it through the scene's key and fill would shade the room
+        // by where the wall's lamps are, which is nonsense.
+        toneMapped: false,
+        // Visible from behind as well, so orbiting round the back of the wall
+        // does not make the picture vanish.
+        side: THREE.DoubleSide,
+        // Never writes depth. It is a reference laid against the wall, not an
+        // object in the room, and writing depth would let a photo standing in
+        // front of the plate hide the parts mounted on it from their own
+        // transparency sort.
+        depthWrite: false,
+      }),
+    );
+    /*
+     * Behind the plate, or in front of it — geometrically, not by render order.
+     *
+     * The plate occupies z 0…PANEL_DEPTH, so 0.6 mm clear of either face puts
+     * the photograph unambiguously on one side without z-fighting. Behind, it
+     * shows through every open cell, which is the view you place a zone in;
+     * in front it covers the honeycomb and the parts still stand through it,
+     * because they really are in front of it.
+     */
+    mesh.position.set(centre.x, centre.y, photo.depth === 'behind' ? -0.6 : PANEL_DEPTH + 0.6);
+    s.photoGroup.add(mesh);
+  }, [doc.photo, photoImg, ready]);
 
   // --- ghost preview ------------------------------------------------------
 
@@ -1354,7 +1649,13 @@ export function WallView3D(props: WallView3DProps) {
       const cell = cellAt(e.clientX, e.clientY);
       if (!cell) return;
       const hitId = itemIndex.get(hexKey(cell));
-      pressRef.current = { x: e.clientX, y: e.clientY, cell, itemId: hitId, moved: false };
+      // A part wins the cell: it is in front of the fixing and it is what the
+      // pointer is over. The fixing under an accessory is reachable by moving
+      // the accessory, which is the same rule the wall uses everywhere else.
+      const fixing = hitId === undefined ? fixingIndex.get(hexKey(cell)) : undefined;
+      pressRef.current = {
+        x: e.clientX, y: e.clientY, cell, itemId: hitId, fixing, moved: false,
+      };
     };
 
     const move = (e: PointerEvent) => {
@@ -1380,8 +1681,37 @@ export function WallView3D(props: WallView3DProps) {
         return;
       }
 
+      // A fixing already in hand: the hover highlight IS the ghost, so there is
+      // nothing else to draw.
+      if (fixingDragRef.current) {
+        setHover(cellAt(e.clientX, e.clientY));
+        return;
+      }
+
       const press = pressRef.current;
-      if (!press || press.itemId === undefined) {
+      if (!press) {
+        setHover(cellAt(e.clientX, e.clientY));
+        return;
+      }
+
+      /*
+       * Past the threshold on a fixing: pick it up. A JUNCTION is not picked up
+       * — it is a four-cell insert whose whole job is to straddle the corner
+       * where the plates meet, so it has nowhere else to be (HSW-SPEC §4). The
+       * press stands, so releasing still selects it and Delete still removes it.
+       */
+      if (press.itemId === undefined && press.fixing && onMoveFixing) {
+        if (Math.hypot(e.clientX - press.x, e.clientY - press.y) <= 5) return;
+        if (press.fixing.junction) return;
+        fixingDragRef.current = { from: press.fixing.at, junction: false };
+        // The parent's `pickedFixing` is what DRAWS it as held — the ref is the
+        // only copy the release handler can trust (D58).
+        onPickFixing?.(press.fixing.at);
+        setHover(cellAt(e.clientX, e.clientY));
+        return;
+      }
+
+      if (press.itemId === undefined) {
         // Plain hover, nothing being dragged. The 3D view used to track `hover`
         // ONLY during a drag, so the wall gave no feedback about which cell the
         // pointer was over until you were already carrying something.
@@ -1402,6 +1732,19 @@ export function WallView3D(props: WallView3DProps) {
 
     const up = (e: PointerEvent) => {
       if (panRef.current) { panRef.current = null; return; }
+
+      const moving = fixingDragRef.current;
+      if (moving) {
+        // Cleared FIRST, whatever happens next: a refused move must not leave
+        // the view holding a fixing that is still on the wall.
+        fixingDragRef.current = null;
+        setHover(null);
+        pressRef.current = null;
+        const cell = cellAt(e.clientX, e.clientY);
+        if (cell) onMoveFixing?.(moving.from, cell);
+        return;
+      }
+
       if (dragRef.current) {
         const cell = cellAt(e.clientX, e.clientY);
         setHover(null);
@@ -1411,8 +1754,17 @@ export function WallView3D(props: WallView3DProps) {
       }
       const press = pressRef.current;
       if (press) {
-        onSelect(press.itemId === undefined ? [] : [press.itemId],
-          e.metaKey || e.ctrlKey);
+        if (press.itemId === undefined && press.fixing) {
+          // Picking a fixing clears the item selection, and the other way round:
+          // Delete has to mean one thing, and two live selections would make it
+          // mean whichever the handler looked at first.
+          onSelect([], false);
+          onPickFixing?.(press.fixing.at);
+        } else {
+          onSelect(press.itemId === undefined ? [] : [press.itemId],
+            e.metaKey || e.ctrlKey);
+          onPickFixing?.(null);
+        }
       }
       pressRef.current = null;
     };
@@ -1443,8 +1795,9 @@ export function WallView3D(props: WallView3DProps) {
       host.removeEventListener('wheel', wheel);
       host.removeEventListener('contextmenu', ctx);
     };
-  }, [ready, cellAt, itemIndex, doc.items, selection, dragRef,
-      onDragMove, onDrop, onDragCancel, onSelect, onStartItemDrag]);
+  }, [ready, cellAt, itemIndex, fixingIndex, doc.items, selection, dragRef,
+      onDragMove, onDrop, onDragCancel, onSelect, onStartItemDrag,
+      onPickFixing, onMoveFixing]);
 
   return (
     <div className="wall3d" ref={hostRef}>
@@ -1458,8 +1811,17 @@ export function WallView3D(props: WallView3DProps) {
           Front
         </button>
       </div>
+      {/* The hint answers the question you have RIGHT NOW. Holding a fixing,
+          that is what to do with it — including the one thing it refuses, which
+          otherwise reads as a broken drag. */}
       <div className="wall3d__hint">
-        drag to place · right-drag orbit · shift-drag pan · wheel zoom · R rotate · Ctrl+D duplicate
+        {pickedFixing === null ? (
+          'drag to place · right-drag orbit · shift-drag pan · wheel zoom · R rotate · Ctrl+D duplicate'
+        ) : fixingIndex.get(hexKey(pickedFixing))?.junction ? (
+          'wall fixing picked · Delete removes it · it bridges the plates, so it does not move'
+        ) : (
+          'wall fixing picked · drag to move it · Delete removes it · Escape lets go'
+        )}
       </div>
     </div>
   );

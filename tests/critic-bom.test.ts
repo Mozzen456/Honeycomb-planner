@@ -354,7 +354,6 @@ describe('1 — SMALL: 2 panels + a handful of accessories', () => {
   it('totals match the hand arithmetic and the independent re-derivation', () => {
     expect(bom.totals.parts).toBe(20);
     expect(bom.totals.distinctParts).toBe(7);
-    expect(bom.totals.minutes).toBe(1003);
     expect(bom.totals.grams).toBe(147.1);
     expect(bom.totals.metres).toBe(49.33);
 
@@ -374,7 +373,6 @@ describe('1 — SMALL: 2 panels + a handful of accessories', () => {
     expect(expected.rawGramsHundredths).toBe(14710);
     expect(expected.rawMetresTenThousandths).toBe(493275);
     expect(bom.totals.parts).toBe(expected.parts);
-    expect(bom.totals.minutes).toBe(expected.minutes);
     expect(bom.totals.grams).toBe(expected.grams);
     expect(bom.totals.metres).toBe(expected.metres);
   });
@@ -384,7 +382,6 @@ describe('1 — SMALL: 2 panels + a handful of accessories', () => {
     // the per-unit x quantity rule this test exists for is unchanged.
     const l = line(bom, 'insert-countersunk')!;
     expect(l.quantity).toBe(4);
-    expect(l.minutes).toBe(Math.round(18.65 * 4)); // 74.6 -> 75
     expect(l.grams).toBeCloseTo(9.2, 6); // 2.29 x 4 = 9.16 -> 9.2 at 1 dp
     expect(l.metres).toBeCloseTo(3.07, 6); // 0.7686 x 4 = 3.0744 -> 3.07
   });
@@ -581,7 +578,6 @@ describe('2 — FULL GARAGE WALL: 1200 x 2400, bed256, 64 panels + 30 accessorie
   it('totals match the hand arithmetic', () => {
     expect(bom.totals.parts).toBe(215);
     expect(bom.totals.distinctParts).toBe(11);
-    expect(bom.totals.minutes).toBe(38154);
     expect(bom.totals.grams).toBe(5810.8);
     expect(bom.totals.metres).toBe(1948.35);
   });
@@ -618,7 +614,6 @@ describe('2 — FULL GARAGE WALL: 1200 x 2400, bed256, 64 panels + 30 accessorie
     expect(bom.totals.parts).toBe(expected.parts);
     expect(bom.totals.grams).toBe(expected.grams);
     expect(bom.totals.metres).toBe(expected.metres);
-    expect(bom.totals.minutes).toBe(expected.minutes);
   });
 
   it('totals.parts equals the sum of every line quantity', () => {
@@ -804,7 +799,6 @@ describe('3 — AWKWARD: seams, edges, overlaps, a missing part and a rotation',
 
   it('totals match the hand arithmetic', () => {
     expect(bom.totals.parts).toBe(19);
-    expect(bom.totals.minutes).toBe(678);
     expect(bom.totals.grams).toBe(95.5);
     expect(bom.totals.metres).toBe(32.03);
 
@@ -830,7 +824,6 @@ describe('3 — AWKWARD: seams, edges, overlaps, a missing part and a rotation',
     expect(bom.totals.parts).toBe(expected.parts);
     expect(bom.totals.grams).toBe(expected.grams); // 104.68 -> 104.7, half away from zero
     expect(bom.totals.metres).toBe(expected.metres); // 35.1014 -> 35.10
-    expect(bom.totals.minutes).toBe(expected.minutes);
   });
 });
 
@@ -925,12 +918,10 @@ describe('5 — rounding at scale', () => {
     // per-unit round-then-multiply).
     expect(line(bom, 'cover-contersunk')!.grams).toBe(29.2);
     expect(line(bom, 'cover-contersunk')!.metres).toBe(9.73); // 40 x 0.2433 = 9.732
-    expect(line(bom, 'cover-contersunk')!.minutes).toBe(266); // 40 x 6.65
 
     expect(bom.totals.parts).toBe(80);
     expect(bom.totals.grams).toBe(107.2); // 29.2 + 78
     expect(bom.totals.metres).toBe(35.87); // 9.732 + 26.136 = 35.868
-    expect(bom.totals.minutes).toBe(879); // 266 + 613.2 = 879.2
   });
 
   it('a BOM with no panels is still computed, with a warning rather than an abort', () => {

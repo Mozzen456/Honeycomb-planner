@@ -25,7 +25,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { MODEL_ACCEPT } from '../core/modelFile';
-import { inProject } from '../core/projectParts';
+import { inProject, shoppableParts } from '../core/projectParts';
 import type { Catalog, CatalogPart, LayoutDoc, PartType } from '../core/types';
 import { isImported } from '../core/userCatalog';
 import { PartImage } from './PartImage';
@@ -61,14 +61,12 @@ const SHELVES: readonly { id: Shelf; label: string; note: string }[] = [
   { id: 'accessory', label: 'Accessories', note: 'Hooks, holders, shelves, bins' },
   { id: 'insert', label: 'Inserts', note: 'Printed hardware that clips into a cell' },
   { id: 'fastener', label: 'Fasteners', note: 'Printed screws and wall clips' },
-  { id: 'panel', label: 'Panels', note: 'The wall plates themselves' },
 ];
 
-type Sort = 'name' | 'quick' | 'light' | 'small';
+type Sort = 'name' | 'light' | 'small';
 
 const SORTS: readonly { id: Sort; label: string }[] = [
   { id: 'name', label: 'Name' },
-  { id: 'quick', label: 'Quickest to print' },
   { id: 'light', label: 'Least filament' },
   { id: 'small', label: 'Fewest cells' },
 ];
@@ -78,16 +76,6 @@ const finite = (v: number | undefined | null): number =>
 
 const cellCount = (part: CatalogPart): number =>
   Array.isArray(part.footprint) && part.footprint.length > 0 ? part.footprint.length : 1;
-
-function formatMinutes(value: number | undefined | null): string {
-  const total = Math.round(finite(value));
-  if (total <= 0) return '0 m';
-  const hours = Math.floor(total / 60);
-  const minutes = total % 60;
-  if (hours === 0) return `${minutes} m`;
-  if (minutes === 0) return `${hours} h`;
-  return `${hours} h ${minutes} m`;
-}
 
 function formatGrams(value: number | undefined | null): string {
   const fixed = finite(value).toFixed(1);
@@ -111,7 +99,6 @@ function onShelf(part: CatalogPart, shelf: Shelf, doc: LayoutDoc): boolean {
 }
 
 function compare(a: CatalogPart, b: CatalogPart, sort: Sort): number {
-  if (sort === 'quick') return finite(a.print?.minutes) - finite(b.print?.minutes);
   if (sort === 'light') return finite(a.print?.grams) - finite(b.print?.grams);
   if (sort === 'small') return cellCount(a) - cellCount(b);
   return a.name.localeCompare(b.name);
@@ -159,8 +146,6 @@ function PartCard(
           {cells} cell{cells === 1 ? '' : 's'}
           <span aria-hidden="true"> · </span>
           {estimated && <span className="lib-card__est" title="Modelled, not sliced">est.</span>}
-          {formatMinutes(part.print?.minutes)}
-          <span aria-hidden="true"> · </span>
           {formatGrams(part.print?.grams)}
         </p>
       </div>
@@ -248,7 +233,15 @@ export function PartLibrary(props: PartLibraryProps): JSX.Element {
     return () => window.removeEventListener('keydown', onKey, true);
   }, [onClose]);
 
-  const parts = catalog.parts ?? [];
+  /*
+   * The catalogue as a SHOP, which is not the whole catalogue: the wall PLATES
+   * are not on sale, because the app sizes and generates every one it draws
+   * (D97). Nobody picks a plate — the tiler picks them from the wall and the
+   * printer, and the parts list still counts every one you have to print. The
+   * rail has always applied this rule; `shoppableParts` is now the one place it
+   * is stated, so the two cannot drift.
+   */
+  const parts = useMemo(() => shoppableParts(catalog), [catalog]);
 
   const shown = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -265,7 +258,7 @@ export function PartLibrary(props: PartLibraryProps): JSX.Element {
   }, [parts, query, shelf, sort, doc]);
 
   const chosenCount = useMemo(
-    () => parts.filter((p) => p.type !== 'panel' && inProject(doc, p.id)).length,
+    () => parts.filter((p) => inProject(doc, p.id)).length,
     [parts, doc],
   );
 

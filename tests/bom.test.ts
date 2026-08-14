@@ -174,13 +174,11 @@ describe('computeBom quantities', () => {
     expect(line.type).toBe('accessory');
     expect(line.supports).toBe(true);
     expect(line.quantity).toBe(5);
-    expect(line.minutes).toBe(212); // 42.4 × 5
     expect(line.grams).toBe(61.7); // 12.34 × 5
     expect(line.metres).toBe(20.3); // 4.06 × 5
 
     expect(bom.totals.parts).toBe(5);
     expect(bom.totals.distinctParts).toBe(1);
-    expect(bom.totals.minutes).toBe(212);
     expect(bom.totals.grams).toBe(61.7);
     expect(bom.totals.metres).toBe(20.3);
   });
@@ -193,7 +191,6 @@ describe('computeBom quantities', () => {
 
     expect(bom.printed).toHaveLength(1);
     expect(bom.printed[0]!.quantity).toBe(2);
-    expect(bom.totals.minutes).toBe(600);
     expect(bom.totals.grams).toBe(200);
     expect(bom.totals.metres).toBe(66.6);
   });
@@ -209,18 +206,16 @@ describe('requirements', () => {
     expect(bom.fasteners.map((l) => [l.partId, l.quantity])).toEqual([['clip', 6]]);
   });
 
-  it('includes fastener print time and filament in the grand totals', () => {
+  it('includes fastener filament in the grand totals', () => {
     const shelf = makePart({ ...SHELF, requires: [{ partId: 'clip', count: 2 }] });
     const bom = computeBom(makeDoc({ items: repeat('shelf', 3) }), makeCatalog([shelf, CLIP]));
 
     const clip = bom.fasteners[0]!;
-    expect(clip.minutes).toBe(21); // 3.5 × 6
     expect(clip.grams).toBe(7.2); // 1.2 × 6
     expect(clip.metres).toBe(2.4); // 0.4 × 6
 
     expect(bom.totals.parts).toBe(9); // 3 shelves + 6 clips
     expect(bom.totals.distinctParts).toBe(2);
-    expect(bom.totals.minutes).toBe(148); // 42.4×3 + 3.5×6 = 148.2
     expect(bom.totals.grams).toBe(44.2); // 12.34×3 + 1.2×6 = 44.22
     expect(bom.totals.metres).toBe(14.58); // 4.06×3 + 0.4×6 = 14.58
   });
@@ -293,7 +288,6 @@ describe('rounding', () => {
     expect(bom.printed[0]!.quantity).toBe(40);
     expect(bom.printed[0]!.grams).toBe(2); // 0.05 × 40
     expect(bom.totals.grams).toBe(2);
-    expect(bom.totals.minutes).toBe(16); // 0.4 × 40
     expect(bom.totals.metres).toBe(0.68); // 0.017 × 40
   });
 
@@ -304,11 +298,10 @@ describe('rounding', () => {
     const doc = makeDoc({ items: [item('i1', 'a', 0, 0), item('i2', 'b', 1, 0)] });
     const bom = computeBom(doc, makeCatalog([a, b]));
 
-    expect(bom.printed.map((l) => [l.minutes, l.grams, l.metres])).toEqual([
-      [0, 0, 0],
-      [0, 0, 0],
+    expect(bom.printed.map((l) => [l.grams, l.metres])).toEqual([
+      [0, 0],
+      [0, 0],
     ]);
-    expect(bom.totals.minutes).toBe(1); // 0.8 rounds up, 0 + 0 would not
     expect(bom.totals.grams).toBe(0.1); // 0.08
     expect(bom.totals.metres).toBe(0.01); // 0.008
   });
@@ -450,7 +443,6 @@ describe('computeBom robustness', () => {
     expect(result.issues.some((i) => i.code === 'unknown-part')).toBe(true);
     expect(result.printed.map((l) => l.partId).sort()).toEqual(['panel3', 'shelf']);
     expect(result.totals.parts).toBe(2); // the ghost contributes nothing
-    expect(result.totals.minutes).toBe(342); // 300 + 42.4
   });
 
   it('returns zeroed totals for an empty document', () => {
@@ -462,7 +454,8 @@ describe('computeBom robustness', () => {
     expect(bom.issues).toEqual([]);
     expect(bom.totals).toEqual({
       parts: 0,
-      minutes: 0,
+      printed: 0,
+      toPrint: 0,
       grams: 0,
       metres: 0,
       distinctParts: 0,

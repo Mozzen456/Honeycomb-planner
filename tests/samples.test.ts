@@ -75,7 +75,7 @@ describe('sample exports', () => {
       `panels=${doc.panels.length} items=${doc.items.length} ` +
         `lines=${bom.printed.length}+${bom.fasteners.length} ` +
         `shopping=${bom.shopping.length} totals=${bom.totals.parts} parts, ` +
-        `${bom.totals.minutes} min, ${bom.totals.grams} g`,
+        `${bom.totals.grams} g`,
     );
     expect(bom.issues.filter((i) => i.level === 'error')).toEqual([]);
   });

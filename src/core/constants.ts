@@ -133,3 +133,58 @@ export const BEDS: Bed[] = [
   { id: 'bed350', label: '350 × 350 (Bambu X1E / large)', width: 350, depth: 350 },
   { id: 'bed400', label: '400 × 400', width: 400, depth: 400 },
 ];
+
+// ---------------------------------------------------------------------------
+// A printer that is not on the list
+// ---------------------------------------------------------------------------
+
+/** `LayoutDoc.bedId` for a bed the user typed the size of. */
+export const CUSTOM_BED_ID = 'custom';
+
+/**
+ * What a typed bed may be.
+ *
+ * The floor is one whole cell — `plateFootprintMm(1, 1)` is 27.25 × 35.4 — and
+ * below it there is no plate to make, so the solver would come back with a
+ * warning and nothing on the wall. The ceiling is a bound on a number a person
+ * types, not a claim about printers: the plate grid the solver considers is
+ * (columns × rows) and grows with the AREA of the bed, so 1000 × 1000 already
+ * offers 48 × 41 sizes and a stray extra digit would offer half a million.
+ */
+export const MIN_BED_MM = 40;
+export const MAX_BED_MM = 1000;
+
+/** A typed bed size, brought into range. Nonsense becomes the nearest bound. */
+export const clampBedMm = (mm: number): number =>
+  !Number.isFinite(mm) ? MIN_BED_MM : Math.min(MAX_BED_MM, Math.max(MIN_BED_MM, mm));
+
+/**
+ * The bed a document means, and the ONLY place that decides it.
+ *
+ * `bedId` alone cannot answer it any more: `custom` means "read the size off the
+ * document instead of the list". Everything that needs a bed — the solver, the
+ * generated plate sizes, the parts-list rail, the exports' header — asks here,
+ * so a custom bed cannot be honoured by one of them and ignored by the next.
+ *
+ * Undefined for an id that is neither a preset nor `custom`, which is what lets
+ * `solveTiling` refuse rather than quietly guess a printer (see its warning).
+ * A `custom` id with no size on the document is the same kind of nonsense and
+ * gets the same answer.
+ */
+export function bedFor(
+  bedId: string,
+  custom?: { widthMm: number; depthMm: number } | undefined,
+): Bed | undefined {
+  if (bedId !== CUSTOM_BED_ID) return BEDS.find((b) => b.id === bedId);
+  if (custom === undefined) return undefined;
+  const width = clampBedMm(custom.widthMm);
+  const depth = clampBedMm(custom.depthMm);
+  return {
+    id: CUSTOM_BED_ID,
+    // Says the size, because "Custom" on its own in an export header or a
+    // warning is not something anyone can check against their printer.
+    label: `Custom (${width} × ${depth})`,
+    width,
+    depth,
+  };
+}

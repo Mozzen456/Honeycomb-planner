@@ -13,10 +13,20 @@
    ============================================================================= */
 
 .bom-panel {
-  /* Column widths, from the space scale. The name column takes what is left. */
+  /* Column widths, from the space scale. The name column takes what is left.
+     The printed column holds a stepper — two buttons, a field and `all` — so it
+     is the widest of the three, and the name column is what gives way. */
+  /* Its heading, "To print", is wider than any quantity it holds and wraps to
+     two lines. Widening the column to fit the heading on one was measured and
+     did not: at 40px it still wrapped, and the 8px came off the NAME column,
+     which is the one carrying a real part name. So the heading wraps and the
+     name keeps the room. */
   --bom-col-qty: var(--space-6);
-  --bom-col-time: var(--space-8);
-  --bom-col-filament: var(--space-8);
+  --bom-col-printed: calc(var(--space-8) + var(--space-6) + var(--space-4));
+  /* Narrower than it was: "3813.5 g" and "1278.7 m" both measure ~42 px at the
+     micro size, and the 16 px this gives back goes to the part name, which is
+     the column that has to hold a real file name. */
+  --bom-col-filament: var(--space-7);
 
   display: grid;
   grid-template-rows: auto minmax(var(--space-0), 1fr) auto;
@@ -53,36 +63,44 @@
   line-height: var(--line-height-tight);
 }
 
-.bom-panel__doc,
 .bom-panel__wall {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   line-height: var(--line-height-snug);
-}
-
-.bom-panel__doc {
-  color: var(--text-secondary);
-  font-size: var(--font-size-xs);
-}
-
-.bom-panel__wall {
   color: var(--text-tertiary);
   font-size: var(--font-size-2xs);
   letter-spacing: var(--letter-spacing-wide);
 }
 
-.bom-panel__exports {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-
 /* The export row consumes `.button` from App.css rather than hand-rolling its
    own chrome — which is what it used to do, at 12px against the top bar's 13px,
    so the two rows of buttons in the same product did not match. Only the group
-   layout belongs here now. `.bom-export--primary` maps onto `.button--primary`:
-   this list exists to be printed, so Print is the one filled action. */
+   layout belongs here.
+
+   One segmented strip rather than four buttons: exporting is a utility, and as
+   four bordered controls with a filled blue Print at the front it carried the
+   weight of the panel's primary action. */
+.bom-panel__exports {
+  display: flex;
+  align-items: center;
+  gap: var(--space-0-5);
+  padding: var(--space-0-5);
+  border: var(--border-width-hair) solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+}
+
+/* Equal shares of the strip, so it reads as one segmented control rather than
+   as four buttons that happen to be adjacent. No wrapping: four labels and an
+   icon measure ~246px inside a 320px panel, and a fifth format would have to
+   earn its place rather than silently start a second row. */
+.bom-export {
+  flex: 1 1 0;
+  min-inline-size: 0;
+  padding-inline: var(--space-1);
+  gap: var(--space-1);
+}
 
 /* -----------------------------------------------------------------------------
    Scroll region
@@ -270,8 +288,8 @@
   inline-size: var(--bom-col-qty);
 }
 
-.bom-table__col--time {
-  inline-size: var(--bom-col-time);
+.bom-table__col--printed {
+  inline-size: var(--bom-col-printed);
 }
 
 .bom-table__col--filament {
@@ -296,9 +314,23 @@
   padding-block: var(--space-1);
   color: var(--text-tertiary);
   font-size: var(--font-size-2xs);
-  font-weight: var(--font-weight-regular);
+  font-weight: var(--font-weight-medium);
   letter-spacing: var(--letter-spacing-wide);
   border-block-end-color: var(--border-subtle);
+  /* A HEADER wraps; the figures under it do not.
+     `.bom-table__num` sets `white-space: nowrap` so a measurement is never
+     broken across lines, and the header cells carry that class too — so in a
+     32px quantity column under `table-layout: fixed`, the words "To print" ran
+     straight over the Part column beside them and the panel's own column
+     headings read "To prinPart".
+
+     `overflow-wrap: normal`, not `break-word`: these are two-word headings in a
+     narrow column, and breaking INSIDE a word gave "TO / PRI / NT". Sentence
+     case rather than the eyebrow's caps for the same reason — uppercase plus
+     `--letter-spacing-caps` makes "PRINT" wider than the column it names, and a
+     column header is not a section heading. */
+  white-space: normal;
+  overflow-wrap: normal;
 }
 
 /* Every number the user compares down a column: right-aligned, tabular, and
@@ -314,9 +346,153 @@
   font-weight: var(--font-weight-medium);
 }
 
-.bom-line__time,
 .bom-line__filament {
   color: var(--text-secondary);
+}
+
+/* -----------------------------------------------------------------------------
+   Printed counts — the stepper on each line
+   --------------------------------------------------------------------------
+
+   The row does NOT go faint when it is finished: a printed line is still a
+   thing you have to fetch, count and mount, and half the list dropping to
+   tertiary as a build progresses makes the list harder to read the further you
+   get. The tick on the count and the flag beside the name carry the state. */
+
+/* Nothing in the stepper may SHRINK. The column is narrow and flex's default is
+   to give way, which took the buttons to 15 px and the field to 23 — a target
+   nobody can hit and a field that cannot show "12". They are sized here and the
+   column is sized to hold them; `.hit-area` supplies the real 44 px target
+   without asking the layout for it. */
+.bom-printed {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  /* No gap between − field + : they read as one stepper, and the 4 px saved is
+     4 px the part name keeps. */
+  gap: var(--space-0);
+}
+
+.bom-printed > * {
+  flex: none;
+}
+
+.bom-printed__step {
+  display: grid;
+  place-items: center;
+  inline-size: var(--icon-size-md);
+  block-size: var(--icon-size-md);
+  padding: var(--space-0);
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1;
+  background-color: var(--surface-2);
+  border: var(--border-width-hair) solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.bom-printed__step:hover:not(:disabled) {
+  color: var(--text-primary);
+  background-color: var(--surface-3);
+}
+
+.bom-printed__step:disabled {
+  color: var(--text-disabled);
+  cursor: default;
+}
+
+/* The typed count. Narrow on purpose: three digits is a batch, and the spinner
+   arrows a browser adds would eat the width the digits need. */
+.bom-printed__field {
+  inline-size: calc(var(--space-5) + var(--space-1));
+  padding: var(--space-0-5) var(--space-0-5);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--font-size-xs);
+  text-align: end;
+  background-color: var(--surface-0);
+  border: var(--border-width-hair) solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.bom-printed__field::-webkit-outer-spin-button,
+.bom-printed__field::-webkit-inner-spin-button {
+  margin: 0;
+  appearance: none;
+}
+
+.bom-printed__field {
+  appearance: textfield;
+}
+
+/* A FIXED width, because the label changes with the state: sized to content,
+   "none" is 11 px wider than "all" and the whole stepper slid left out of its
+   own column and over the part name. Measured in the running app. */
+.bom-printed__all {
+  inline-size: var(--space-6);
+  margin-inline-start: var(--space-0-5);
+  padding: var(--space-0-5) var(--space-0);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-2xs);
+  letter-spacing: var(--letter-spacing-wide);
+  text-align: center;
+  border-radius: var(--radius-sm);
+}
+
+.bom-printed__all:hover {
+  color: var(--text-primary);
+  background-color: var(--surface-2);
+}
+
+.bom-line__flag--done {
+  color: var(--accent);
+}
+
+/* The colour swatch on a line, in the heading beside the name. `flex: none` for
+   the same reason the stepper's parts are: this column has no width to give. */
+.bom-line__swatch {
+  flex: none;
+}
+
+/* What to load in the printer, as chips. Small and square — a colour needs no
+   more than that to be recognised against the wall. */
+.bom-totals__palette {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-2xs);
+}
+
+.bom-totals__palette-label {
+  letter-spacing: var(--letter-spacing-wide);
+}
+
+.bom-totals__chip {
+  inline-size: var(--space-3);
+  block-size: var(--space-3);
+  border: var(--border-width-hair) solid var(--border-strong);
+  border-radius: var(--radius-sm);
+}
+
+/* The line the wall is lit for. A tinted row and an accent bar down the leading
+   edge, because in a sixty-line list the plates light up somewhere off screen
+   and you need to see WHICH line you clicked without scrolling back. */
+.bom-line[data-lit='true'] {
+  background-color: var(--accent-bg);
+  box-shadow: inset var(--border-width-thick) 0 0 0 var(--accent);
+}
+
+.bom-line[data-lit='true'] .bom-line__name {
+  color: var(--text-primary);
+}
+
+/* Nothing left on this line: the count reads 0, so it steps back out of the
+   column you are scanning for work. The name stays at full strength. */
+.bom-line--done .bom-line__qty {
+  color: var(--text-tertiary);
+  font-weight: var(--font-weight-regular);
 }
 
 .bom-line__part {
@@ -473,12 +649,36 @@
   line-height: var(--line-height-snug);
 }
 
+/* The slicer note takes the room that is left; the reset keeps its own width, so
+   a long profile name cannot squeeze the button away. */
+.bom-totals__foot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-inline-size: var(--space-0);
+}
+
 .bom-totals__note {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-tertiary);
   font-size: var(--font-size-2xs);
+}
+
+.bom-totals__reset {
+  flex: none;
+  padding: var(--space-0-5) var(--space-1);
+  color: var(--text-secondary);
+  font-size: var(--font-size-2xs);
+  white-space: nowrap;
+  border-radius: var(--radius-sm);
+}
+
+.bom-totals__reset:hover {
+  color: var(--text-primary);
+  background-color: var(--surface-3);
 }
 
 /* -----------------------------------------------------------------------------
@@ -500,6 +700,14 @@
      gives it a full-size hit rectangle, so the global coarse-pointer growth is
      undone here rather than being allowed to deform the callout. */
   .bom-issue__dismiss {
+    min-block-size: var(--icon-size-md);
+  }
+
+  /* Same for the printed stepper: `.hit-area` already gives each button a
+     44 px hit rectangle, so growing the boxes themselves would only push the
+     part name out of a column that has none to spare. */
+  .bom-printed__step,
+  .bom-printed__all {
     min-block-size: var(--icon-size-md);
   }
 }

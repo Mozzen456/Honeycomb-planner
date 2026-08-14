@@ -12,14 +12,28 @@
  * touches no DOM API: it returns markup, and the caller decides whether that
  * becomes a Blob, a new window or a file.
  *
- * Convention, set by `bom.ts` and followed here: `BomLine.minutes`, `.grams`
- * and `.metres` are the **line totals** — the catalogue's per-part estimate
- * already multiplied by `quantity`. The per-unit columns in the CSV are derived
- * by dividing back out, which is why they are the only numbers in this file
- * that do any arithmetic.
+ * Convention, set by `bom.ts` and followed here: `BomLine.grams` and `.metres`
+ * are the **line totals** — the catalogue's per-part estimate already multiplied
+ * by `quantity`. The per-unit columns in the CSV come from the line's own
+ * per-unit fields, never from dividing a rounded total back out.
+ *
+ * Every sheet carries what is STILL TO PRINT as well as the quantity, because a
+ * build happens over weeks: the copy taped to the printer is worth nothing if it
+ * cannot tell you what today's job is.
  */
 
+import { bedFor } from './constants';
 import type { Bom, BomLine, LayoutDoc } from './types';
+
+/**
+ * The printer, as a person can check it against their own.
+ *
+ * The id alone was fine while every bed was a preset; a custom one prints as
+ * "custom", which tells a reader nothing about the plates in front of them.
+ * `bedFor` gives the size back with it.
+ */
+const bedName = (doc: Partial<LayoutDoc>): string =>
+  bedFor(doc.bedId ?? '', doc.customBed)?.label ?? doc.bedId ?? '';
 
 // ---------------------------------------------------------------------------
 // Number and text formatting
@@ -32,18 +46,11 @@ function num(value: number, dp = 2): string {
   return fixed.includes('.') ? fixed.replace(/\.?0+$/, '') : fixed;
 }
 
-/** 195 → "3 h 15 min". Print times are read as hours, never as 195. */
-export function formatMinutes(value: number): string {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return '0 min';
-  const total = Math.round(value);
-  const h = Math.floor(total / 60);
-  const m = total % 60;
-  if (h === 0) return `${m} min`;
-  if (m === 0) return `${h} h`;
-  return `${h} h ${m} min`;
-}
-
 const lines = (parts: string[]): string => parts.join('\n');
+
+/** A whole count, never negative — quantities, printed, still to print. */
+const whole = (value: number | undefined | null): number =>
+  typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.round(value)) : 0;
 
 // ---------------------------------------------------------------------------
 // CSV — RFC 4180
@@ -52,6 +59,8 @@ const lines = (parts: string[]): string => parts.join('\n');
 const CSV_HEADER = [
   'section',
   'quantity',
+  'printed',
+  'to_print',
   'part_id',
   'part',
   'type',
@@ -61,10 +70,9 @@ const CSV_HEADER = [
   'print_estimated',
   'fastener_count_unknown',
   'already_in_the_wall',
-  'minutes_each',
+  'color',
   'grams_each',
   'metres_each',
-  'minutes_total',
   'grams_total',
   'metres_total',
 ];
@@ -86,16 +94,18 @@ const csvRow = (cells: (string | number)[]): string => cells.map(csvField).join(
  * Per-unit figures come from the line's own catalogue values.
  *
  * They used to be computed as `total / quantity`, which divides a number that
- * has already been rounded: six parts at 54.63 minutes each total 328, and
- * 328 / 6 printed as 54.6. The spreadsheet then disagreed with the catalogue in
- * its last digit for no reason a reader could see. `bom.ts` now carries the
- * unrounded per-unit value through, and this reads it.
+ * has already been rounded: six parts at 4.63 g each total 27.8, and 27.8 / 6
+ * printed as 4.6. The spreadsheet then disagreed with the catalogue in its last
+ * digit for no reason a reader could see. `bom.ts` carries the unrounded
+ * per-unit value through, and this reads it.
  */
 function csvLineFor(section: string, line: BomLine): (string | number)[] {
   const q = Number.isFinite(line.quantity) ? line.quantity : 0;
   return [
     section,
     num(q, 0),
+    num(whole(line.printed), 0),
+    num(whole(line.toPrint), 0),
     line.partId ?? '',
     line.name ?? '',
     line.type ?? 'unknown',
@@ -105,10 +115,9 @@ function csvLineFor(section: string, line: BomLine): (string | number)[] {
     line.estimated ? 'yes' : 'no',
     line.fastenersUnknown ? 'yes' : 'no',
     num(line.providedBySockets ?? 0, 0),
-    num(line.minutesEach ?? 0),
+    line.color ?? '',
     num(line.gramsEach ?? 0),
     num(line.metresEach ?? 0),
-    num(line.minutes),
     num(line.grams),
     num(line.metres),
   ];
@@ -124,27 +133,15 @@ export function toCsv(bom: Bom): string {
   for (const line of bom.printed ?? []) rows.push(csvRow(csvLineFor('printed', line)));
   for (const line of bom.fasteners ?? []) rows.push(csvRow(csvLineFor('fastener', line)));
   for (const buy of bom.shopping ?? []) {
-    rows.push(
-      csvRow([
-        'shopping',
-        num(Number.isFinite(buy.count) ? buy.count : 0, 0),
-        '',
-        buy.item ?? '',
-        'bought',
-        '',
-        '',
-        '',
-        '',
-        '',
-        '',
-        '',
-        '',
-        '',
-        '',
-        '',
-        '',
-      ]),
-    );
+    // Bought, not printed: `printed` and `to_print` are left EMPTY rather than
+    // zeroed. A zero would read as "none of these bought yet", which is a claim
+    // this app has no way to make — nobody ticks a screw off in here.
+    const row: (string | number)[] = new Array(CSV_HEADER.length).fill('');
+    row[0] = 'shopping';
+    row[1] = num(Number.isFinite(buy.count) ? buy.count : 0, 0);
+    row[CSV_HEADER.indexOf('part')] = buy.item ?? '';
+    row[CSV_HEADER.indexOf('type')] = 'bought';
+    rows.push(csvRow(row));
   }
   return rows.join('\r\n') + '\r\n';
 }
@@ -174,15 +171,22 @@ function mdText(value: string): string {
 
 function checklistLine(line: BomLine): string {
   const q = Number.isFinite(line.quantity) ? line.quantity : 0;
+  const done = whole(line.printed);
+  const left = whole(line.toPrint);
   const detail: string[] = [];
-  if (line.minutes > 0) detail.push(formatMinutes(line.minutes));
+  // What is LEFT leads, and the box is ticked when there is nothing left — the
+  // checklist is the same list as the panel's counts, in a file you can carry.
+  if (done > 0) detail.push(left > 0 ? `${num(done, 0)} of ${num(q, 0)} printed` : 'all printed');
+  // Which filament to load. Before the weight, because it is what you change on
+  // the machine rather than something you read off it.
+  if (line.color) detail.push(`in ${line.color}`);
   if (line.grams > 0) detail.push(`${num(line.grams, 1)} g`);
   if (line.supports) detail.push('needs supports');
   // The sheet you carry to the printer is the copy that gets used, so the two
   // "this is a model, not a measurement" markers travel with it. On screen they
   // are the `est.` badge; here they are words, because a badge does not print.
   if (line.needsReview) detail.push('footprint estimated');
-  if (line.estimated) detail.push('print time estimated');
+  if (line.estimated) detail.push('filament estimated');
   // The one that stops a build: you get to the wall and find out the parts list
   // never knew how many inserts this thing takes.
   if (line.fastenersUnknown) detail.push('CHECK how many inserts this needs');
@@ -193,7 +197,12 @@ function checklistLine(line: BomLine): string {
   }
   const tail = detail.length ? ` — ${detail.join(', ')}` : '';
   const file = line.file ? ` \`${mdText(line.file)}\`` : '';
-  return `- [ ] **${num(q, 0)} ×** ${mdText(line.name || line.partId)}${tail}${file}`;
+  const box = left === 0 && q > 0 ? '- [x]' : '- [ ]';
+  // The count is what is STILL TO PRINT, which is the number you act on. The
+  // quantity is beside it whenever the two differ, so the sheet never looks like
+  // it has quietly changed the size of the job.
+  const count = left === q ? `${num(q, 0)} ×` : `${num(left, 0)} of ${num(q, 0)} ×`;
+  return `${box} **${count}** ${mdText(line.name || line.partId)}${tail}${file}`;
 }
 
 function section(title: string, body: string[]): string[] {
@@ -218,14 +227,15 @@ export function toMarkdownChecklist(bom: Bom, doc: LayoutDoc): string {
   out.push(`# ${mdText(doc.name || 'Untitled layout')} — build checklist`);
   out.push('');
   out.push(
-    `Wall ${num(doc.wall?.widthMm ?? 0)} × ${num(doc.wall?.heightMm ?? 0)} mm · bed \`${mdText(doc.bedId ?? '')}\``,
+    `Wall ${num(doc.wall?.widthMm ?? 0)} × ${num(doc.wall?.heightMm ?? 0)} mm · bed \`${mdText(bedName(doc))}\``,
   );
   out.push('');
   out.push('| Total | Value |');
   out.push('| --- | ---: |');
-  out.push(`| Parts to print | ${mdCell(num(totals?.parts ?? 0, 0))} |`);
+  out.push(`| Still to print | ${mdCell(num(totals?.toPrint ?? 0, 0))} |`);
+  out.push(`| Already printed | ${mdCell(num(totals?.printed ?? 0, 0))} |`);
+  out.push(`| Parts in all | ${mdCell(num(totals?.parts ?? 0, 0))} |`);
   out.push(`| Distinct parts | ${mdCell(num(totals?.distinctParts ?? 0, 0))} |`);
-  out.push(`| Print time | ${mdCell(formatMinutes(totals?.minutes ?? 0))} |`);
   out.push(`| Filament | ${mdCell(`${num(totals?.grams ?? 0, 1)} g`)} |`);
   out.push(`| Filament length | ${mdCell(`${num(totals?.metres ?? 0, 1)} m`)} |`);
 
@@ -275,18 +285,23 @@ function htmlRows(rows: BomLine[]): string {
   return rows
     .map((line) => {
       const q = Number.isFinite(line.quantity) ? line.quantity : 0;
+      const done = whole(line.printed);
+      const left = whole(line.toPrint);
       return lines([
-        '<tr>',
-        '  <td class="tick"></td>',
-        `  <td class="qty">${escapeHtml(num(q, 0))}</td>`,
+        left === 0 && q > 0 ? '<tr class="done">' : '<tr>',
+        // Pre-ticked when there is nothing left to print, so the sheet you take
+        // to the printer starts where the app left off rather than at zero.
+        left === 0 && q > 0 ? '  <td class="tick tick--done"></td>' : '  <td class="tick"></td>',
+        `  <td class="qty">${escapeHtml(num(left, 0))}</td>`,
         `  <td class="name">${escapeHtml(line.name || line.partId)}` +
           (line.file ? `<span class="file">${escapeHtml(line.file)}</span>` : '') +
+          (line.color ? `<span class="flag">${escapeHtml(line.color)}</span>` : '') +
           (line.supports ? '<span class="flag">supports</span>' : '') +
           (line.needsReview ? '<span class="flag">footprint est.</span>' : '') +
-          (line.estimated ? '<span class="flag">print est.</span>' : '') +
+          (line.estimated ? '<span class="flag">filament est.</span>' : '') +
           (line.fastenersUnknown ? '<span class="flag">check fixings</span>' : '') +
           '</td>',
-        `  <td class="n">${escapeHtml(formatMinutes(line.minutes))}</td>`,
+        `  <td class="n">${escapeHtml(done > 0 ? `${num(done, 0)} of ${num(q, 0)}` : num(q, 0))}</td>`,
         `  <td class="n">${escapeHtml(num(line.grams, 1))} g</td>`,
         `  <td class="n">${escapeHtml(num(line.metres, 1))} m</td>`,
         '</tr>',
@@ -300,7 +315,7 @@ function htmlSection(title: string, rows: BomLine[]): string {
     '<section>',
     `<h2>${escapeHtml(title)}</h2>`,
     '<table>',
-    '<thead><tr><th class="tick"></th><th class="qty">Qty</th><th>Part</th><th class="n">Time</th><th class="n">Filament</th><th class="n">Length</th></tr></thead>',
+    '<thead><tr><th class="tick"></th><th class="qty">To print</th><th>Part</th><th class="n">Printed</th><th class="n">Filament</th><th class="n">Length</th></tr></thead>',
     '<tbody>',
     htmlRows(rows),
     '</tbody>',
@@ -354,6 +369,11 @@ thead { display: table-header-group; }
 td.tick, th.tick { width: 7mm; }
 td.tick::before { content: ""; display: block; width: 4.5mm; height: 4.5mm;
                   border: 1pt solid #000; margin-top: 0.6mm; }
+/* Already printed: the box arrives ticked, so the sheet starts where the app
+   left off. Solid rather than a drawn tick — a laser printer at 8pt makes a
+   glyph look like dirt, and a filled square cannot be misread. */
+td.tick--done::before { background: #000; }
+tr.done td.name, tr.done td.qty, tr.done td.n { color: #555; }
 td.qty, th.qty { width: 12mm; font-weight: 700; }
 td.n, th.n { text-align: right; width: 22mm; white-space: nowrap; }
 td.name .file { display: block; font-size: 8pt; word-break: break-all; }
@@ -415,13 +435,14 @@ tr.empty td { font-style: italic; }
     `<h1>${escapeHtml(title)}</h1>`,
     '<p class="meta">' +
       `Wall ${escapeHtml(num(doc.wall?.widthMm ?? 0))} &times; ${escapeHtml(num(doc.wall?.heightMm ?? 0))} mm` +
-      ` &middot; bed ${escapeHtml(doc.bedId ?? '')}` +
+      ` &middot; bed ${escapeHtml(bedName(doc))}` +
       ` &middot; ${escapeHtml(num(doc.panels?.length ?? 0, 0))} panels` +
       ` &middot; ${escapeHtml(num(doc.items?.length ?? 0, 0))} placed parts</p>`,
     '<dl class="totals">',
+    `<div><dt>To print</dt><dd>${escapeHtml(num(totals?.toPrint ?? 0, 0))}</dd></div>`,
+    `<div><dt>Printed</dt><dd>${escapeHtml(num(totals?.printed ?? 0, 0))}</dd></div>`,
     `<div><dt>Parts</dt><dd>${escapeHtml(num(totals?.parts ?? 0, 0))}</dd></div>`,
     `<div><dt>Distinct</dt><dd>${escapeHtml(num(totals?.distinctParts ?? 0, 0))}</dd></div>`,
-    `<div><dt>Print time</dt><dd>${escapeHtml(formatMinutes(totals?.minutes ?? 0))}</dd></div>`,
     `<div><dt>Filament</dt><dd>${escapeHtml(num(totals?.grams ?? 0, 1))} g</dd></div>`,
     `<div><dt>Length</dt><dd>${escapeHtml(num(totals?.metres ?? 0, 1))} m</dd></div>`,
     '</dl>',
@@ -440,7 +461,7 @@ tr.empty td { font-style: italic; }
       '</table>',
       '</section>',
     ]),
-    '<p class="foot">Honeycomb Planner print list. Times and filament are slicer estimates for the recorded profile.</p>',
+    '<p class="foot">Honeycomb Planner print list. Quantities are what is still to print; filament figures are slicer estimates for the recorded profile.</p>',
     '</body>',
     '</html>',
     '',

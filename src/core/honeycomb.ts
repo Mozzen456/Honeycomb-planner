@@ -71,23 +71,43 @@ export interface ProfileLevel {
 }
 
 /**
- * The stepped bore, bottom (wall face, z = 0) to top (the mouth, z = 8).
+ * The stepped bore, from the WALL FACE (z = 0) out to the room face (z = 8).
  *
  * Straight out of `constants.ts`, which is straight out of the measurement. The
- * four band depths sum to exactly `PANEL_DEPTH` — 0.5 + 4.6 + 0.9 + 2.0 = 8.0 —
+ * four band depths sum to exactly `PANEL_DEPTH` — 2.0 + 0.9 + 4.6 + 0.5 = 8.0 —
  * and `assertProfile` below refuses to let that drift.
+ *
+ * **The 22.0 mouth goes against the WALL, and the 20.8 flare faces the room.**
+ * It was the other way round, and the app drew every plate turned over, which is
+ * what "the tapered part should be towards the wall" was reporting. The proof is
+ * the INSERT, not the plate: an insert's flange is 0.3–2.5 mm, its body 2.5–6.5,
+ * and its snap barbs peak at 20.735 mm across flats at z = 8.2–8.6 (HSW-SPEC §5).
+ * With the flange seated on the face, those barbs sit 5.7–6.1 mm into the plate.
+ * Entered from the FLARE face that is 0.5 flare + 4.6 throat + 0.9 chamfer = the
+ * point where the bore opens to 21.3–22.0, so the barbs spring out and catch —
+ * which is the sentence the spec already had. Entered from the MOUTH face the
+ * same barbs sit at 5.7–6.1 mm, which is inside the 20.0 throat: compressed,
+ * gripping nothing, and the insert would not stay in.
+ *
+ * So z = 0 here is the face against the wall AND the face on the printer's bed;
+ * the plate is printed mouth-down. That trades the 38.7° entry flare for the 48°
+ * lead-in as the only overhang, over 0.9 mm — steep, short and unsupported by
+ * nothing, and the alternative is a plate you cannot clip an insert into.
  */
 export const BORE_PROFILE: readonly ProfileLevel[] = [
-  { zMm: 0, acrossFlatsMm: CELL.entryFlareAcrossFlats },
-  { zMm: CELL.entryFlareDepth, acrossFlatsMm: CELL.throatAcrossFlats },
-  { zMm: CELL.entryFlareDepth + CELL.throatDepth, acrossFlatsMm: CELL.throatAcrossFlats },
+  { zMm: 0, acrossFlatsMm: CELL.mouthAcrossFlats },
+  { zMm: CELL.mouthDepth, acrossFlatsMm: CELL.mouthAcrossFlats },
   {
-    zMm: CELL.entryFlareDepth + CELL.throatDepth + CELL.chamferDepth,
-    acrossFlatsMm: CELL.mouthAcrossFlats,
+    zMm: CELL.mouthDepth + CELL.chamferDepth,
+    acrossFlatsMm: CELL.throatAcrossFlats,
   },
   {
-    zMm: CELL.entryFlareDepth + CELL.throatDepth + CELL.chamferDepth + CELL.mouthDepth,
-    acrossFlatsMm: CELL.mouthAcrossFlats,
+    zMm: CELL.mouthDepth + CELL.chamferDepth + CELL.throatDepth,
+    acrossFlatsMm: CELL.throatAcrossFlats,
+  },
+  {
+    zMm: CELL.mouthDepth + CELL.chamferDepth + CELL.throatDepth + CELL.entryFlareDepth,
+    acrossFlatsMm: CELL.entryFlareAcrossFlats,
   },
 ];
 

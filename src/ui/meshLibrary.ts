@@ -21,6 +21,8 @@
 import * as THREE from 'three';
 
 import { AXES, detect, type Detection } from '../core/detect';
+import { cellsBoundsMm, panelCells } from '../core/hex';
+import { buildHoneycombMesh } from '../core/honeycomb';
 import { measureInsertSeat, type InsertSeat } from '../core/insertSeat';
 import { parseModelFile } from '../core/modelFile';
 import { mountingOf } from '../core/overrides';
@@ -51,6 +53,61 @@ export function forgetPartMesh(partId: string): void {
   const pending = cache.get(partId);
   cache.delete(partId);
   void pending?.then((m) => m?.geometry.dispose());
+}
+
+/**
+ * A `SolidMesh` from the generator as three.js geometry, optionally shifted.
+ *
+ * Non-indexed on purpose, so `computeVertexNormals` gives flat shading per
+ * triangle — which is what a printed plate looks like and what makes the
+ * stepped bore read as a step rather than a smudge.
+ */
+export function solidToGeometry(
+  mesh: { positions: ArrayLike<number> },
+  dx = 0,
+  dy = 0,
+): THREE.BufferGeometry {
+  const src = mesh.positions;
+  const pos = new Float32Array(src.length);
+  for (let i = 0; i < src.length; i += 3) {
+    pos[i] = src[i]! + dx;
+    pos[i + 1] = src[i + 1]! + dy;
+    pos[i + 2] = src[i + 2]!;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.computeVertexNormals();
+  return geo;
+}
+
+const plateCache = new Map<string, THREE.BufferGeometry>();
+
+/**
+ * A plain `columns × rows` plate, centred on its own block, wall face at z = 0.
+ *
+ * From the GENERATOR rather than from `models/`, and that is the point: since
+ * the 22.0 mouth goes against the wall (D97), a shipped plate would have to be
+ * drawn turned over, and a printed plate turned over is a MIRRORED cell block —
+ * its holes land between the cells anything else is drawn on. The generator
+ * builds the plate from the cells instead, so it cannot disagree with them.
+ *
+ * Cached per size and never disposed: there are seven of them at most, they are
+ * shared by whoever asks, and a disposal here would blank a plate somebody else
+ * is still drawing.
+ */
+export function plateGeometry(columns: number, rows: number): THREE.BufferGeometry {
+  const key = `${columns}x${rows}`;
+  const had = plateCache.get(key);
+  if (had !== undefined) return had;
+  const cells = panelCells({ q: 0, r: 0 }, columns, rows);
+  const b = cellsBoundsMm(cells);
+  const geo = solidToGeometry(
+    buildHoneycombMesh({ cells, originAtZero: false }),
+    -(b.minX + b.maxX) / 2,
+    -(b.minY + b.maxY) / 2,
+  );
+  plateCache.set(key, geo);
+  return geo;
 }
 
 /**

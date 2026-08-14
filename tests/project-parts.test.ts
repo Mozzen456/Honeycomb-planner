@@ -19,8 +19,8 @@ import { describe, expect, it, beforeEach } from 'vitest';
 
 import { deserialize, serialize } from '../src/core/persist';
 import {
-  inProject, MAX_PROJECT_PARTS, projectPartIds, resolveProjectParts, withPartAdded,
-  withPartRemoved, withPartsAdded,
+  inProject, isShoppable, MAX_PROJECT_PARTS, projectPartIds, resolveProjectParts,
+  shoppableParts, withPartAdded, withPartRemoved, withPartsAdded,
 } from '../src/core/projectParts';
 import { Store, emptyDoc, __resetIds } from '../src/core/store';
 import type { Catalog, CatalogPart, Hex, LayoutDoc } from '../src/core/types';
@@ -233,5 +233,54 @@ describe('the list survives a save and a load', () => {
     const res = deserialize(JSON.stringify({ ...emptyDoc(), library: 'hook' }));
     expect(res.doc).not.toBeNull();
     expect(res.doc?.library).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// What the catalogue actually offers
+// ---------------------------------------------------------------------------
+
+describe('the catalogue as a shop', () => {
+  /**
+   * The wall PLATES are not on sale.
+   *
+   * The app sizes and generates every plate it draws (D97), so the shipped panel
+   * entries are not things anyone picks: the tiler decides which plates a wall
+   * needs, and what you print is the file the app writes. They stay in the
+   * catalogue — the solver reads their sizes with "Fit to printer" off, the
+   * parts list costs a generated plate against the biggest of them — so this is
+   * about the SHELVES, not about the catalogue.
+   */
+  it('offers everything except the shipped plates', () => {
+    const shown = shoppableParts(catalog).map((p) => p.id);
+    expect(shown).not.toContain('plate');
+    expect(shown).toContain('hook');
+    expect(shown).toContain('bin');
+    // ...and the plate is still in the catalogue for everyone who needs it.
+    expect(catalog.parts.map((p) => p.id)).toContain('plate');
+  });
+
+  it('keeps a plate the user IMPORTED on the shelves', () => {
+    // `typeFromName` calls anything named `wall-honeycomb…` a panel, and an
+    // imported one can still be placed by hand — so hiding it would take
+    // somebody's own upload off the shelves, and the library is the only place
+    // it can be looked at or deleted.
+    const mine = {
+      ...part('user/my-plate', { type: 'panel' }),
+      measurement: { imported: true },
+    } as unknown as CatalogPart;
+    expect(isShoppable(mine)).toBe(true);
+    expect(shoppableParts({ ...catalog, parts: [...catalog.parts, mine] }).map((p) => p.id))
+      .toContain('user/my-plate');
+  });
+
+  it('agrees with the rail, which is the same rule', () => {
+    // Two readers of one fact is the recurring failure here (D50, D52, D66):
+    // the library shows what you can choose, the rail shows what you chose.
+    for (const p of catalog.parts) {
+      const d = withPartsAdded(emptyDoc(), [p.id]);
+      const inRail = resolveProjectParts(d, catalog).parts.some((x) => x.id === p.id);
+      expect(inRail, p.id).toBe(isShoppable(p));
+    }
   });
 });

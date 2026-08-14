@@ -9,9 +9,10 @@
  *
  *  R1. Full precision is kept in the accumulators and rounded exactly once, at
  *      the boundary. Totals are summed from unrounded per-unit values, never
- *      from the rounded numbers on the lines — 60 lines each rounded to the
- *      whole minute drift by tens of minutes, which is a wrong BOM that looks
- *      right. Grams -> 1 dp, metres -> 2 dp, minutes -> whole.
+ *      from the rounded numbers on the lines — 60 lines each rounded to a tenth
+ *      of a gram drift by grams, which is a wrong BOM that looks right. Grams ->
+ *      1 dp, metres -> 2 dp. Counts (quantity, printed, to print) are whole
+ *      things and are never rounded at all: they are counted.
  *
  *  R2. A part appears on exactly one line. Inserts and fasteners (catalogue
  *      `type` of 'insert' or 'fastener') go to `Bom.fasteners`, everything else
@@ -34,6 +35,7 @@
  *      lines by name then partId, shopping by item name, issues grouped by code.
  */
 
+import { colorOfLine as lineColor } from './colors';
 import { customPanelGroups, isCustomPanel } from './customiser';
 import { fastenerCells, fixingsFor, JUNCTION_FIXING_ID, type FixingPlan } from './fixings';
 import { fastenersNeedReview, socketProvidesOf, socketsOf } from './overrides';
@@ -96,9 +98,28 @@ function roundTo(value: number, dp: number): number {
   return Object.is(rounded, -0) ? 0 : rounded;
 }
 
-const roundMinutes = (v: number): number => roundTo(v, 0);
 const roundGrams = (v: number): number => roundTo(v, 1);
 const roundMetres = (v: number): number => roundTo(v, 2);
+
+/**
+ * How many of this line are already printed, read off the document.
+ *
+ * Whole things only, never negative, and CAPPED at what the layout asks for —
+ * the document is allowed to remember that you printed eight of something the
+ * wall currently needs three of (see `LayoutDoc.printed`), but a line saying
+ * "8 of 3 printed, −5 to go" is not a fact about anything. The cap lives here,
+ * at the one place a line is built, so the panel, the exports and the totals
+ * cannot each pick a different answer.
+ */
+function printedOf(
+  progress: Record<string, number> | undefined,
+  partId: string,
+  quantity: number,
+): { printed: number; toPrint: number } {
+  const raw = progress?.[partId];
+  const done = Math.min(quantity, Math.max(0, Math.floor(finite(raw))));
+  return { printed: done, toPrint: Math.max(0, quantity - done) };
+}
 
 function bump(map: Map<string, number>, key: string, amount: number): void {
   map.set(key, (map.get(key) ?? 0) + amount);
@@ -146,15 +167,19 @@ function biggestPanel(index: ReadonlyMap<string, CatalogPart>): CatalogPart | un
 const isFastener = (part: CatalogPart): boolean =>
   part.type === 'insert' || part.type === 'fastener';
 
+/**
+ * What one of these costs to print. Filament only: the catalogue still carries
+ * the slicer's `minutes`, and the parts list deliberately does not report it —
+ * a time is a property of the machine and the profile, not of the build, and
+ * what the list is asked is what is LEFT to print (see `LayoutDoc.printed`).
+ */
 function estimateOf(part: CatalogPart): {
-  minutes: number;
   grams: number;
   metres: number;
   supports: boolean;
 } {
   const print = part.print;
   return {
-    minutes: finite(print?.minutes),
     grams: finite(print?.grams),
     metres: finite(print?.metres),
     supports: print?.supports === true,
@@ -242,6 +267,64 @@ function mountsThroughSocket(
   index: ReadonlyMap<string, CatalogPart>,
 ): boolean {
   return asArray(part?.requires).some((r) => r && isEmptyInsert(index.get(r.partId)));
+}
+
+/**
+ * Which PLATES a parts-list line is talking about, by panel id.
+ *
+ * The answer is not "the panels with that partId", and that is the whole reason
+ * this exists. A plate cut round a switch, sized for the printer, or carrying an
+ * edge leaves the stock line and is reported on a generated one keyed
+ * `custom/<shape>|<frame>` (D56, D66) — so a stock line means the plates that
+ * are still the shipped file, and a custom line means one group of generated
+ * ones. Splitting that rule between `computeBom` and whatever wants to
+ * highlight them would let a click light up a plate the line does not count.
+ *
+ * Returns ids so a caller can match placements without re-deriving anything;
+ * empty for an accessory line, which is answered by `doc.items` instead.
+ */
+export function panelsForLine(doc: LayoutDoc | undefined, partId: string): string[] {
+  if (typeof partId !== 'string' || partId.length === 0) return [];
+  const out: string[] = [];
+  for (const [panelId, line] of panelLineKeys(doc)) if (line === partId) out.push(panelId);
+  return out;
+}
+
+/**
+ * The reverse, and the one that actually does the work: panel id -> the line it
+ * is counted on.
+ *
+ * One walk of the assembly answers it for every plate, which matters because the
+ * colour of every plate is looked up on every frame. It is also the only place
+ * the stock-versus-generated split is decided, so `panelsForLine` and anything
+ * colouring a plate cannot come to different conclusions about which line a
+ * plate belongs to.
+ */
+export function panelLineKeys(doc: LayoutDoc | undefined): ReadonlyMap<string, string> {
+  const panels = asArray(doc?.panels);
+  const out = new Map<string, string>();
+  if (panels.length === 0) return out;
+
+  const frameKeys = new Map<string, string>();
+  const frameKeyOf = (panel: PlacedPanel): string => {
+    const seen = frameKeys.get(panel.id);
+    if (seen !== undefined) return seen;
+    const key = panelFrameKey(panel, panels, doc?.frame);
+    frameKeys.set(panel.id, key);
+    return key;
+  };
+
+  // The generated plates first, since a plate on one of those lines is exactly
+  // a plate that is NOT on its own stock one.
+  for (const group of customPanelGroups(panels, frameKeyOf)) {
+    for (const panel of group.panels) out.set(panel.id, `custom/${group.key}`);
+  }
+  for (const panel of panels) {
+    if (out.has(panel.id)) continue;
+    if (isCustomPanel(panel) || frameKeyOf(panel) !== '') continue;
+    out.set(panel.id, panel.partId);
+  }
+  return out;
 }
 
 /**
@@ -721,13 +804,29 @@ export function validate(doc: LayoutDoc, catalog: Catalog): Issue[] {
   for (const footprint of itemFootprints) {
     for (const cell of footprint.cells) taken.add(hexKey(cell));
   }
-  for (const panelId of fixingPlanFor(doc, catalog).starvedPanelIds) {
+  const fixings = fixingPlanFor(doc, catalog);
+  for (const panelId of fixings.starvedPanelIds) {
     issues.push({
       level: 'warning',
       code: 'no-room-for-mounts',
       message:
         `Panel "${panelId}" has no free cell left for the fixing that holds it to the ` +
         `wall — accessories occupy all of them. Clear one cell, or fit its fixing first.`,
+      itemIds: [panelId],
+    });
+  }
+  /*
+   * A different problem with the same symptom, and it needs its own words: the
+   * planner DID give this plate a fixing and somebody took it out. Telling them
+   * to clear a cell would be nonsense — the cells are clear, the fixing is gone.
+   */
+  for (const panelId of fixings.unfixedPanelIds) {
+    issues.push({
+      level: 'warning',
+      code: 'panel-unfixed',
+      message:
+        `Panel "${panelId}" has no wall fixing left — the one holding it was removed. ` +
+        `It hangs on its neighbours' interlock alone.`,
       itemIds: [panelId],
     });
   }
@@ -884,8 +983,9 @@ export function computeBom(doc: LayoutDoc, catalog: Catalog): Bom {
   // Lines. Unrounded running totals; rounding happens once, below.
   const printed: BomLine[] = [];
   const fasteners: BomLine[] = [];
+  const progress = doc?.printed;
   let totalParts = 0;
-  let totalMinutes = 0;
+  let totalPrinted = 0;
   let totalGrams = 0;
   let totalMetres = 0;
 
@@ -893,9 +993,10 @@ export function computeBom(doc: LayoutDoc, catalog: Catalog): Bom {
     const part = index.get(partId);
     if (part === undefined || quantity <= 0) continue;
     const est = estimateOf(part);
+    const done = printedOf(progress, partId, quantity);
 
     totalParts += quantity;
-    totalMinutes += est.minutes * quantity;
+    totalPrinted += done.printed;
     totalGrams += est.grams * quantity;
     totalMetres += est.metres * quantity;
 
@@ -905,15 +1006,21 @@ export function computeBom(doc: LayoutDoc, catalog: Catalog): Bom {
       file: part.file ?? '',
       type: part.type ?? 'unknown',
       quantity,
-      minutes: roundMinutes(est.minutes * quantity),
+      printed: done.printed,
+      toPrint: done.toPrint,
       grams: roundGrams(est.grams * quantity),
       metres: roundMetres(est.metres * quantity),
       // Per-unit figures come from the catalogue, never from total ÷ quantity:
       // that division reads back a number that has already been rounded.
-      minutesEach: roundTo(est.minutes, 2),
       gramsEach: roundGrams(est.grams),
       metresEach: roundMetres(est.metres),
       supports: est.supports,
+      // The line's own colour: what this gets printed in, if anything was said.
+      // Through `colorOfLine`, so the sheet and the wall cannot disagree about
+      // which of the four levels applies.
+      ...(lineColor(doc?.colors, partId, part.type === 'panel') !== undefined
+        ? { color: lineColor(doc?.colors, partId, part.type === 'panel') }
+        : {}),
       needsReview: needsReviewOf(part),
       estimated: isEstimated(part),
       fastenersUnknown: fastenersNeedReview(part),
@@ -949,13 +1056,27 @@ export function computeBom(doc: LayoutDoc, catalog: Catalog): Bom {
   const refCells = Math.max(1, asArray(reference?.footprint).length);
   const refEst = reference
     ? estimateOf(reference)
-    : { minutes: 0, grams: 0, metres: 0, supports: false };
+    : { grams: 0, metres: 0, supports: false };
 
   for (const [index_, group] of groups.entries()) {
     const first = group.panels[0]!;
     const stock = index.get(first.partId);
-    const kept = group.params?.cellCount ??
-      Math.max(1, asArray(stock?.footprint).length);
+    /*
+     * The plate's OWN cells, counted here rather than asked of the customiser.
+     *
+     * It used to read `group.params?.cellCount`, falling back to the stock
+     * file's footprint. Both arms are absent for a big generated plate:
+     * `toCustomiserPanel` returns null above 13 × 12 (the customiser's own
+     * limit) and a `generated/…` id has no catalogue entry by design (D61) — so
+     * `kept` fell through to 1, and an 18 × 13 plate was reported as "1 cells"
+     * and costed at 5.1 g of filament instead of 234 cells and 4 kg. It needed
+     * a bed big enough to make plates the customiser cannot express, which is
+     * why a 256 mm printer never showed it and a 400 mm one always did.
+     *
+     * `params.cellCount` was only ever `placedPanelCells(panel).length` anyway —
+     * `customPanelGroups` builds the parameters from exactly those cells.
+     */
+    const kept = Math.max(1, placedPanelCells(first).length);
 
     // Scale from the plate's OWN stock file where there is one, and from the
     // reference where there is not.
@@ -965,9 +1086,15 @@ export function computeBom(doc: LayoutDoc, catalog: Catalog): Bom {
     const share = base ? kept / baseCells : 0;
     const quantity = group.panels.length;
     const label = `Custom panel ${String.fromCharCode(65 + index_)}`;
+    // Keyed on the group's KEY, which is the plate's shape and its edge — not on
+    // the letter, which is a position in this list and changes the moment
+    // another custom plate appears. Re-solve a wall and the plates you have
+    // already printed are still the same plates.
+    const partId = `custom/${group.key}`;
+    const done = printedOf(progress, partId, quantity);
 
     totalParts += quantity;
-    totalMinutes += est.minutes * share * quantity;
+    totalPrinted += done.printed;
     totalGrams += est.grams * share * quantity;
     totalMetres += est.metres * share * quantity;
 
@@ -990,18 +1117,21 @@ export function computeBom(doc: LayoutDoc, catalog: Catalog): Bom {
     const why = reasons.length > 0 ? reasons.join(', ') : 'generated';
 
     printed.push({
-      partId: `custom/${group.key}`,
+      partId,
       name: `${label} — ${kept} cells, ${why}`,
       file: '',
       type: 'panel',
       quantity,
-      minutes: roundMinutes(est.minutes * share * quantity),
+      printed: done.printed,
+      toPrint: done.toPrint,
       grams: roundGrams(est.grams * share * quantity),
       metres: roundMetres(est.metres * share * quantity),
-      minutesEach: roundTo(est.minutes * share, 2),
       gramsEach: roundGrams(est.grams * share),
       metresEach: roundMetres(est.metres * share),
       supports: est.supports,
+      ...(lineColor(doc?.colors, partId, true) !== undefined
+        ? { color: lineColor(doc?.colors, partId, true) }
+        : {}),
       needsReview: false,
       estimated: true,
       fastenersUnknown: false,
@@ -1024,7 +1154,8 @@ export function computeBom(doc: LayoutDoc, catalog: Catalog): Bom {
     shopping,
     totals: {
       parts: totalParts,
-      minutes: roundMinutes(totalMinutes),
+      printed: totalPrinted,
+      toPrint: Math.max(0, totalParts - totalPrinted),
       grams: roundGrams(totalGrams),
       metres: roundMetres(totalMetres),
       distinctParts: printed.length + fasteners.length,
