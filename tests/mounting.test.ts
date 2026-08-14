@@ -13,10 +13,11 @@
 import { describe, expect, it } from 'vitest';
 
 import catalogJson from '../src/catalog/catalog.json';
+import overridesJson from '../src/catalog/overrides.json';
 import { detect } from '../src/core/detect';
 import { hexKey } from '../src/core/hex';
 import {
-  anchorOf, applyOverrides, mountingOf, readFootprint, readMounting,
+  anchorOf, applyOverrides, mountingOf, readFootprint, readMounting, socketsOf,
 } from '../src/core/overrides';
 import { partCells } from '../src/core/store';
 import {
@@ -485,5 +486,87 @@ describe('local corrections and the file they become', () => {
       offsetMm: -6.5, offsetXMm: 8, offsetYMm: -8,
     };
     expect(readMounting(JSON.parse(JSON.stringify(seated)))).toEqual(seated);
+  });
+});
+
+/**
+ * THE SHIPPED FILE, as everyone who loads the site gets it.
+ *
+ * Everything above works on a fabricated part and a synthetic overrides object,
+ * which proves the mechanism and not the artefact. This block reads the real
+ * `src/catalog/overrides.json` — the file the app imports, the file `Download
+ * setup` is meant to replace — and asserts that every decision in it actually
+ * lands on the catalogue the browser builds.
+ *
+ * It exists because of what the file is FOR. A correction is made in a browser,
+ * where it lives in localStorage and applies to one person on one device; it
+ * reaches everybody else only by being exported into this file and committed.
+ * That hand-off is the one step with no feedback: an id that does not match a
+ * part, or a field the reader does not know, is a silent no-op — the app looks
+ * exactly the same as if the correction had never been made, which is precisely
+ * how the fastener choice was lost for a whole session (D44) and how a
+ * correction keyed on a `user/…` id was written, stored, exported and never
+ * applied (D71).
+ *
+ * It is driven BY the file rather than by a list written here, so it covers
+ * whatever gets added to it next without anybody remembering to extend it.
+ */
+describe('the corrections that ship', () => {
+  const shipped = overridesJson as { parts: Record<string, Record<string, unknown>> };
+  const applied = applyOverrides(catalog, shipped);
+  const byId = new Map(applied.parts.map((p) => [p.id, p]));
+  const ids = Object.keys(shipped.parts);
+
+  it('names parts that exist', () => {
+    // A typo'd or retired id is dead weight that reads as a correction. There is
+    // nothing in the app that would ever tell you.
+    const orphans = ids.filter((id) => !byId.has(id));
+    expect(orphans, 'ids in overrides.json with no part in the catalogue').toEqual([]);
+  });
+
+  it('lands every field on the catalogue the browser builds', () => {
+    expect(ids.length).toBeGreaterThan(0);
+
+    for (const id of ids) {
+      const override = shipped.parts[id]!;
+      const part = byId.get(id);
+      if (part === undefined) continue; // reported by the test above
+
+      if (override['mounting'] !== undefined) {
+        expect(mountingOf(part), `${id}: mounting`).toEqual(readMounting(override['mounting']));
+      }
+      if (override['footprint'] !== undefined) {
+        const want = readFootprint(override['footprint']) ?? [];
+        expect(part.footprint?.map(hexKey), `${id}: footprint`).toEqual(want.map(hexKey));
+      }
+      if (override['socketCells'] !== undefined) {
+        const want = readFootprint(override['socketCells']) ?? [];
+        expect(socketsOf(part).map(hexKey), `${id}: sockets`).toEqual(want.map(hexKey));
+      }
+      if (override['requires'] !== undefined) {
+        expect(part.requires, `${id}: requires`).toEqual(override['requires']);
+      }
+    }
+  });
+
+  /**
+   * The one that matters on publication day.
+   *
+   * 27 of the 51 shipped parts still carry `needsReview`, and the mounting face
+   * is what the inspector exists to answer. Today the file carries none — this
+   * does not fail for that, because "nobody has aligned anything yet" is a
+   * legitimate state. It fails if an alignment is added and does NOT arrive,
+   * which is the state that looks identical from the outside.
+   */
+  it('applies the alignments, however many there are', () => {
+    const aligned = ids.filter((id) => shipped.parts[id]!['mounting'] !== undefined);
+    for (const id of aligned) {
+      expect(mountingOf(byId.get(id)!), `${id} is aligned in the file but not in the app`)
+        .toBeDefined();
+    }
+    // Stated out loud so the number is visible in the run rather than inferred
+    // from a silent pass over an empty list.
+    expect(aligned.length, `alignments shipped: ${aligned.length} of ${ids.length} corrections`)
+      .toBe(aligned.length);
   });
 });
