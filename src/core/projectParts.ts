@@ -55,8 +55,33 @@ export const MAX_PROJECT_PARTS = 500;
  * library is the only place it can be looked at or deleted. The rule is about
  * the SHIPPED plates the app now generates for itself, not about the type.
  */
+/**
+ * Shipped parts that are part of ANOTHER part, and so are not chosen on their
+ * own.
+ *
+ * Both are lids: 5–6 mm deep, no fastener of their own, and named for the thing
+ * they close. Nothing mounts them on the wall — you get one because you printed
+ * the holder it belongs to — so offering them on a shelf beside the hooks and
+ * the shelves invites somebody to plan a wall of covers for boxes they have
+ * not got.
+ *
+ * They stay IN the catalogue, exactly as the plates do: a layout that already
+ * names one still resolves it, the rail still shows it if it is placed, and the
+ * parts list still counts and costs it. This says only that they are not on
+ * SALE.
+ *
+ * By id, not by a `-cover` suffix: `cover-contersunk` is a genuine wall part
+ * that a name rule would take with them, and a rule that guesses from a string
+ * will keep finding new parts to hide every time the catalogue grows. Imported
+ * ids carry a `user/` prefix, so an upload can never collide with these.
+ */
+const NOT_ON_SALE: ReadonlySet<string> = new Set([
+  'box-and-usb-holder-cover',
+  'sd-card-holder-cover',
+]);
+
 export const isShoppable = (part: CatalogPart): boolean =>
-  part.type !== 'panel' || isImported(part);
+  !NOT_ON_SALE.has(part.id) && (part.type !== 'panel' || isImported(part));
 
 /** The catalogue as a SHOP: everything a person can actually choose. */
 export const shoppableParts = (catalog: Catalog): CatalogPart[] =>

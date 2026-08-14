@@ -17,6 +17,7 @@
 
 import { describe, expect, it, beforeEach } from 'vitest';
 
+import catalogJson from '../src/catalog/catalog.json';
 import { deserialize, serialize } from '../src/core/persist';
 import {
   inProject, isShoppable, MAX_PROJECT_PARTS, projectPartIds, resolveProjectParts,
@@ -24,6 +25,9 @@ import {
 } from '../src/core/projectParts';
 import { Store, emptyDoc, __resetIds } from '../src/core/store';
 import type { Catalog, CatalogPart, Hex, LayoutDoc } from '../src/core/types';
+
+/** The real generated catalogue, for the rules that are about the shipped set. */
+const shippedCatalog = catalogJson as unknown as Catalog;
 
 function part(id: string, extra: Partial<CatalogPart> = {}): CatalogPart {
   return {
@@ -272,6 +276,31 @@ describe('the catalogue as a shop', () => {
     expect(isShoppable(mine)).toBe(true);
     expect(shoppableParts({ ...catalog, parts: [...catalog.parts, mine] }).map((p) => p.id))
       .toContain('user/my-plate');
+  });
+
+  /**
+   * The two covers are not on sale either.
+   *
+   * They are lids for other accessories — 5–6 mm deep, no fastener of their own
+   * — so nothing mounts them on the wall and nobody picks one on purpose.
+   * Asserted against the REAL shipped catalogue, not a fixture: the point of
+   * the rule is what it does to the shelves a person actually browses, and a
+   * fixture would let the ids drift out of the catalogue without failing.
+   */
+  it('keeps the covers off the shelves and in the catalogue', () => {
+    const covers = ['box-and-usb-holder-cover', 'sd-card-holder-cover'];
+    const shipped = shippedCatalog.parts.map((p) => p.id);
+    const onSale = shoppableParts(shippedCatalog).map((p) => p.id);
+
+    for (const id of covers) {
+      // Still a real part, or this test is asserting nothing at all.
+      expect(shipped, id).toContain(id);
+      expect(onSale, id).not.toContain(id);
+    }
+
+    // A cover is excluded by ID and not by its name: `cover-contersunk` is a
+    // genuine wall part, and a `-cover` suffix rule would take it too.
+    expect(onSale).toContain('cover-contersunk');
   });
 
   it('agrees with the rail, which is the same rule', () => {
