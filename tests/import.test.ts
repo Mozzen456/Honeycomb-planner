@@ -1,5 +1,5 @@
 /**
- * Importing an STL, end to end over the pure modules.
+ * Importing a model file, end to end over the pure modules.
  *
  * The promise the import feature makes is that a part you add behaves exactly
  * like a part the scanner measured — same footprint rules, same requirement
@@ -15,11 +15,12 @@ import { computeBom } from '../src/core/bom';
 import { BEDS } from '../src/core/constants';
 import { toCsv, toMarkdownChecklist } from '../src/core/exporters';
 import {
-  bedsThatFit, proposePart, slugify, typeFromName, withFootprint,
+  bedsThatFit, proposeFromMesh, proposePart, slugify, typeFromName, withFootprint,
 } from '../src/core/importPart';
+import { parseStl } from '../src/core/stl';
 import { emptyDoc } from '../src/core/store';
 import {
-  isImported, isUsablePart, mergeCatalog, parseUserParts,
+  isImported, isUsablePart, mergeCatalog, orphanedIds, parseUserParts,
 } from '../src/core/userCatalog';
 import type { Catalog, Hex } from '../src/core/types';
 import { loadModel } from './stl.test';
@@ -39,8 +40,8 @@ const part = (id: string) => catalog.parts.find((p) => p.id === id)!;
 describe('proposePart', () => {
   it('measures a wall-clipping accessory the way the scanner did', () => {
     const original = part('20-micro-sd-card-holder');
-    const { part: made, detection } = proposePart(
-      '20-micro-sd-card-holder.stl', bytesOf(original.file), catalog,
+    const { part: made, detection } = proposeFromMesh(
+      '20-micro-sd-card-holder.stl', parseStl(bytesOf(original.file)), catalog,
     );
 
     expect(made.id).toBe('user/20-micro-sd-card-holder');
@@ -55,7 +56,7 @@ describe('proposePart', () => {
   });
 
   it('flags an insert-fed part instead of asserting its cells', () => {
-    const { part: made, warnings } = proposePart('shelf-2.stl', bytesOf(part('shelf-2').file), catalog);
+    const { part: made, warnings } = proposeFromMesh('shelf-2.stl', parseStl(bytesOf(part('shelf-2').file)), catalog);
     expect(made.needsReview).toBe(true);
     expect(warnings.join(' ')).toMatch(/bound from the bounding box/i);
     expect(made.provenance.notes.join(' ')).toMatch(/FLAGGED/);
@@ -63,8 +64,8 @@ describe('proposePart', () => {
 
   it('recovers a panel, its block and the beds it fits', () => {
     const original = part('wall-honeycomb-part');
-    const { part: made } = proposePart(
-      'wall-honeycomb-part.stl', bytesOf(original.file), catalog,
+    const { part: made } = proposeFromMesh(
+      'wall-honeycomb-part.stl', parseStl(bytesOf(original.file)), catalog,
     );
     expect(made.type).toBe('panel');
     expect(made.panel?.columns).toBe(original.panel!.columns);
@@ -76,7 +77,7 @@ describe('proposePart', () => {
   });
 
   it('never claims a slicer profile it did not use', () => {
-    const { part: made } = proposePart('shelf-1.stl', bytesOf(part('shelf-1').file), catalog);
+    const { part: made } = proposeFromMesh('shelf-1.stl', parseStl(bytesOf(part('shelf-1').file)), catalog);
     expect(made.print.source).toBe('volume');
     expect(made.print.profile).toBe('estimated/in-browser');
     expect(made.print.grams).toBeGreaterThan(0);
@@ -84,16 +85,31 @@ describe('proposePart', () => {
 
   it('gives a colliding name a distinct id rather than overwriting', () => {
     const file = part('shelf-1').file;
-    const first = proposePart('shelf-1.stl', bytesOf(file), catalog).part;
+    const first = proposeFromMesh('shelf-1.stl', parseStl(bytesOf(file)), catalog).part;
     const wider = mergeCatalog(catalog, [first]);
-    const second = proposePart('shelf-1.stl', bytesOf(file), wider).part;
+    const second = proposeFromMesh('shelf-1.stl', parseStl(bytesOf(file)), wider).part;
     expect(second.id).not.toBe(first.id);
     expect(second.id).toBe('user/shelf-1-2');
   });
 
-  it('refuses bytes that are not a model, with a reason', () => {
+  it('refuses bytes that are not a model, with a reason', async () => {
     const junk = new TextEncoder().encode('not an stl at all, just some text');
-    expect(() => proposePart('notes.txt', junk.buffer as ArrayBuffer, catalog)).toThrow();
+    await expect(proposePart('notes.txt', junk.buffer as ArrayBuffer, catalog)).rejects.toThrow();
+  });
+
+  /**
+   * `proposePart` is the asynchronous front door — it reads the file, whatever
+   * format it is, and hands the mesh to `proposeFromMesh`. Every other case in
+   * this file goes through the synchronous core, so this is the one that proves
+   * the two halves still meet.
+   */
+  it('reads an STL through the async front door and agrees with the sync core', async () => {
+    const file = part('20-micro-sd-card-holder').file;
+    const viaFile = await proposePart('20-micro-sd-card-holder.stl', bytesOf(file), catalog);
+    const viaMesh = proposeFromMesh('20-micro-sd-card-holder.stl', parseStl(bytesOf(file)), catalog);
+    expect(viaFile.part.footprint).toEqual(viaMesh.part.footprint);
+    expect(viaFile.part.type).toBe(viaMesh.part.type);
+    expect(viaFile.warnings).toEqual(viaMesh.warnings);
   });
 });
 
@@ -115,7 +131,7 @@ describe('typeFromName and slugify', () => {
 });
 
 describe('withFootprint — the human correction', () => {
-  const proposal = () => proposePart('shelf-2.stl', bytesOf(part('shelf-2').file), catalog).part;
+  const proposal = () => proposeFromMesh('shelf-2.stl', parseStl(bytesOf(part('shelf-2').file)), catalog).part;
 
   it('keeps the flag when the proposed footprint is merely accepted', () => {
     // Pressing Add without touching anything must not promote a bound to a
@@ -137,8 +153,8 @@ describe('withFootprint — the human correction', () => {
   });
 
   it('recomputes a panel block and its printed size from the drawn cells', () => {
-    const panel = proposePart(
-      'wall-honeycomb-part.stl', bytesOf(part('wall-honeycomb-part').file), catalog,
+    const panel = proposeFromMesh(
+      'wall-honeycomb-part.stl', parseStl(bytesOf(part('wall-honeycomb-part').file)), catalog,
     ).part;
     const cells: Hex[] = [
       { q: 0, r: 0 }, { q: 1, r: 0 },
@@ -166,7 +182,7 @@ describe('bedsThatFit', () => {
 describe('the imported part inside the rest of the app', () => {
   const imported = () =>
     withFootprint(
-      proposePart('my-hook.stl', bytesOf(part('hook-to-empty').file), catalog).part,
+      proposeFromMesh('my-hook.stl', parseStl(bytesOf(part('hook-to-empty').file)), catalog).part,
       [{ q: 0, r: 0 }],
       catalog,
     );
@@ -230,7 +246,7 @@ describe('the imported part inside the rest of the app', () => {
 
 describe('userCatalog storage', () => {
   it('reads back what it wrote', () => {
-    const made = proposePart('shelf-1.stl', bytesOf(part('shelf-1').file), catalog).part;
+    const made = proposeFromMesh('shelf-1.stl', parseStl(bytesOf(part('shelf-1').file)), catalog).part;
     const { parts, dropped } = parseUserParts(JSON.stringify([made]));
     expect(dropped).toEqual([]);
     expect(parts).toHaveLength(1);
@@ -238,7 +254,7 @@ describe('userCatalog storage', () => {
   });
 
   it('drops a corrupt entry and says which, rather than failing to load', () => {
-    const made = proposePart('shelf-1.stl', bytesOf(part('shelf-1').file), catalog).part;
+    const made = proposeFromMesh('shelf-1.stl', parseStl(bytesOf(part('shelf-1').file)), catalog).part;
     const stored = JSON.stringify([made, { id: 'broken' }, { footprint: [] }]);
     const { parts, dropped } = parseUserParts(stored);
     expect(parts).toHaveLength(1);
@@ -246,17 +262,59 @@ describe('userCatalog storage', () => {
   });
 
   it('drops a duplicate id rather than letting two parts share one', () => {
-    const made = proposePart('shelf-1.stl', bytesOf(part('shelf-1').file), catalog).part;
+    const made = proposeFromMesh('shelf-1.stl', parseStl(bytesOf(part('shelf-1').file)), catalog).part;
     const { parts, dropped } = parseUserParts(JSON.stringify([made, made]));
     expect(parts).toHaveLength(1);
     expect(dropped[0]).toContain('duplicate id');
   });
 
   it('survives junk in localStorage', () => {
-    expect(parseUserParts(null)).toEqual({ parts: [], dropped: [] });
-    expect(parseUserParts('')).toEqual({ parts: [], dropped: [] });
+    expect(parseUserParts(null)).toEqual({ parts: [], dropped: [], readable: true });
+    expect(parseUserParts('')).toEqual({ parts: [], dropped: [], readable: true });
     expect(parseUserParts('{oh no').dropped[0]).toMatch(/not valid JSON/);
     expect(parseUserParts('{"parts":[]}').dropped[0]).toMatch(/not a list/);
+  });
+
+  /**
+   * `readable` is the guard on the only DESTRUCTIVE thing in this module.
+   *
+   * "No imports yet" and "the store would not open" are both an empty list, and
+   * `sweepOrphans` deletes every stored model and photo that no part claims. If
+   * an unreadable store reported an empty list as fact, a browser that refused
+   * localStorage once would cost somebody every model they had uploaded.
+   */
+  it('says whether the store was actually READ, not just whether it was empty', () => {
+    expect(parseUserParts(null).readable).toBe(true);      // nothing stored — a real answer
+    expect(parseUserParts('[]').readable).toBe(true);       // stored nothing — also a real answer
+    expect(parseUserParts('{oh no').readable).toBe(false);  // cannot tell what is alive
+    expect(parseUserParts('{"parts":[]}').readable).toBe(false);
+  });
+
+  it('a junk ENTRY still leaves the list readable — that row really is an orphan', () => {
+    const made = proposeFromMesh('shelf-1.stl', parseStl(bytesOf(part('shelf-1').file)), catalog).part;
+    const res = parseUserParts(JSON.stringify([made, { id: 'broken' }]));
+    expect(res.readable).toBe(true);
+    expect(res.dropped).toEqual(['broken']);
+  });
+
+  describe('orphanedIds — what an abandoned import leaves behind', () => {
+    it('names stored ids that belong to no part', () => {
+      expect(orphanedIds(['user/a', 'user/b', 'user/c'], [{ id: 'user/b' }]))
+        .toEqual(['user/a', 'user/c']);
+    });
+
+    it('is one-directional: a part with no stored bytes is NOT rubbish', () => {
+      // The model may simply have failed to store on a browser that refuses
+      // IndexedDB. The part still plans, costs and exports.
+      expect(orphanedIds([], [{ id: 'user/a' }])).toEqual([]);
+    });
+
+    it('keeps a SHIPPED part’s id, because a photo may be keyed on one', () => {
+      // Photos are keyed on part id and nothing else, precisely so a shipped
+      // part can have one. Sweeping against the imports alone would eat it.
+      expect(orphanedIds(['hook-side'], [{ id: 'hook-side' }])).toEqual([]);
+      expect(orphanedIds(['hook-side'], [{ id: 'user/mine' }])).toEqual(['hook-side']);
+    });
   });
 
   it('rejects a part with no usable footprint or type', () => {

@@ -1,31 +1,45 @@
 /**
- * The review step of an STL import.
+ * The first step of a model import: what this part is.
  *
  * Measuring a mesh is the easy half. The half geometry cannot do is say which
  * cells an insert-fed part will be screwed into — that is the installer's
  * choice, not a feature of the file (PARKED.md P1). So this dialog shows every
  * number that was measured, says plainly which of them are bounds rather than
- * measurements, and gives the two controls that turn the unanswerable question
- * into a two-click one: draw the footprint, and name the insert it bolts to.
+ * measurements, and gives the controls that turn the unanswerable questions
+ * into clicks: name the insert it bolts to, and add a photograph of the printed
+ * thing.
  *
- * Nothing is written until Add is pressed. Cancel leaves the catalogue exactly
- * as it was.
+ * WHICH CELLS the part takes is asked on the NEXT step and not here. It used to
+ * be asked on both, with two footprint editors a click apart — and the one on
+ * this page is the worse place to answer it, because there is nothing to answer
+ * it against. On the alignment step the same editor sits beside the part shown
+ * against a real patch of wall, which is the only view in which "does it cover
+ * that cell" is a question a person can actually see.
+ *
+ * It does not finish the import. Pressing Next hands the part to the alignment
+ * step, and only that step adds it (D71) — a model whose mounting face nobody
+ * chose is a part that will sit wrong on the wall, and the moment it is being
+ * added is the one moment the person is certainly looking at it.
+ *
+ * Nothing is written until the alignment step is saved. Cancel at either step
+ * leaves the catalogue exactly as it was.
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { BEDS } from '../core/constants';
-import { hexKey } from '../core/hex';
 import { bedsThatFit, withFootprint, type ImportedPart, type ImportProposal } from '../core/importPart';
-import type { Catalog, Hex, PartType } from '../core/types';
-import { FootprintEditor } from './FootprintEditor';
+import type { Catalog, PartType } from '../core/types';
+import { PartImage } from './PartImage';
+import { photoRefusal, PHOTO_MAX_PX, preparePhoto } from './partPhotos';
 import './ImportDialog.css';
 
 export interface ImportDialogProps {
   proposal: ImportProposal;
   catalog: Catalog;
   onCancel: () => void;
-  onConfirm: (part: ImportedPart) => void;
+  /** The part as described, plus its downscaled photo if one was chosen. */
+  onConfirm: (part: ImportedPart, photo: Blob | null) => void;
 }
 
 const TYPES: { value: PartType; label: string; note: string }[] = [
@@ -45,11 +59,42 @@ function formatMinutes(total: number): string {
 export function ImportDialog({ proposal, catalog, onCancel, onConfirm }: ImportDialogProps) {
   const [name, setName] = useState(proposal.part.name);
   const [type, setType] = useState<PartType>(proposal.part.type);
-  const [cells, setCells] = useState<Hex[]>(proposal.part.footprint);
   const [requiresId, setRequiresId] = useState<string>(
     proposal.part.requires[0]?.partId ?? '',
   );
+  /**
+   * The photo, already downscaled, plus a URL to show it with.
+   *
+   * Prepared on PICK rather than on confirm, so what the preview shows is the
+   * exact blob that gets stored — and so a file the browser cannot decode says
+   * so while the person is still holding the file picker, not two steps later.
+   */
+  const [photo, setPhoto] = useState<{ blob: Blob; url: string } | null>(null);
+  const [photoError, setPhotoError] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDivElement | null>(null);
+
+  // The preview URL belongs to this dialog and dies with it. (A photo that is
+  // kept gets a fresh URL from `photoUrlFor`, which owns the long-lived ones.)
+  useEffect(() => () => { if (photo) URL.revokeObjectURL(photo.url); }, [photo]);
+
+  const choosePhoto = async (file: File | undefined): Promise<void> => {
+    if (file === undefined) return;
+    const refusal = photoRefusal(file);
+    if (refusal !== null) {
+      setPhotoError(refusal);
+      return;
+    }
+    try {
+      const blob = await preparePhoto(file);
+      setPhoto((prev) => {
+        if (prev) URL.revokeObjectURL(prev.url);
+        return { blob, url: URL.createObjectURL(blob) };
+      });
+      setPhotoError(null);
+    } catch (err) {
+      setPhotoError(`Could not read ${file.name}: ${(err as Error).message}`);
+    }
+  };
 
   // Focus moves into the dialog so a keyboard user is not left behind on the
   // page underneath, and Escape always gets out.
@@ -74,24 +119,24 @@ export function ImportDialog({ proposal, catalog, onCancel, onConfirm }: ImportD
   const measure = proposal.measure;
   const [w, h, d] = proposal.part.bboxMm;
 
-  const toggle = (cell: Hex): void => {
-    setCells((prev) => {
-      const key = hexKey(cell);
-      const without = prev.filter((c) => hexKey(c) !== key);
-      if (without.length === prev.length) return [...prev, cell];
-      // The last cell stays: a part that covers nothing cannot be checked
-      // against anything. The middle one is not special — `anchorOf` picks the
-      // drag cell from whatever cells the part has.
-      if (without.length === 0) return prev;
-      return without;
-    });
-  };
-
   const confirm = (): void => {
-    let part = withFootprint({ ...proposal.part, type }, cells, catalog);
+    /*
+     * The cells are passed through UNCHANGED — they are chosen on the next
+     * step, against the wall, where you can see them.
+     *
+     * `withFootprint` is still the right call rather than a plain spread: the
+     * TYPE can change here, and the wall-mount count and the panel block are
+     * derived from it. Re-stating the same cells deliberately does NOT clear
+     * `needsReview`, which is the honesty rule this whole flow rests on — only
+     * an actual edit turns a bound into a decision.
+     */
+    let part = withFootprint({ ...proposal.part, type }, proposal.part.footprint, catalog);
     part = { ...part, name: name.trim().length > 0 ? name.trim() : part.id };
     if (requiresId.length > 0) {
-      part = { ...part, requires: [{ partId: requiresId, count: Math.max(1, cells.length) }] };
+      part = {
+        ...part,
+        requires: [{ partId: requiresId, count: Math.max(1, proposal.part.footprint.length) }],
+      };
     } else if (type === 'accessory' && measured.tier !== 'wall-clip') {
       part = { ...part, requires: [] };
     }
@@ -101,13 +146,13 @@ export function ImportDialog({ proposal, catalog, onCancel, onConfirm }: ImportD
         panel: { ...part.panel, fitsBeds: bedsThatFit(part.panel.widthMm, part.panel.heightMm, BEDS) },
       };
     }
-    onConfirm(part);
+    onConfirm(part, photo?.blob ?? null);
   };
 
   const canBeLaidOut = type === 'panel' && proposal.part.panel !== undefined;
 
   return (
-    <div className="import-scrim" role="presentation" onPointerDown={onCancel}>
+    <div className="modal-scrim import-scrim" role="presentation" onPointerDown={onCancel}>
       <div
         className="import"
         role="dialog"
@@ -118,6 +163,7 @@ export function ImportDialog({ proposal, catalog, onCancel, onConfirm }: ImportD
         onPointerDown={(e) => e.stopPropagation()}
       >
         <header className="import__head">
+          <p className="import__step">Step 1 of 2 · What this part is</p>
           <h2 className="import__title" id="import-title">Add {proposal.part.file}</h2>
           <p className="import__sub">
             {measured.tier === 'panel'
@@ -125,6 +171,7 @@ export function ImportDialog({ proposal, catalog, onCancel, onConfirm }: ImportD
               : measured.tier === 'wall-clip'
                 ? 'Measured as a wall part — its footprint comes from the mesh.'
                 : 'No wall interface found — the footprint below is a bound, not a measurement.'}
+            {' '}Next you line it up against the wall; it joins your library after that.
           </p>
         </header>
 
@@ -134,6 +181,66 @@ export function ImportDialog({ proposal, catalog, onCancel, onConfirm }: ImportD
               <span>Name</span>
               <input value={name} onChange={(e) => setName(e.target.value)} />
             </label>
+
+            {/*
+              A photograph of the printed part.
+              Optional, and above the numbers on purpose: it is the field that
+              makes the library browsable, and the one a person will skip if it
+              is buried under a bounding box and a triangle count.
+            */}
+            <div className="import__photo">
+              <span className="import__photolabel">Photo</span>
+              <div className="import__photorow">
+                {/*
+                  With no photograph, the slot shows the part RENDERED from its
+                  own model — the same picture the library falls back to. An
+                  empty grey box asked "is a photo required?"; the render answers
+                  it by showing what you get if you skip this.
+                */}
+                {photo === null ? (
+                  <PartImage
+                    part={proposal.part}
+                    className="import__photoframe import__photoframe--render"
+                    hasPhoto={false}
+                  />
+                ) : (
+                  <span className="import__photoframe">
+                    <img src={photo.url} alt={`Photograph of ${name}`} />
+                  </span>
+                )}
+                <div className="import__photoactions">
+                  <label className="button import__photopick">
+                    {photo === null ? 'Choose a photo…' : 'Replace…'}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        void choosePhoto(e.target.files?.[0]);
+                        e.target.value = '';
+                      }}
+                    />
+                  </label>
+                  {photo !== null && (
+                    <button
+                      type="button"
+                      className="button"
+                      onClick={() => {
+                        URL.revokeObjectURL(photo.url);
+                        setPhoto(null);
+                      }}
+                    >
+                      Remove
+                    </button>
+                  )}
+                  <p className="import__hint">
+                    Optional. Without one you get the render on the left, which tells you
+                    the shape; a photograph tells you the part — printed, in colour, holding
+                    something. Scaled down to {PHOTO_MAX_PX} px before it is stored.
+                  </p>
+                </div>
+              </div>
+              {photoError !== null && <p className="import__photoerror">{photoError}</p>}
+            </div>
 
             <label className="import__field">
               <span>Type</span>
@@ -196,23 +303,12 @@ export function ImportDialog({ proposal, catalog, onCancel, onConfirm }: ImportD
             )}
           </section>
 
-          <section className="import__footprint">
-            <h3>Footprint</h3>
-            <p className="import__hint">
-              Click a cell to add or remove it. This is the shape the part occupies on the
-              wall, and what the planner checks when you drop it.
-            </p>
-            <FootprintEditor cells={cells} onToggle={toggle} />
-            <p className="import__count tabular-nums">
-              {cells.length} cell{cells.length === 1 ? '' : 's'}
-            </p>
-          </section>
         </div>
 
         <footer className="import__foot">
           <button type="button" className="button" onClick={onCancel}>Cancel</button>
           <button type="button" className="button button--primary" onClick={confirm}>
-            Add to catalogue
+            Next: line it up →
           </button>
         </footer>
       </div>

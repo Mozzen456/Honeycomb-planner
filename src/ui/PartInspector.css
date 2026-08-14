@@ -1,14 +1,9 @@
 /* The mounting-face inspector. Tokens only — no colour, size or duration literals. */
 
-.inspector__scrim {
-  position: fixed;
-  inset: 0;
-  z-index: var(--z-modal);
-  display: grid;
-  place-items: center;
-  padding: var(--space-4);
-  background: var(--scrim);
-}
+/* The scrim is `.modal-scrim` in base.css. This dialog happened to survive the
+   implicit-track bug — a bare `max-block-size: 100%` resolves where the
+   `min(46rem, 100%)` next door does not — but surviving by accident is not a
+   property worth keeping, so it uses the same definite track as the rest. */
 
 .inspector {
   display: flex;
@@ -33,6 +28,13 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
+}
+
+.inspector__step {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-2xs);
+  text-transform: uppercase;
+  letter-spacing: var(--letter-spacing-caps);
 }
 
 .inspector__title {

@@ -41,8 +41,52 @@
  */
 
 import { PITCH, ROW_STEP } from './constants';
-import { hexKey, hexToMm, placeFootprint, placedPanelCells } from './hex';
+import { hexDistance, hexKey, hexToMm, placeFootprint, placedPanelCells } from './hex';
 import type { Hex, LayoutDoc, PlacedPanel, Rotation } from './types';
+
+/**
+ * Which of a part's OWN cells carry the fastener it hangs on.
+ *
+ * Not "all of them". A seven-cell shelf hanging on two pegs takes two inserts,
+ * and drawing one per cell is the seven-inserts-for-two-pegs error made into a
+ * picture — it contradicts the count on the part and the line on the list.
+ *
+ * Nearest the anchor first, ties broken on q then r, and a multi-cell fastener
+ * claims every cell it covers so the next one does not land on top of it.
+ * Deterministic, because this decides where an insert is DRAWN in two different
+ * views: the alignment tool, where a person seats their part against it, and the
+ * wall. Two readings of it would put the insert in one cell in the dialog and
+ * another on the wall, which is the class of bug that keeps costing this repo
+ * days (D53).
+ *
+ * @param cells   the cells the part covers, in whatever frame the caller uses
+ * @param anchor  the cell the part hangs off — `item.at` on the wall
+ * @param spread  the fastener's own footprint, as offsets from its anchor
+ * @param count   how many of it the part takes
+ * @param taken   cells that already have one (a socket in the wall supplies it)
+ */
+export function fastenerCells(
+  cells: readonly Hex[],
+  anchor: Hex,
+  spread: readonly Hex[],
+  count: number,
+  taken: ReadonlySet<string> = new Set(),
+): Hex[] {
+  if (count <= 0 || cells.length === 0) return [];
+  const shape = spread.length > 0 ? spread : [{ q: 0, r: 0 }];
+  const ordered = [...cells].sort((a, b) => (
+    hexDistance(a, anchor) - hexDistance(b, anchor) || a.q - b.q || a.r - b.r
+  ));
+  const claimed = new Set<string>(taken);
+  const out: Hex[] = [];
+  for (const c of ordered) {
+    if (out.length >= count) break;
+    if (claimed.has(hexKey(c))) continue;
+    out.push(c);
+    for (const s of shape) claimed.add(hexKey({ q: c.q + s.q, r: c.r + s.r }));
+  }
+  return out;
+}
 
 /**
  * Default centre-to-centre spacing for wall fixings, mm.

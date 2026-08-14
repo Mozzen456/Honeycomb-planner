@@ -10,7 +10,7 @@ import {
   type TiledPanel,
 } from '../src/core/tiling';
 import { hexKey, panelCells, cellsBoundsMm } from '../src/core/hex';
-import { PITCH, ROW_STEP, MARGIN_X, MARGIN_Y, BEDS } from '../src/core/constants';
+import { PITCH, ROW_STEP, BEDS } from '../src/core/constants';
 import type { Hex } from '../src/core/types';
 
 /**
@@ -90,11 +90,18 @@ describe('solveTiling — a real wall', () => {
   it('keeps every panel inside the wall rectangle', () => {
     for (const p of result.panels) {
       const b = cellsBoundsMm(cellsOf(p));
-      // The lattice is anchored so the bottom-left panel's outline starts at (0, 0).
-      expect(b.minX + MARGIN_X).toBeGreaterThanOrEqual(-1e-9);
-      expect(b.minY + MARGIN_Y).toBeGreaterThanOrEqual(-1e-9);
-      expect(b.maxX + MARGIN_X).toBeLessThanOrEqual(2400 + 1e-9);
-      expect(b.maxY + MARGIN_Y).toBeLessThanOrEqual(1200 + 1e-9);
+      // Straight against the wall, with nothing added.
+      //
+      // This used to add MARGIN_X and MARGIN_Y before comparing, under a comment
+      // saying "the lattice is anchored so the bottom-left panel's outline starts
+      // at (0, 0)" — which is what the SOLVER assumed and what `hexToMm` did not
+      // do. The fudge made the test agree with the intent while the app hung the
+      // honeycomb half a cell off the left-hand edge of the wall. `LATTICE_ANCHOR`
+      // makes the intent true, so the fudge goes (D63).
+      expect(b.minX).toBeGreaterThanOrEqual(-1e-9);
+      expect(b.minY).toBeGreaterThanOrEqual(-1e-9);
+      expect(b.maxX).toBeLessThanOrEqual(2400 + 1e-9);
+      expect(b.maxY).toBeLessThanOrEqual(1200 + 1e-9);
     }
   });
 

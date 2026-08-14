@@ -101,7 +101,20 @@ function toCustomiser(cell: Hex, flip: boolean): { col: number; row: number } {
  * the wrong plate.
  */
 export function toCustomiserPanel(panel: PlacedPanel): CustomiserPanel | null {
-  const cells = placedPanelCells(panel);
+  return toCustomiserCells(placedPanelCells(panel));
+}
+
+/**
+ * The same conversion from a bare cell set.
+ *
+ * Split out because a FRAMED plate's cells are not `placedPanelCells`: a framed
+ * edge cuts its outermost cells in half, and those cells leave `omit` as far as
+ * the planner is concerned — nothing mounts in half a hexagon — while the plate
+ * still has to be generated WITH them. Handing the planner's view of the cells
+ * to the customiser would emit `Gap_Column` entries where the border goes, and
+ * the plate would come back with holes in its frame.
+ */
+export function toCustomiserCells(cells: readonly Hex[]): CustomiserPanel | null {
   if (cells.length === 0) return null;
 
   // Both parities are legal panels; pick whichever puts every cell on a whole
@@ -173,9 +186,22 @@ export function toCustomiserPanel(panel: PlacedPanel): CustomiserPanel | null {
   return null;
 }
 
-/** Is this panel a stock rectangle, or has it been cut about? */
+/**
+ * Is this panel a stock rectangle, or does the app have to make it?
+ *
+ * Two ways to stop being stock. Cut about — a hole for a socket, which is what
+ * `omit` records. Or a SIZE no shipped file comes in, which is what a
+ * `generated/` id records: once plates are sized to the printer rather than
+ * taken from `models/`, most of a wall is plates nobody has ever published.
+ *
+ * A border is deliberately NOT in this list. It is a property of the assembly,
+ * not of the block, so two plates with the same cells and different edges are
+ * still the same entry here — `panelFrameKey` is what separates them, and it
+ * goes into the grouping key alongside this.
+ */
 export const isCustomPanel = (panel: PlacedPanel): boolean =>
-  Array.isArray(panel.omit) && panel.omit.length > 0;
+  (Array.isArray(panel.omit) && panel.omit.length > 0) ||
+  panel.partId.startsWith('generated/');
 
 /**
  * The customiser's parameter block, ready to paste into the Customizer panel or
@@ -184,11 +210,29 @@ export const isCustomPanel = (panel: PlacedPanel): boolean =>
  * Emitted as the customiser's own syntax rather than a JSON blob, because the
  * thing a user actually does with it is paste it.
  */
-export function toCustomiserScad(panel: CustomiserPanel, label: string): string {
+export function toCustomiserScad(
+  panel: CustomiserPanel,
+  label: string,
+  borders?: { left: boolean; right: boolean; bottom: boolean; top: boolean },
+): string {
   const lines: string[] = [];
   lines.push(`/* ${label} — ${panel.cellCount} cells */`);
   lines.push(`Number_of_Columns = ${panel.columns};`);
   lines.push(`Flip_Staggering = ${panel.flipStaggering ? 'true' : 'false'};`);
+  if (borders) {
+    // Emitted even when every side is off, so a customiser session that already
+    // had borders set cannot leave a stale one behind — the same reason all
+    // thirteen columns are emitted below.
+    const b = (v: boolean) => (v ? 'true' : 'false');
+    lines.push(`Left_Border = ${b(borders.left)};`);
+    lines.push(`Right_Border = ${b(borders.right)};`);
+    lines.push(`Bottom_Border = ${b(borders.bottom)};`);
+    lines.push(`Top_Border = ${b(borders.top)};`);
+    // NOT emitted: the app's border is additive and the customiser's is a cut,
+    // so there is no thickness here that means the same thing. The flags travel
+    // because "this edge is closed" survives the translation; the millimetres do
+    // not (D59).
+  }
   lines.push('');
   for (let i = 0; i < CUSTOMISER_MAX_COLUMNS; i++) {
     lines.push(`Column_${i} = ${panel.columnHeights[i] ?? 0};`);
@@ -210,17 +254,30 @@ export function toCustomiserScad(panel: CustomiserPanel, label: string): string 
  */
 export function customPanelGroups(
   panels: readonly PlacedPanel[],
+  /**
+   * Anything else that makes two same-shaped plates different plates.
+   *
+   * The frame is the reason this exists. A one-column plate at the left edge and
+   * one at the right edge cut the SAME relative cell — and come out mirrored,
+   * because the border is on opposite sides. Shape alone would group them and
+   * you would print one plate twice.
+   */
+  extraKey?: (panel: PlacedPanel) => string,
 ): { key: string; panels: PlacedPanel[]; params: CustomiserPanel | null }[] {
   const groups = new Map<string, PlacedPanel[]>();
   for (const panel of panels) {
-    if (!isCustomPanel(panel)) continue;
+    const extra = extraKey ? extraKey(panel) : '';
+    // Cut, sized by the app, OR carrying an edge. The edge cannot be read off
+    // the panel alone — it is a property of the assembly — so it arrives as
+    // `extraKey`, and a non-empty one is exactly "this plate has an edge".
+    if (!isCustomPanel(panel) && extra === '') continue;
     // Shape, not position: the same block with the same holes is the same plate
     // wherever it hangs.
     const cut = (panel.omit ?? [])
       .map((c) => hexKey({ q: c.q - panel.origin.q, r: c.r - panel.origin.r }))
       .sort()
       .join(' ');
-    const key = `${panel.columns}x${panel.rows}|${cut}`;
+    const key = `${panel.columns}x${panel.rows}|${cut}|${extra}`;
     const list = groups.get(key);
     if (list) list.push(panel);
     else groups.set(key, [panel]);

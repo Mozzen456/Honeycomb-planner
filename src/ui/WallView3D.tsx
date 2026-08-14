@@ -18,14 +18,20 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 
-import { fixingPlanFor, itemCells } from '../core/bom';
+import { fasteningPlanFor, fixingPlanFor, itemCells } from '../core/bom';
 import { JUNCTION_FIXING_ID } from '../core/fixings';
 import { CELL, PANEL_DEPTH, PITCH } from '../core/constants';
 import {
-  cellsBoundsMm, hexKey, hexToMm, mmToHex, panelCells, placedPanelCells,
+  cellsCentreMm, hexKey, hexToMm, mmToHex, panelCells, placedPanelCells,
 } from '../core/hex';
+import { buildHoneycombMesh } from '../core/honeycomb';
+import {
+  isGeneratedSize, panelFrameKey, panelIsBordered, panelModelSpecFor,
+} from '../core/panelModel';
 import { partCells } from '../core/store';
-import type { Catalog, CatalogPart, Hex, LayoutDoc, Rotation } from '../core/types';
+import type {
+  Catalog, CatalogPart, Hex, LayoutDoc, PlacedPanel, Rotation,
+} from '../core/types';
 import { loadPartMesh, type PartMesh } from './meshLibrary';
 import './WallView3D.css';
 
@@ -85,6 +91,28 @@ function cellPrism(radius: number, depth: number): THREE.CylinderGeometry {
 }
 
 /**
+ * How far out of the wall a part's mesh sits — the ONE reading of it.
+ *
+ * Everything mounts ON the wall face, where `meshLibrary.orient` leaves its
+ * mating face. A fitting is the exception: it mounts IN the wall, body through
+ * the 22.0 mm mouth into the throat, and only its flange stays on this side
+ * (HSW-SPEC §5). `measureInsertSeat` finds that split on the mesh itself, so
+ * this drops the part by the length of the body and leaves the flange proud —
+ * which is what a photograph of an installed insert shows, and what the
+ * alignment tool draws a part up against.
+ *
+ * The fixings were at `PANEL_DEPTH − depthMm`: the whole 10 mm inside an 8 mm
+ * plate, so the flange was buried 2.5 mm in the honeycomb and 2 mm of body came
+ * out of the back. That is the fallback now, for a fitting whose mesh will not
+ * read as one — wrong by a flange, and still nearer than standing it in the
+ * room.
+ */
+function seatedZ(mesh: PartMesh, fitting: boolean): number {
+  if (mesh.seat !== null) return PANEL_DEPTH - mesh.seat.bodyMm;
+  return fitting ? PANEL_DEPTH - mesh.depthMm : PANEL_DEPTH;
+}
+
+/**
  * Corner k of a FLAT-TOP cell, in wall millimetres.
  *
  * Must stay identical to `hexCorners` in hex.ts — this builds the plate's
@@ -96,6 +124,36 @@ function corner(centre: { x: number; y: number }, k: number, acrossFlats: number
   const R = acrossFlats / Math.sqrt(3);
   const a = (Math.PI / 180) * (60 * (((k % 6) + 6) % 6));
   return new THREE.Vector2(centre.x + R * Math.cos(a), centre.y + R * Math.sin(a));
+}
+
+/**
+ * A RING round a cell's mouth — which cell, without plugging it.
+ *
+ * This was a solid hexagonal prism sitting in the mouth, and a cell is a HOLE:
+ * anything that goes into it disappeared behind the marker meant to point at it.
+ * Now that a fitting is seated in the wall rather than standing out in the room
+ * (D53) that is most of what you came to look at — the socket in the top of an
+ * insert, the bore a bolt goes through, the daylight through a hollow one.
+ *
+ * `PartInspector` learnt the same thing as D44 and its cells have been rings
+ * ever since. This is the wall's copy of that lesson: 0.6 mm each side of the
+ * 1.6 mm web, so the marker sits ON the rim without swallowing it.
+ */
+function cellRing(centre: { x: number; y: number }, depth: number): THREE.ExtrudeGeometry {
+  const outer: THREE.Vector2[] = [];
+  const inner: THREE.Vector2[] = [];
+  for (let k = 0; k < 6; k++) {
+    outer.push(corner(centre, k, CELL.mouthAcrossFlats + 1.2));
+    // Reversed, so it reads as a hole against the counter-clockwise outline.
+    inner.push(corner(centre, 5 - k, CELL.mouthAcrossFlats));
+  }
+  const shape = new THREE.Shape(outer);
+  shape.holes.push(new THREE.Path(inner));
+  const g = new THREE.ExtrudeGeometry([shape], {
+    depth, bevelEnabled: false, curveSegments: 1,
+  });
+  g.computeVertexNormals();
+  return g;
 }
 
 /**
@@ -259,6 +317,45 @@ function buildPanelGeometry(
   const front = make(CELL.mouthAcrossFlats, CELL.mouthDepth);
   front.translate(0, 0, PANEL_DEPTH - CELL.mouthDepth);
   return { back, front };
+}
+
+/**
+ * A generated plate as three.js geometry, in the plate's own frame.
+ *
+ * Built in ABSOLUTE wall millimetres — the frame lines are absolute, so it has
+ * to be — and then shifted back by the panel's origin, because the caller
+ * instances it and translates each copy by `hexToMm(origin)`. Every member of an
+ * instancing group is a translation of this one; the group key includes the
+ * frame, which is what makes that true.
+ *
+ * Returns null rather than throwing when the generator refuses a shape, so one
+ * awkward plate cannot take the whole wall down with it.
+ */
+function generatedPanelGeometry(
+  panel: PlacedPanel,
+  doc: LayoutDoc,
+): THREE.BufferGeometry | null {
+  try {
+    const spec = panelModelSpecFor(panel, doc);
+    if (spec.cells.length === 0) return null;
+    const mesh = buildHoneycombMesh({ ...spec, originAtZero: false });
+    const o = hexToMm(panel.origin);
+    const src = mesh.positions;
+    const pos = new Float32Array(src.length);
+    for (let i = 0; i < src.length; i += 3) {
+      pos[i] = src[i]! - o.x;
+      pos[i + 1] = src[i + 1]! - o.y;
+      pos[i + 2] = src[i + 2]!;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    // Non-indexed, so this is flat shading per triangle — which is what a
+    // printed plate looks like, and what makes the stepped bore read.
+    geo.computeVertexNormals();
+    return geo;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -521,7 +618,10 @@ export function WallView3D(props: WallView3DProps) {
     // columns × rows alone drew the cut panels solid.
     const bySize = new Map<
       string,
-      { partId: string; columns: number; rows: number; omit: Hex[]; origins: Hex[] }
+      {
+        partId: string; columns: number; rows: number; omit: Hex[];
+        sample: PlacedPanel; origins: Hex[];
+      }
     >();
     for (const p of doc.panels) {
       const cut = (p.omit ?? [])
@@ -530,12 +630,17 @@ export function WallView3D(props: WallView3DProps) {
         .join(' ');
       // Keyed on the PART as well as the shape: two panel types can share a
       // cell block and still be different plates, and each has its own mesh.
-      const k = `${p.partId}|${p.columns}x${p.rows}|${cut}`;
+      // And on the FRAME, because two plates with the same cut can still be
+      // mirror images of each other when the border is on opposite edges.
+      const k = `${p.partId}|${p.columns}x${p.rows}|${cut}|${panelFrameKey(p, doc.panels, doc.frame)}`;
       const e = bySize.get(k) ?? {
         partId: p.partId,
         columns: p.columns,
         rows: p.rows,
         omit: (p.omit ?? []).map((c) => ({ q: c.q - p.origin.q, r: c.r - p.origin.r })),
+        // One panel of the group, to generate the plate from. Every other member
+        // is a translation of it — that is what the key guarantees.
+        sample: p,
         origins: [],
       };
       e.origins.push(p.origin);
@@ -556,7 +661,7 @@ export function WallView3D(props: WallView3DProps) {
       color: theme.panel.clone().lerp(new THREE.Color(0xffffff), 0.18),
     });
 
-    for (const { partId, columns, rows, omit, origins } of bySize.values()) {
+    for (const { partId, columns, rows, omit, sample, origins } of bySize.values()) {
       /*
        * The real plate, when there is one AND this is a stock plate.
        *
@@ -566,21 +671,45 @@ export function WallView3D(props: WallView3DProps) {
        * stock mesh for it would show a plate with no hole where the light
        * switch goes, which is precisely the thing the customiser exists to cut.
        */
-      const real = omit.length === 0 ? panelMeshes.get(partId) : undefined;
+      // The shipped mesh, and ONLY when this really is the shipped plate.
+      //
+      // Three things stop it being one, and all three have to be checked here:
+      // cells cut out, a size the app chose, and an EDGE. Missing the edge drew
+      // the stock STL for every bordered plate, so the plan showed a border, the
+      // parts list said "edged top + left", and the wall in 3D had none (D66).
+      const stock =
+        omit.length === 0 &&
+        !isGeneratedSize(partId) &&
+        !panelIsBordered(sample, doc.panels, doc.frame);
+      const real = stock ? panelMeshes.get(partId) : undefined;
 
       if (real) {
-        // The mesh is centred on its own bounding box; the cell block is not
-        // centred on the ORIGIN cell. Line the two up by their centres, which
-        // works because a plate's margins are equal on opposite sides, so its
-        // cells really are centred within it (HSW-SPEC §4).
-        const block = cellsBoundsMm(panelCells({ q: 0, r: 0 }, columns, rows));
-        const cx = (block.minX + block.maxX) / 2;
-        const cy = (block.minY + block.maxY) / 2;
+        /*
+         * The mesh is centred on its own bounding box, so it is placed at the
+         * centre of the block it represents — measured at the block's REAL
+         * origin, not at (0, 0) and then shifted.
+         *
+         * That distinction is the whole bug this replaced. It used to add
+         * `hexToMm(origin)` to the centre of a block at (0, 0), and BOTH of
+         * those carry `LATTICE_ANCHOR` — so the anchor was counted twice and
+         * every stock plate sat exactly `MARGIN_X` (13.6255 mm) to the right of
+         * its own cells. Invisible on the plates themselves, because they all
+         * shifted together and the honeycomb stayed continuous; visible the
+         * moment a PART was placed, because parts are drawn at the true lattice
+         * position and so appeared to sit between holes. Same class as D63.
+         *
+         * A centre measured at the real origin cannot double-count anything:
+         * it is one anchored quantity used as one absolute position. It works
+         * because a plate's margins are equal on opposite sides, so its cells
+         * really are centred within it — measured, not assumed: the mesh comes
+         * out 170.317 × 177.000 against a block of exactly the same size
+         * (HSW-SPEC §4, `tests/plate-alignment.test.ts`).
+         */
         const mesh = new THREE.InstancedMesh(real.geometry, faceMat, origins.length);
         const m4 = new THREE.Matrix4();
         origins.forEach((o, i) => {
-          const p = hexToMm(o);
-          m4.makeTranslation(p.x + cx, p.y + cy, 0);
+          const c = cellsCentreMm(panelCells(o, columns, rows));
+          m4.makeTranslation(c.x, c.y, 0);
           mesh.setMatrixAt(i, m4);
         });
         mesh.instanceMatrix.needsUpdate = true;
@@ -590,6 +719,41 @@ export function WallView3D(props: WallView3DProps) {
         mesh.userData['ownGeometry'] = false;
         s.panelGroup.add(mesh);
         continue;
+      }
+
+      /*
+       * A CUT plate is drawn from the generator — the same triangles the
+       * Download STL button writes.
+       *
+       * This used to be the drawn approximation below, which knows about cells
+       * and holes but not about a framed edge: a border cuts its outermost cells
+       * in HALF and walls them off, and `omit` carries those cells, so the wall
+       * came up with a column of hexagons simply missing along every framed edge.
+       * It looked like damage. Drawing the real plate means what you see is what
+       * you print, frame and all, and the stepped bore is genuinely there rather
+       * than suggested by two tones.
+       */
+      // Anything the app has to MAKE — cut round a zone, sized for the printer,
+      // or carrying an edge — is drawn from the generator, so what is on screen
+      // is what the Download STL button writes.
+      if (omit.length > 0 || isGeneratedSize(partId) || panelIsBordered(sample, doc.panels, doc.frame)) {
+        const geo = generatedPanelGeometry(sample, doc);
+        if (geo) {
+          const mesh = new THREE.InstancedMesh(geo, faceMat, origins.length);
+          const m4 = new THREE.Matrix4();
+          origins.forEach((o, i) => {
+            const p = hexToMm(o);
+            m4.makeTranslation(p.x, p.y, 0);
+            mesh.setMatrixAt(i, m4);
+          });
+          mesh.instanceMatrix.needsUpdate = true;
+          mesh.frustumCulled = false;
+          s.panelGroup.add(mesh);
+          continue;
+        }
+        // Fall through to the drawn plate if the generator refuses this shape,
+        // so an un-generatable plate still appears on the wall instead of
+        // leaving a hole with no explanation.
       }
 
       const { back, front } = buildPanelGeometry(columns, rows, omit);
@@ -609,6 +773,21 @@ export function WallView3D(props: WallView3DProps) {
   }, [doc.panels, panelMeshes, ready, readTheme, themeTick]);
 
   // --- build the placed items --------------------------------------------
+
+  /**
+   * The two plans this view draws, computed ONCE per document.
+   *
+   * `fixingPlanFor` runs the whole seam-and-spacing solver over the wall, and it
+   * was being run again inside `fasteningPlanFor` and once more by the parts
+   * list. Memoised here and handed down, so the fixings you see and the
+   * fasteners you see come from the same pass — the reading of "which cells are
+   * free" that D48 says must not exist twice.
+   */
+  const fixingPlan = useMemo(() => fixingPlanFor(doc, catalog), [doc, catalog]);
+  const fastenings = useMemo(
+    () => fasteningPlanFor(doc, catalog, fixingPlan),
+    [doc, catalog, fixingPlan],
+  );
 
   /**
    * Bumped when a part's real mesh finishes loading, to rebuild the item group.
@@ -667,15 +846,11 @@ export function WallView3D(props: WallView3DProps) {
 
       // The body: the part's own mesh where we have it, otherwise a box at its
       // measured size, standing proud of the face.
-      let cx = 0;
-      let cy = 0;
-      for (const c of cells) {
-        const p = hexToMm(c);
-        cx += p.x;
-        cy += p.y;
-      }
-      cx /= cells.length;
-      cy /= cells.length;
+      //
+      // Placed at the BOX CENTRE of its cells, which is where `orient` centres
+      // the mesh. This used to take the MEAN, which is the same point only for a
+      // symmetric footprint — an L-shaped part sat 3.4 mm off its own holes.
+      const { x: cx, y: cy } = cellsCentreMm(cells);
 
       const loaded = meshes.current.get(it.partId);
       if (loaded === undefined) {
@@ -690,30 +865,82 @@ export function WallView3D(props: WallView3DProps) {
       const body = loaded
         ? new THREE.Mesh(loaded.geometry, mat)
         : new THREE.Mesh(new THREE.BoxGeometry(w, h, depth), mat);
-      body.position.set(cx, cy, loaded ? PANEL_DEPTH : PANEL_DEPTH + depth / 2);
+      // A fitting goes INTO the cell; everything else stands on the face. No
+      // seat ROTATION: a mesh from a file is drawn flat-top and the wall is now
+      // flat-top too, so it lands in its hole unturned (D35).
       const fitting = part.type === 'insert' || part.type === 'fastener';
-      // No seat correction: a mesh from a file is drawn flat-top and the wall
-      // is now flat-top too, so it lands in its hole unturned (D35).
-      void fitting;
+      body.position.set(cx, cy, loaded ? seatedZ(loaded, fitting) : PANEL_DEPTH + depth / 2);
       body.rotation.z = (Math.PI / 3) * it.rotation;
       body.userData['itemId'] = it.id;
       body.userData['ownGeometry'] = loaded === null || loaded === undefined;
       s.itemGroup.add(body);
 
-      // A thin collar in each occupied cell, so a multi-cell part still shows
-      // WHICH cells it uses — the body alone would hide that.
+      // A ring round each occupied cell, so a multi-cell part still shows WHICH
+      // cells it uses — the body alone would hide that. A ring and not a plug:
+      // the plug filled the hole, and a hole is the thing you look through.
       for (const c of cells) {
         const p = hexToMm(c);
-        const collar = new THREE.Mesh(
-          cellPrism((CELL.mouthAcrossFlats * 0.96) / Math.sqrt(3), CELL.mouthDepth * 1.2),
-          mat,
-        );
-        collar.position.set(p.x, p.y, PANEL_DEPTH - CELL.mouthDepth * 0.4);
+        const collar = new THREE.Mesh(cellRing(p, 0.8), mat);
+        collar.position.z = PANEL_DEPTH - 0.4;
         collar.userData['itemId'] = it.id;
+        collar.userData['ownGeometry'] = true;
         s.itemGroup.add(collar);
       }
     }
-  }, [doc.items, selection, catalog, partOf, ready, readTheme, themeTick, meshTick]);
+
+    /*
+     * THE INSERTS THE ACCESSORIES THEMSELVES HANG ON.
+     *
+     * The wall drew the fixings holding the PLATES up and nothing holding the
+     * things ON them — so a part seated against an insert in the alignment tool
+     * arrived here with no insert under it, and the two views disagreed about
+     * the thing the tool exists to line up.
+     *
+     * Straight from `fasteningPlanFor`, which is also what `computeBom` counts:
+     * one plan, so an insert in the picture is an insert on the list. Where the
+     * wall already carries one — an accessory pegged into a junction fixing's
+     * open socket (D47) — the plan reports it as supplied and nothing is drawn,
+     * because the part that provides it is drawn already.
+     *
+     * In the fixing tone rather than the item's: these are wall hardware, and a
+     * builder reading the picture should see the same family of parts in the
+     * seams and under the hooks.
+     */
+    const fittingMat = new THREE.MeshLambertMaterial({
+      color: theme.panel.clone().lerp(new THREE.Color(0xffffff), 0.35),
+    });
+    for (const f of fastenings) {
+      const part = partOf(f.partId);
+      if (!part || f.cells.length === 0) continue;
+      const loaded = meshes.current.get(f.partId);
+      if (loaded === undefined) {
+        meshes.current.set(f.partId, null);
+        void loadPartMesh(part).then((m) => {
+          meshes.current.set(f.partId, m);
+          if (m !== null) setMeshTick((n) => n + 1);
+        });
+      }
+      for (const at of f.cells) {
+        // Through `itemCells`, so one instance covers exactly the cells a placed
+        // copy of that fastener would — anchor shift, rotation and all.
+        const covered = itemCells(
+          { id: `${f.itemId}/${f.partId}`, partId: f.partId, at, rotation: f.rotation },
+          catalog,
+        );
+        if (covered.length === 0) continue;
+        const { x: fx, y: fy } = cellsCentreMm(covered);
+        const mesh = loaded
+          ? new THREE.Mesh(loaded.geometry, fittingMat)
+          : new THREE.Mesh(cellPrism(CELL.mouthAcrossFlats / Math.sqrt(3), PANEL_DEPTH), fittingMat);
+        mesh.rotation.z = (Math.PI / 3) * f.rotation;
+        mesh.position.set(fx, fy, loaded ? seatedZ(loaded, true) : PANEL_DEPTH / 2);
+        // Selecting the part it holds, not itself: it is not a placed item.
+        mesh.userData['itemId'] = f.itemId;
+        mesh.userData['ownGeometry'] = !loaded;
+        s.itemGroup.add(mesh);
+      }
+    }
+  }, [doc.items, fastenings, selection, catalog, partOf, ready, readTheme, themeTick, meshTick]);
 
   // --- wall fixings -------------------------------------------------------
 
@@ -800,7 +1027,7 @@ export function WallView3D(props: WallView3DProps) {
     // junction's own socket does not delete the junction (D48). Drawing this
     // from a second rule would put a fixing in the picture that is not on the
     // list, or the reverse.
-    const plan = fixingPlanFor(doc, catalog);
+    const plan = fixingPlan;
 
     // Lighter than the plate, not darker. These are structure rather than the
     // things you came to hang up, so they must not compete with a placed
@@ -815,9 +1042,10 @@ export function WallView3D(props: WallView3DProps) {
       const mesh = fixingMesh
         ? new THREE.Mesh(fixingMesh.geometry, mat)
         : new THREE.Mesh(cellPrism(CELL.mouthAcrossFlats / Math.sqrt(3), PANEL_DEPTH), mat);
-      // Seated in the cell: the insert drops in from behind and its flange sits
-      // proud of the front face, which is what the photographs show.
-      mesh.position.set(p.x, p.y, fixingMesh ? PANEL_DEPTH - fixingMesh.depthMm : PANEL_DEPTH / 2);
+      // Seated in the cell: the body drops into the hole and the flange sits
+      // proud of the front face, which is what the photographs show — and, now
+      // that the flange is measured rather than assumed away, what this draws.
+      mesh.position.set(p.x, p.y, fixingMesh ? seatedZ(fixingMesh, true) : PANEL_DEPTH / 2);
       mesh.userData['ownGeometry'] = fixingMesh === null;
       s.fixingGroup.add(mesh);
     }
@@ -847,44 +1075,33 @@ export function WallView3D(props: WallView3DProps) {
         ? new THREE.Mesh(junctionMesh.geometry, mat)
         : new THREE.Mesh(cellPrism((CELL.mouthAcrossFlats * 1.6) / Math.sqrt(3), PANEL_DEPTH), mat);
       mesh.rotation.z = (Math.PI / 3) * junction.rotation;
-      mesh.position.set(
-        cx, cy,
-        junctionMesh ? PANEL_DEPTH - junctionMesh.depthMm : PANEL_DEPTH / 2,
-      );
+      mesh.position.set(cx, cy, junctionMesh ? seatedZ(junctionMesh, true) : PANEL_DEPTH / 2);
       mesh.userData['ownGeometry'] = junctionMesh === null;
       s.fixingGroup.add(mesh);
     }
-  }, [doc, catalog, ready, readTheme, themeTick, fixingMesh, junctionMesh]);
+  }, [doc, catalog, fixingPlan, ready, readTheme, themeTick, fixingMesh, junctionMesh]);
 
-  // --- obstacles ----------------------------------------------------------
-
-  /**
-   * Switches and sockets, drawn as what they are: a plate standing off the
-   * wall where the honeycomb cannot go. Shown in the danger colour because the
-   * one thing you need to see is whether a part is about to sit on top of one.
+  /*
+   * --- obstacles: NOT drawn ------------------------------------------------
+   *
+   * A blocked zone used to be a red slab standing 5 mm off the wall, the size
+   * of the zone, on the argument that you need to see whether a part is about
+   * to sit on one. Two things were wrong with that.
+   *
+   * It is the biggest object on the wall and it is opaque, so it HID what it
+   * was pointing at — the cut plates, the edge raised round them, and any part
+   * near the zone. The one view where you can check that a border came out
+   * clean round a socket was the one view that covered it up.
+   *
+   * And it says nothing the wall does not already say. The honeycomb is CUT
+   * there: the hole is the zone, at exactly its size, and a part cannot be
+   * dropped in it because there are no cells. A marker that duplicates an
+   * absence is noise on top of the answer.
+   *
+   * The plan view still draws zones, with their names and sizes, which is where
+   * you position them. `obstacleGroup` is kept in the scene so nothing else has
+   * to change shape; it simply stays empty.
    */
-  useEffect(() => {
-    const s = stateRef.current;
-    if (!s || !ready) return;
-    const theme = readTheme();
-    for (const child of [...s.obstacleGroup.children]) {
-      s.obstacleGroup.remove(child);
-      const m = child as THREE.Mesh;
-      m.geometry?.dispose();
-      (m.material as THREE.Material)?.dispose?.();
-    }
-    for (const o of doc.obstacles ?? []) {
-      const mat = new THREE.MeshLambertMaterial({
-        color: theme.bad, transparent: true, opacity: 0.75,
-      });
-      const box = new THREE.Mesh(
-        new THREE.BoxGeometry(Math.max(1, o.widthMm), Math.max(1, o.heightMm), 10),
-        mat,
-      );
-      box.position.set(o.xMm + o.widthMm / 2, o.yMm + o.heightMm / 2, PANEL_DEPTH / 2 + 5);
-      s.obstacleGroup.add(box);
-    }
-  }, [doc.obstacles, ready, readTheme, themeTick]);
 
   // --- ghost preview ------------------------------------------------------
 
@@ -1011,15 +1228,10 @@ export function WallView3D(props: WallView3DProps) {
 
     if (item && part) {
       const cells = itemCells(item, catalog);
-      let cx = 0;
-      let cy = 0;
-      for (const c of cells) {
-        const m = hexToMm(c);
-        cx += m.x;
-        cy += m.y;
-      }
-      cx /= cells.length || 1;
-      cy /= cells.length || 1;
+      // The same centring as the body above, through the same function: an
+      // outline that is centred differently from the thing it outlines is worse
+      // than no outline.
+      const { x: cx, y: cy } = cellsCentreMm(cells);
 
       const loaded = meshes.current.get(item.partId);
       const { depth, w, h } = partBox(part);
@@ -1035,7 +1247,14 @@ export function WallView3D(props: WallView3DProps) {
           depthTest: false,
         }),
       );
-      edges.position.set(cx, cy, loaded ? PANEL_DEPTH : PANEL_DEPTH + depth / 2);
+      // The same seating the body got, or the outline floats off the part it is
+      // outlining — an insert now sits 7.5 mm into the wall.
+      edges.position.set(
+        cx, cy,
+        loaded
+          ? seatedZ(loaded, part.type === 'insert' || part.type === 'fastener')
+          : PANEL_DEPTH + depth / 2,
+      );
       edges.rotation.z = (Math.PI / 3) * item.rotation;
       // Drawn last and over everything, so an outline round a part standing 40 mm
       // off the wall is not hidden by the part itself.

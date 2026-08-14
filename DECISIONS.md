@@ -1458,3 +1458,1321 @@ before and after the fix. The defect above is the only mechanism in the file tha
 copy in the scene, and it is closed; if it turns up again it will be from a path I have not found,
 and the thing to look at first is what changed `part` or `current` identity while the dialog stayed
 open.
+
+---
+
+## D53 — An insert seats IN the wall, and its own mesh says how far
+
+**Reported: "in the alignment tool I want you to use the actual model of the insert so that I can
+line up properly, and catch the position from the alignment tool so that it all gets seated
+correctly."**
+
+The alignment tool drew the insert as a gold disc — `INSERT.flangeAcrossFlats` across,
+`INSERT.flangeThickness` thick, one in every cell the part covered. That is a drawing of a flange
+and nothing else: no body, no bolt head, and above all **no socket**, which is the one feature a
+person is lining their part up against. It is the same objection that turned the dialog's honeycomb
+into a real panel STL (D45) — what you are matching your part to should be the object you are going
+to print.
+
+**So the insert is now its own STL**, through the same `loadPartMesh` the wall draws with, sharing
+its cache and carrying any correction saved for the insert itself.
+
+**Which meant answering where an insert actually sits, and that is not where anything else sits.**
+`meshLibrary.orient` leaves every part with its mating face at z = 0 — on the wall face. An insert
+is the exception in the whole catalogue: its body goes through the 22.0 mm mouth into the throat and
+only its flange stays on this side (HSW-SPEC §5). Drawn by the general rule it stands its entire
+10 mm out in the room.
+
+`src/core/insertSeat.ts` measures the split instead of assuming it: the flange is exactly the
+material that cannot pass through a mouth, so the lowest plane at which the part gets wider than the
+widest thing that fits IS the wall's front face. Every one of the fifteen shipped fittings measures
+**7.5 mm of body and a 2.5 mm flange** — which is `INSERT.flangeThickness` to the tenth, so the datum
+`seat: 'insert'` has moved parts by since it was introduced is now held to the models it claims to
+describe (`tests/insert-seat.test.ts`). It **refuses** rather than guesses: a mesh whose widest
+material is not a thin collar at the outer end returns null, and the caller falls back — to the drawn
+flange in the dialog, and to the old convention on the wall.
+
+**The classifier deliberately uses no cell centres.** The obvious test — "further from any cell
+centre than a mouth's circumradius" — is more principled and does not work here, because for a
+`high`-mating part the oriented mesh is mirrored relative to its own footprint (PARKED P10). On the
+chiral two-cell fittings (`double-m4`, `insert-hollow-dual`, `insert-hollow-for`,
+`insert-with-m3-dual`) that reads the plugs as being outside their own holes and calls the entire
+10 mm a flange. A band inside the part's own outline needs no lattice at all and is immune to it.
+
+**The same measurement fixed the wall, which is the "seated correctly" half of the request.** Wall
+fixings and junction fixings were drawn at `PANEL_DEPTH − depthMm`: all 10 mm of a fitting inside an
+8 mm plate, so the flange was buried 2.5 mm in the honeycomb and 2 mm of body came out of the back.
+A placed insert item was at `PANEL_DEPTH` — the whole thing standing in the room. All four now go
+through one helper, `seatedZ` in `WallView3D`, so the wall cannot seat an insert one way as a fixing
+and another as an item, and the dialog and the wall show the same object in the same place.
+
+**The inserts are drawn `fastenerCount` times, not once per cell** — in the 3D stage and in the 2D
+footprint editor, which took a `showInserts` flag and marked every covered cell. A seven-cell shelf
+hanging on two pegs showed seven inserts: the seven-inserts-for-two-pegs error (CLAUDE.md) drawn as
+a picture, contradicting the number typed directly below it. They go in the cells nearest the anchor,
+deterministically, and a multi-cell fastener claims every cell it covers so the next one does not
+land on top of it.
+
+**What is NOT claimed: which cells the pegs are really in.** Nothing in the geometry says that, and
+the tool does not pretend otherwise — the count is a person's answer and the placement follows it in
+a stated order. And the seat datum stays `INSERT.flangeThickness` rather than becoming per-part: it
+is what `seatOffsetMm` moves a part by, in a core function with no mesh to hand. An insert whose own
+flange disagrees with it by more than 0.1 mm — which no shipped one does, but an imported one may —
+is called out in the dialog with the number to type into the depth, rather than being absorbed.
+
+**And the dialog has to seat a fitting too — reported within the hour.** "The whole wall is
+misaligned, so when I line something up in the tool it does not line up in the large preview." The
+wall had learnt where an insert goes and the alignment tool had not: it draws every part with its
+mating face on the plate, which is right for an accessory and 7.5 mm wrong for the part that mounts
+INSIDE the cell. Lining an insert up against the tool's wall therefore put it somewhere else in the
+big view — the single failure this file exists to prevent, reintroduced by teaching one side of it
+a new fact.
+
+The inspected part is now dropped by the same `seat.bodyMm`, as a translation along the wall normal
+on top of `mountingMatrixInFileFrame` — NOT folded into `mountingMatrix`, because it is not a
+correction: nobody chose it, and it must never appear in the six numbers that get saved. It is
+measured under the LIVE face rather than read off `loadPartMesh`, whose geometry carries the SAVED
+mounting: picking a different face changes which end goes into the wall, and the preview has to
+follow the click rather than the file.
+
+What was checked while looking for it, since "the whole wall" could have meant the honeycomb itself:
+every shipped panel's holes were rastered out of the geometry the wall actually draws — `orient`
+plus the pointy plate's 90° — and compared with `hexToMm` under the wall's own placement rule. The
+worst residual over all seven, 288-cell plate included, is 0.25 mm at a 0.5 mm raster, i.e. nothing.
+The plates and the lattice agree; it was the fittings that had moved.
+
+**Then the cell markers had to stop being plugs.** "When I place a part its middle gets filled out,
+so I cannot see through the open parts." Each occupied cell carried a solid hexagonal prism in its
+mouth — a marker for WHICH cells a multi-cell part uses, which is a real question the body alone
+cannot answer. It sat at z 6.0–8.4, which is inside the socket of an insert now seated at 0.5–10.5:
+the marker was drawn through the middle of the very hole it was pointing at.
+
+`PartInspector` already knew this — D44 turned its cells into rings for exactly this reason, "a cell
+drawn as a solid prism hides anything that goes into it". The wall's markers are now the same ring,
+0.6 mm each side of the 1.6 mm web, so they sit ON the rim and leave the hole open. Seating the
+fittings is what exposed it: while an insert stood 10 mm out in the room, the plug behind it was
+hidden by the part itself.
+
+**And then the wall had to DRAW them.** "When I use the tool to align an object with an insert, the
+insert is not rendered in the 3D view of the main page." The wall drew the fixings that hold the
+PLATES up — the spacing grid and the junctions at the seams — and nothing that holds the things ON
+them. So the alignment tool showed a hook pegged into an insert and the big view showed the same
+hook floating over an empty hole: the two disagreed about the very object the tool exists to line
+up against.
+
+`bom.fasteningPlanFor` resolves every placed item's `requires` into cells on the wall, and it is one
+plan with two consumers by construction: `computeBom` reads its `supplied` cells to know what NOT to
+order, `WallView3D` reads its `cells` to know what to draw. An insert in the picture is an insert on
+the list, and the reverse — which is the rule D48 had to establish for the wall fixings after
+planning them twice gave 128 holes in a wall needing 80. The socket allocation moved into it
+unchanged, so the deduction that was already right stayed right.
+
+Which cells carry them is `fixings.fastenerCells`, and `PartInspector` now calls it instead of its
+own copy: the count the person typed, never one per cell, nearest the anchor, with a multi-cell
+fastener claiming what it covers. Two copies of that rule would put the insert in one cell in the
+dialog and another on the wall — the same failure as the seat, one step further out.
+
+`tests/fastening-plan.test.ts` pins both halves: the count rule with its cases, and a part hung on a
+junction's open socket coming back `supplied` with nothing drawn while a second one on bare wall
+buys its own — checked against the BOM line, which reports 1 printed and 1 provided.
+
+---
+
+## D54 — The generator is built from the measurements; the customiser settles only choices
+
+`Customiser/Cadcode.rtf` — the supplied OpenSCAD customiser plus borders — expresses the whole bore
+in closed form, as one extruded polygon per wall:
+
+    polygon([[0,0], [0,8], [0.8,8], [0.8,6], [1.8,5.1], [1.8,0.5], [1.62,0]])
+
+That is a complete, unambiguous specification of the plate, and it would have been much quicker to
+transcribe than to derive. It is also wrong in one place.
+
+Read as thickness against height, it says: 1.8 mm of wall from z 0.5 to 5.1, tapering to 0.8 mm
+between 5.1 and 6.0, then 0.8 mm to the top, with a 0.18 mm chamfer over the bottom 0.5 mm. Against
+HSW-SPEC §3 — measured off `wall-honeycomb-part.stl`, standard deviation **0.00000 mm** across all
+56 cells — the two agree exactly on the 22.0 mouth over 2.0 mm, on the 48° lead-in over 0.9 mm, and
+on the 20.0 throat over 4.6 mm. They disagree on the entry flare: the customiser chamfers to 20.36,
+the shipped plates measure **20.8 across flats over 0.5 mm**.
+
+The measurement wins, per the standing rule that a source settles a *choice* and never a
+measurement. `BORE_PROFILE` in `src/core/honeycomb.ts` is therefore assembled from `constants.ts`
+and nothing else, and the four band depths sum to exactly `PANEL_DEPTH` — 0.5 + 4.6 + 0.9 + 2.0 = 8.0
+— which `assertProfile` refuses to let drift.
+
+What the customiser IS the authority on is everything a measurement cannot reach, because no shipped
+plate has one: where a border cuts, how thick it is, and how it behaves when doubled.
+
+**How we know the generator is right.** It reproduces all seven shipped plates from the constants
+alone — volume within **0.0025 %** and bounding box within **0.0004 mm** of the figures `tools/scan.py`
+measured off the real files, on every one. `tests/honeycomb-model.test.ts` is that comparison, and it
+is the reason a plate nobody has ever printed can be trusted: the ones that HAVE been printed come
+out right to five figures. The residual 0.0004 mm is the snapping below, not error.
+
+**Watertightness is not optional and not automatic.** `ROW_STEP` is the designer's typed 20.438, not
+23.6·√3/2 (D4), so unit hexagons do **not** tile exactly: the three cells meeting at a corner compute
+it about 0.0003 mm apart. Emitted as computed, that is a mesh full of 0.0003 mm cracks — not a solid,
+and a slicer will either refuse it or "repair" it into something else. `cornerPositions` resolves
+every shared corner to ONE canonical point, keyed on the unordered triple of cells that meet there,
+so adjacent cells emit bit-identical vertices and the internal edges cancel exactly. `meshIsClosed`
+checks the stronger property — every directed edge has exactly one opposite — which also catches
+inconsistent winding, and it compares vertices EXACTLY on purpose: a tolerance there would hide the
+snapping failing.
+
+---
+
+## D55 — A border cuts through the cell centre, and Cadcode's asymmetry is kept
+
+> **SUPERSEDED BY D59.** This described the customiser's CUT. The user's own printed
+> reference plate does the opposite — it adds material and keeps every cell — so the cut
+> was replaced wholesale. Kept because the reasoning about which cells a cut eats is still
+> the reason the additive form was worth the rewrite.
+
+A framed edge is not "the honeycomb, plus a rim". Following the customiser, it is a CUT: the
+outermost cells are sliced along their own centre line and closed with a wall of the same thickness
+and taper as every other wall. Two consequences fall out of that and both matter to the planner.
+
+**It eats cells.** Half a hexagon holds nothing, so those cells must leave the mountable set or the
+app offers a socket that will not exist. Which cells is not uniform and cannot be guessed: a left
+border eats the whole first column, while a top border eats only the un-staggered half of the top
+row — the staggered half sits a full `PITCH/2` lower, so the line runs along its flat and leaves its
+bore untouched. `frameConsumedCells` decides it by one rule, measured against the widest band of the
+bore: a cell is eaten when its MOUTH crosses the line.
+
+**The wall's inner face lands exactly where a full cell's bore already is.** So a single-thickness
+border adds no material at all to the cells it only grazes; only doubling does. If that comes out
+wrong the plate still looks right on screen and the frame is 1.8 mm thinner than asked for.
+
+Cadcode is asymmetric about doubling: the top and bottom borders shift the plate's edge OUTWARD by
+`WALL_THICKNESS` (its `shift`) so the wall's inner face stays put, while the left and right borders
+keep a fixed edge and grow inward. That looks like a leftover — the top/bottom shift carries a
+comment describing it as a fix — and it is reproduced rather than tidied, because the point of
+matching the reference is that these plates interchange with everyone else's. Recorded here so the
+next person does not "correct" it. `tests/honeycomb-frame.test.ts` pins both halves.
+
+---
+
+## D56 — The planner and the printer see a framed cell differently, on purpose
+
+A cell a border has halved is in two states at once: gone, as far as anything that mounts on the
+wall is concerned, and still there as far as the printer is concerned. Both are true and the app
+needs both.
+
+The cheap resolution — a third cell state, checked everywhere — would mean teaching placement, the
+parts list, the fixing plan and both renderers about frames. Instead the frame's cells join the
+obstacle's cells in `omit`, which every one of those rules already handles, and exactly one function
+puts them back: `panelModelSpec` in `src/core/panelModel.ts`, which is what the generator, the STL
+download, the 3D view and the customiser export all go through. Nothing else may reconstruct a
+plate's cells. If that function ever stops restoring them, the plate generates with a column of holes
+where its frame should be — you would print it and find it had no frame on it — so
+`tests/frame-document.test.ts` states it as a measurement: the restored plate has strictly more
+material than the un-restored one.
+
+Two more things follow from the frame being a property of the ASSEMBLY rather than of a plate.
+`frameLinesFor` takes the line from every panel's cells at once, because four plates along one edge
+must be cut on ONE line or the edge comes out stepped. And `panelFrameKey` joins the grouping key
+everywhere identical plates are counted — `customPanelGroups`, `computeBom` and the 3D view's
+instancing — because two plates with the same relative cut and the border on opposite edges are
+MIRROR IMAGES, and grouping them prints one twice and the other never.
+
+---
+
+## D57 — An edge runs between corners `dir` and `dir + 1`, and that is now a function
+
+Deriving the frame needed the answer to "which two corners bound the edge a cell shares with
+neighbour `dir`", and checking it turned up the same off-by-one twice more in `WallCanvas`: the
+outline of every placed part, and every panel seam, were drawn from corners `dir − 1` to `dir` — one
+edge round the hexagon. It is the identical mistake already fixed once in `WallView3D`'s
+`unionOutline` (pass 7), and it survived a 704-test suite because it is entirely plausible on screen:
+a seam still ran between two plates, an outline still surrounded a part, just along the wrong side of
+each cell.
+
+It is now `edgeCorners` in `hex.ts`, with the rest of the lattice semantics, and the test asserts
+nothing by hand: the midpoint of the edge must sit exactly halfway between the two cell centres. That
+cannot be satisfied by an off-by-one and it needs no written-down expectation.
+
+`WallCanvas`'s `panelIndex` had a related fault, and it is the one that mattered most here: it built
+the cell map from `panelCells` on the raw block instead of `placedPanelCells`, so a cut cell was
+still drawn. A blocked zone changed the parts list and the 3D view and left the plan showing an
+unbroken honeycomb straight through the light switch — the one place the cut most needs to be
+visible, since drawing the zone is what you came to the plan to do.
+
+---
+
+## D58 — The plan is where you measure and where you draw what the wall must avoid
+
+A wall is planned against a room and a room is measured with a tape. The app could state the wall's
+own size and nothing else: there was no way to ask how far it was between any two things on it, and
+an obstacle could only be typed in as four numbers in a side panel — where it was then invisible,
+because neither view drew obstacles at all.
+
+Three modal tools now, not modifiers: two of the three are DRAGS on empty wall, and a marquee, a
+measurement and a new zone cannot all be "drag on empty wall" at once. Escape always returns to
+Select, and drawing a zone returns to Select by itself so the zone can be nudged without hunting for
+the tool switch.
+
+Snapping is shared between measuring and drawing, which is the point: a zone drawn by eye lands a
+fraction of a cell out, and a fraction of a cell is the difference between cutting one hexagon and
+cutting two. `snapPoint` ranks a POINT above a LINE before it considers distance — ranking by
+distance alone makes a wall corner unreachable, since standing 3 mm right and 4 mm up from it the
+bottom edge is 4 mm away and the corner 5, so the edge takes every pointer and you can never measure
+from the corner of your own wall.
+
+The measurement is in the DOM as well as on the canvas. A number painted into a canvas cannot be read
+by a screen reader, cannot be selected and cannot be copied into the note you are writing about your
+wall — and this is the one number in the app a person actually wants to write down.
+
+**The live gesture is a REF**, written synchronously, exactly as the part drag already was. Held in
+state, the release arrived before the render that would make it visible and the whole gesture was
+thrown away: every quick flick measured nothing. That is the third time this shape has cost something
+in this file, so it is worth stating plainly — anything a pointer builds up between `down` and `up`
+belongs in a ref, and the state copy exists only to draw.
+
+---
+
+## D59 — The border ADDS material; it does not cut cells
+
+D55 built the border from `Cadcode.rtf`, which slices the outermost cells along their centre
+line and walls off the halves. Then the user supplied a photograph of a printed plate
+(`Customiser/borders.webp`) and it is not that at all.
+
+Under magnification the reference is unambiguous: every cell is a whole, open hexagon; the
+walls BETWEEN cells run out past the honeycomb to a straight line; and the triangular notches
+between the zig-zag outline and that line are filled solid. Nothing is cut. The plate is the
+honeycomb plus material on the outside.
+
+The difference is not cosmetic — it is a column of mounting points. A cut border eats the whole
+first column of a plate and half the top row; the additive one costs nothing. Given the choice
+between matching a reference implementation and matching a reference OBJECT, the object wins,
+for the same reason the STLs in `models/` outrank any published description.
+
+**How it is built.** One extra ring: every empty lattice position touching the plate, drawn
+SOLID (no bore), clipped to a straight line `thicknessMm` beyond the outermost extent of the
+real cells around it. Each phantom works its own line out from its own neighbours, so a straight
+run comes out flush without anyone having to find the run first, and a step in an L-shaped plate
+follows the step. Local rule, global result — and phantoms are ordinary pieces to the mesh
+builder, tiling with their neighbours and sharing their snapped corners, so watertightness comes
+free.
+
+**Thickness is now a number, not a switch.** Cadcode offered single or double because a cut can
+only be one cell wall or two. An additive edge can be any width, so it is a millimetre field,
+bounded by `MAX_BORDER_MM` — one ring of positions can only reach so far, and past that the edge
+would come back short without saying so.
+
+**`Top_Border` still travels to the customiser; the thickness does not.** "This edge is closed"
+survives the translation between a cut and an addition. The millimetres do not mean the same
+thing in both, and emitting a number that means something else is worse than emitting nothing.
+
+---
+
+## D60 — Exactly one plate prints each piece of edge
+
+A position on the outside of the wall can touch two plates at once — the corner where they butt.
+Both would grow it, and printed, the two plates overlap by a whole cell and the wall does not go
+together. Found by looking at the app: bordered plates came back 20 mm wider than their own
+cells, which is one lattice step, which is one phantom claimed twice.
+
+Ownership goes to whichever plate holds the MOST of the position's neighbours — the plate it is
+actually attached to. Given to the other one it becomes a tab hanging off a corner: fragile, and
+a plate wider than its own block for no reason a reader could see. Ties break on the canonically
+smallest neighbouring CELL, a property of the lattice rather than of the panel list, so both
+plates reach the same answer without either knowing about the other.
+
+The same walk answers both questions — which edge to build, and which sides to label the plate
+with — because they must agree. Labelled from "sides it is near" instead of "sides it owns", a
+plate reads "edged bottom" in the parts list while its neighbour prints that bottom edge.
+
+A plate can still legitimately carry a strip reaching one lattice step past its own cells: the
+wall's edge is continuous and the plates share it out, so the split lands somewhere. That is
+budgeted in `generatedPlateSizes` rather than discovered at the printer — without the allowance
+a bordered wall plans plates to exactly the bed and then several of them do not fit.
+
+---
+
+## D61 — Plates are sized to the printer, not taken from the shipped seven
+
+The seven shipped plates were drawn for particular beds, and the largest that fits a 350 mm
+printer is a 10 × 10. That printer can hold 16 × 14. Tiling a wall out of shipped files on a big
+printer therefore prints two and a half times as many plates, with two and a half times as many
+seams, for no reason except that nobody published the bigger file. Now the app can make it.
+
+`plateFootprintMm` is the arithmetic, and it is checked against the shipped plates rather than
+against itself — it reproduces all seven from their cell counts alone. The strongest evidence it
+is the designer's own formula is that `maxPlateForBed` on the smallest listed bed (180 × 180)
+returns exactly 8 × 7, which is `wall-honeycomb-part`.
+
+**Off by default**, and that is deliberate: someone who has already printed a stack of shipped
+plates should not have their wall re-planned around plates nobody has tested. It is also NOT
+stored on the document — it changes what the next solve produces, and a saved layout already
+records what it produced, so storing it would let a reload silently re-plan someone's wall.
+
+A generated plate carries a `generated/` id, which no catalogue entry will ever match. Three
+consequences, each of which was a real defect first: `validate` must not report it missing,
+`isCustomPanel` must count it as custom so it reaches the download list, and the BOM must cost it
+against the biggest shipped plate PER CELL — left to fall through, a wall of generated plates
+reported zero print time and zero filament, which looks like an answer rather than like a gap.
+
+---
+
+## D62 — A measurement field holds text, not a number
+
+Reported plainly: "on the measurements i cannot erase the text to 0 making it really hard to type
+1000mm".
+
+The cause is the obvious controlled number input:
+
+    <input type="number" value={mm} onChange={e => setMm(Number(e.target.value))} />
+
+`Number('')` is `0`. The zero goes into the document, the document clamps it up to its minimum, and
+the field repaints as `50` before the second digit arrives — so typing "1000" over "2400" produces
+"501000", or nothing, depending on where the caret ends up. The value is never wrong for long enough
+to see; the field simply refuses to be emptied, and there is nothing on screen to explain why.
+
+`NumberField` separates the two things that were conflated. The TEXT being edited is local state and
+shows exactly what was typed, including empty. The NUMBER is committed separately, and only when the
+text parses AND is in range — so the half-typed "1" on the way to "1000" never resizes the wall to
+its minimum. Blur resolves whatever is left: an in-range number commits, out-of-range clamps (by
+then it is a request, not a typo), and anything unparseable reverts to what the document holds.
+
+Two things worth keeping:
+
+**The rules are pure functions.** `valueWhileTyping`, `valueOnBlur` and `formatValue` are the whole
+feature and are tested without a DOM or a test renderer, which is the same shape as everything else
+load-bearing here. The component is the shell.
+
+**The range has one owner.** `MIN_WALL_MM` and `MAX_WALL_MM` are exported from `store.ts` beside the
+`clampDim` that enforces them, because the field needs the same range to decide what to commit. Two
+copies and the field would refuse a size the document would have accepted, with nothing to say so.
+
+`PartInspector` had already solved this for its six seating numbers and nobody noticed it was a
+general problem. It is the third time in this codebase that a rule existed correctly in one place
+and wrongly in another; the fix is the same as it always is — extract it, name it, test it.
+
+---
+
+## D63 — The lattice is anchored into the wall, in X only
+
+Reported as "in the plan section the honeycomb is not in the wall edge its shifted", and it was:
+the honeycomb hung **13.6255 mm — exactly `MARGIN_X` — off the left-hand edge of every wall**, with
+the slack turning up as an over-large gap on the right.
+
+The wall's origin is its bottom-left CORNER, which is what a tape measure reads against. The
+lattice's origin is a cell CENTRE. Those are not the same point and nothing said so. `tiling.ts` had
+assumed the offset all along — `maxColumnIndex` counts columns from `ROW_STEP·q + MARGIN_X`, and
+`maxRowsInBand` from `PITCH·shift + MARGIN_Y` — while `hexToMm` put cell (0, 0) at (0, 0). The solver
+and the embedding disagreed by exactly one vector, and had done since the frame turn.
+
+`LATTICE_ANCHOR` in `constants.ts` names it, `hexToMm` adds it and `mmToHex` takes it away. One
+place: a translation changes no relative geometry, so rotations, footprints, parity, seams, the
+detector and the generator are all untouched — `toAxial` works on differences and never sees it.
+
+**X only, and the asymmetry is the whole subtlety.** In Y the solver can already land the outline on
+zero by choosing which row a band starts at: centres sit at `PITCH·(r + q/2)`, the stagger makes
+that any multiple of `PITCH/2`, and `MARGIN_Y` IS `PITCH/2`, so `r + q/2 = 0.5` hits it exactly. In X
+there is no such freedom — `ROW_STEP·q = MARGIN_X` has no integer solution — so the offset can only
+come from the anchor. Anchoring Y as well pushes every band half a pitch up and the top row off the
+wall: measured at **8.6 mm over** on a 1200 × 900 wall with plates sized to a 256 bed, caught by
+re-measuring rather than by reasoning.
+
+**The test had the bug written into it.** `tiling.test.ts` asserted "keeps every panel inside the
+wall rectangle" by adding `MARGIN_X` and `MARGIN_Y` to the bounds before comparing, under a comment
+saying "the lattice is anchored so the bottom-left panel's outline starts at (0, 0)" — stating the
+intent and then compensating for the code not implementing it. A fudge factor in an assertion is
+worth reading as a defect report: it is usually the place where two modules already disagree and
+somebody made the test agree with both. The fudge is gone, and `plate-size.test.ts` now checks the
+solved honeycomb against the wall on five wall sizes and both plate sources with nothing added.
+
+---
+
+## D64 — The border switch and the zone's measurements belong on the plan
+
+Two controls moved to where the work happens.
+
+**Border, in the plan toolbar.** It had only been in the parts-list rail, which is where you go to
+read what to print — not where you are when you decide the wall wants a finished edge. The toolbar
+button switches all four sides on at once with the thickness beside it, because "how thick" is the
+question asked immediately after "on or off"; the per-side checkboxes stay in the rail for the wall
+that runs into a ceiling on one side. `E` toggles it, next to `V`/`M`/`B`.
+
+**A blocked zone's name and size are controls, not paint.** They were drawn into the canvas, which
+means they can be looked at and nothing else. A switch plate is 146 × 86 — a number you have written
+on the back of your hand and want to type, not a rectangle to drag until it looks about right, and
+dragging is how you end up cutting one hexagon too few. Clicking either opens it for editing.
+
+Three details worth keeping:
+
+- The size is **two fields and a separate `×`**, not one "146 x 86" string to parse. A measurement
+  typed under pressure should not be able to fail on a separator.
+- The tag layer is `pointer-events: none` and each tag takes it back for itself, so the wall
+  underneath still drags and marquees normally.
+- The tag is anchored to the zone's **corner**, not its middle, because the middle is where you grab
+  to move the zone. A tag over it would make a zone you can rename but not move.
+
+It also makes the zones reachable at all without a pointer: painted text has no place in the
+accessibility tree, so until now a blocked zone was invisible to a screen reader and its size could
+not be copied out.
+
+---
+
+## D65 — The plan draws the border the generator makes, not the honeycomb's outline
+
+Reported as "it now has a border, BUT it follows the honeycomb, i want it to be flat like in the
+picture, just straight lines on the border".
+
+The GEOMETRY was already flat — measured: a bordered 5 × 4 plate's mesh reaches exactly
+`maxY + MARGIN_Y + thickness` along its whole top, and the STL downloads with that edge. The PLAN
+was drawing something else. `borderEdgeSegments` emitted one line per exposed cell edge, which is
+the honeycomb's zig-zag, so the picture promised a scalloped edge while the file delivered a
+straight one. Two readings of "where is the border", which is the failure this codebase keeps
+having.
+
+There is now one reading. `borderPolygons` comes out of `borderPieces` — the same walk the mesh is
+built from — and the plan FILLS those shapes rather than tracing an outline of its own. The border
+is material, so it is drawn as material.
+
+**The corners needed a second ring.** Where two straight runs meet, the position that squares the
+corner off touches no real cell at all: it sits diagonally past the corner one, so the first ring of
+phantoms never reaches it. The expansion now repeats until nothing new survives the clip planes.
+
+**The test that would have caught it, and the shape of it.** A border that follows the zig-zag and
+one that is flat have the SAME bounding box, so every bounds assertion passed. What separates them
+is where the lost area goes: a zig-zag border loses material along every edge, so the shortfall
+against a true rectangle grows with the perimeter; a flat one loses only the four corner chamfers,
+so the shortfall is a CONSTANT. `honeycomb-frame.test.ts` now measures the cross-section of a 3 × 3
+and an 8 × 7 and requires the two shortfalls to be equal. That is a property no amount of
+bounding-box checking expresses.
+
+The corners are left very slightly chamfered — about 25 mm² each, a 7 mm nick — because a hexagon
+does not tile a square corner exactly. Recorded rather than chased: it is under 2 % of the plate, it
+is where a sharp corner would chip anyway, and closing it completely would mean a real polygon union
+for a result nobody can see.
+
+---
+
+## D66 — Three things stop a plate being the shipped file, and all three are gates
+
+Reported as "the frames are not flat on the top, just jagged; sides look nice". The geometry was
+flat — measured, the top silhouette of a bordered plate is a single straight line at
+`maxY + MARGIN_Y + thickness` at every x across it. The 3D wall was drawing the SHIPPED STL.
+
+`WallView3D` short-circuits to the cached mesh when a plate is the stock plate:
+
+    const real = omit.length === 0 && !isGeneratedSize(partId) ? panelMeshes.get(partId) : undefined;
+
+A bordered plate has no cut-outs and a catalogue id, so it passed both tests and the stock file was
+drawn — no border, the honeycomb's raw zig-zag on every edge. The plan showed a border, the parts
+list said "edged top + left", and the wall showed neither. It only looked like a TOP problem because
+the sides of a flat-top lattice zig-zag by 6.8 mm and the top by 11.8: the same defect, twice as
+visible along the top.
+
+Three things stop a plate being the shipped file — cells cut out of it, a size the app chose, and an
+EDGE — and every gate has to check all three. The first two were already there; the third was added
+when the border was, and this one gate was missed.
+
+The lesson is not "check three things". It is that a plate's identity had grown a third reason and
+the reasons live in three different modules — `omit` on the panel, the id prefix in `panelModel`,
+and the frame on the document. `panelIsBordered` now names the third so a gate can ask rather than
+re-derive, and `tests/frame-document.test.ts` states the whole rule: a plate with no cut and a
+catalogue id can still not be stock.
+
+**Why no test caught it.** Every check of the border was on the GEOMETRY, and the geometry was right
+throughout. The defect was a renderer choosing not to use it. That is the same shape as D50 (the
+parts list computed through the store) and D52 (the abandoned mesh in the inspector): the data was
+correct and something drew something else. Those are found by looking at the running app, which is
+how this one was found too — four for four since the frame turn.
+
+---
+
+## D67 — A measurement whose commit is expensive waits for Enter or OK
+
+Reported as "when i want to change the size of the blocked box i need an OK button or for me to hit
+the enter button before the blocked zone size is updated".
+
+`NumberField` commits every in-range keystroke (D62), which is right for the wall size: seeing the
+wall resize as you type is the point. It is wrong for a blocked zone. Typing `220` over `146` commits
+at `2`, at `22` and at `220`, and each commit runs `setObstacles` — which re-cuts every plate on the
+wall, re-derives the parts list, and leaves an undo step. Three re-cuts and three undo steps for one
+measurement, and the wall visibly thrashing while you type it.
+
+So the field gained a mode rather than a new component: `commitOn: 'type' | 'confirm'`. Nothing about
+the parsing, clamping or formatting changes — `confirm` simply does not call `valueWhileTyping`, and
+the existing blur path resolves it. One rule, two schedules.
+
+**Which schedule a field gets follows from what its commit COSTS**, not from what it looks like. The
+wall size stays live because the commit is a resize and the feedback is the feature. The zone's size
+waits because the commit re-plans the wall. The zone's NAME waits too, for the same reason and no
+other — a rename cannot change a single cell, but it goes through `setObstacles` all the same.
+
+**Blur still commits.** Escape drops the edit and OK applies it, but wandering off with a number
+typed applies it as well: a measurement silently thrown away is worse than one applied a moment
+early, and there is nothing on screen that would explain the loss.
+
+---
+
+## D68 — The border is drawn in the plate's colour, because it IS the plate
+
+Reported as "the border is jagged towards the middle, make it flat on both sides just like the
+photo". The geometry had no such edge. The PLAN had painted one.
+
+`drawBorder` filled the border shapes in their own tone, distinct from the plate. That made the band
+read as a separate object, and a separate object has two edges — so the eye followed its INNER
+boundary, which is the honeycomb's outline stepping half a pitch between staggered columns. It looked
+like a jagged edge on the border. There is no edge there at all: a bordered plate is one piece of
+8 mm plastic, and the only boundary it has near its rim is where the holes begin.
+
+Filled in the plate's own colour it draws what the reference photograph shows: a flat outer rim, the
+honeycomb stopping short of it, and nothing in between to see. A hairline follows the same shapes so
+the plate's outer edge stays findable against the wall behind it at low zoom — the same shapes, so
+the stroke cannot describe a different edge from the fill.
+
+**Why the top looked worse than the sides, which is worth recording because it is not a defect.**
+The wall is flat-top (D31/D35). Along a LEFT or RIGHT edge every cell in a column sits at the same
+x, so the outline scallops by `MARGIN_X − PITCH/(2√3)` = 6.8 mm and repeats. Along a TOP or BOTTOM
+edge, adjacent columns are staggered half a pitch, so it steps 11.8 mm. Same construction, nearly
+twice the amplitude, which is why "sides look nice" and the top did not.
+
+The reference plate is photographed with its rows running along the bordered edge, so its bordered
+edges are the 6.8 mm kind. That is an orientation of the photograph, not a difference in the plate:
+the wall's flat-top frame is settled against the designer's own dimensioned drawings and is not a
+free choice.
+
+Three reports in a row about this border have all been the same shape — the geometry was right and a
+renderer drew something else (D65, D66, this). Worth the pattern being written down: when the plan,
+the parts list and the 3D view disagree, suspect the drawing before the model.
+
+---
+
+## D69 — The border is a rail of one thickness, and the staggered pockets stay open
+
+Reported three times, and the last time precisely: "the border is jagged towards the middle, make it
+flat on both sides just like the photo".
+
+Measured on the render: the border's OUTER edge was already dead flat — a pixel probe found a single
+value across the whole width, spread zero. The INNER edge varied by 17 px. Filling everything between
+the honeycomb and the straight outer line makes the band `t` thick above one column and `t + PITCH/2`
+above the next, because the wall is flat-top and adjacent columns stagger half a pitch along a TOP or
+BOTTOM edge. Flat outside, stepped inside — which is what it looked like, and what it was.
+
+**Why the reference photograph does not show this.** That plate is photographed with its ROWS running
+along the bordered edge, which is the direction that does not stagger. Our left and right edges are
+that direction, which is exactly why they were reported as fine while the top was not. The wall's
+flat-top frame is settled against the designer's own dimensioned drawings (D31/D35) and is not a free
+choice, so the stagger cannot be rotated away.
+
+That left three shapes, and the user chose. Cutting the protruding half-row flush would give a
+perfect rail at the cost of half the cells in the top and bottom rows. Making the border thicker
+would hide the step without removing it. **Leaving the pockets open** keeps every cell mountable, and
+that is the choice: the top and bottom borders are clipped on the inside as well, so the band is one
+thickness, and the half-cell pockets between the rail and the lower columns are simply not filled.
+
+The cost is real and is the reason this was asked rather than assumed: the rail is attached at every
+other column rather than continuously, so that edge is easier to snap than a filled one would be.
+
+**Left and right are deliberately NOT clipped.** The notch there is not a missing cell — it is the
+6.8 mm scallop between a hexagon's own corner and its flats, inside a single cell's reach. Clipping
+it would leave slivers, and filling it is what makes those edges read as a clean rail already.
+`tests/honeycomb-frame.test.ts` states all three: every top piece is at most `t` deep, a top rail
+adds about `width × t` of material and not that plus a half cell per column, and a side piece is
+legitimately deeper than `t`.
+
+---
+
+## D70 — The plan is Y-UP, like the wall and like the 3D view
+
+Reported as "the 2D planner window is not oriented the same way as the 3D". It was not: `toScreen`
+mapped wall y straight to canvas y, and canvas y grows DOWNWARD. So the plan drew the same document
+upside down against the view sitting next to it — a socket 60 mm off the floor appeared at the top of
+the plan and at the bottom in 3D.
+
+The wall's origin is its bottom-left corner, which is what a tape measure reads against, what
+`LATTICE_ANCHOR` anchors to (D63) and what `WallView3D` already used. `toScreen` now flips y and
+`originY` is the wall-mm y at the BOTTOM of the canvas.
+
+**A y-flip is not a one-line change, because a flipped frame negates every angle written in it.**
+Three things had to move with it:
+
+- **Pan and wheel-zoom** invert on y — dragging the pointer down now raises the wall-mm value at the
+  bottom edge.
+- **Seams and part outlines** were rebuilt from angles in SCREEN space (`cos 60k`, `sin 60k`). Under
+  a flip those run the other way round the hexagon, putting every edge one round out — the exact
+  defect `edgeCorners` was introduced for (D57), arriving by a different route. Both now take their
+  corners from `hexCorners` in WALL space and map them through `toScreen`, which is the right
+  structure regardless: the lattice is described once, in the frame it is defined in.
+- **`visibleCells`** took `toWall(0, 0)` as the minimum corner. With y up that is the canvas's TOP
+  edge and therefore the largest y, so the cull rejected the entire wall. It now takes both corners
+  and sorts them.
+
+`addHex` needed nothing: a flat-top hexagon is symmetric about its horizontal axis, so the corner set
+is unchanged by the flip.
+
+The mapper is now pinned by `tests/visible-cells.test.ts` — higher wall points sit higher on screen,
+the wall origin is bottom-left, and the round trip is exact so a drop lands where it was aimed.
+
+---
+
+## D71 — Parts are shopped for: a library to browse, a rail that holds this project
+
+The rail was the whole catalogue — 51 shipped parts plus every import — and a wall uses about six of
+them. Two different jobs were sharing one surface: *browsing*, which wants pictures and room, and
+*building*, which wants the short list you are actually working from. The rail could answer neither.
+"What am I printing?" was answered by reading the parts list, and "which of these is the hook I
+want?" was answered by dragging one onto the wall to look at it.
+
+So they are two places now, and a part moves between them:
+
+- **`PartLibrary`** is the shop. Every part as a card with a picture at a size you can see, plus
+  type, cell count, print time and filament; shelves (everything / in this project / my uploads /
+  by type), a search box and a sort. One button per card puts the part in the project.
+- **`CatalogPanel`** is the rail, and now holds only what was chosen. Which means it answers the
+  question it never could: this is what the wall is built from.
+
+**The list is on the DOCUMENT** (`LayoutDoc.library`), not in local UI state. Which parts a wall is
+built from is a decision about that wall — it belongs in the file, it travels down a share link, and
+it is undoable like every other edit. `projectParts.ts` is the only module that reads the field.
+
+**A PLACED part is in the project whether the list names it or not.** `projectPartIds` unions the two
+and everything else goes through it. Without that rule, every layout saved before this existed — and
+every share link, and every undo past the point a part was added — opens with a wall covered in hooks
+and an empty rail, and the only way back is to find the part in the library again. Placing a part
+also adds it to the list, because dropping something straight onto the wall is a way of shopping for
+it and the two paths must not disagree.
+
+**An id the catalogue cannot resolve is kept and reported, never dropped.** Load a friend's layout and
+it names uploads you have never seen. Dropping those ids would rewrite the document on the way
+through; the rail says how many instead. Panels are the one exclusion from the rail: the tiler
+chooses those from the wall size and the printer, so "Solve panels" must not silently fill the basket
+with seven plates nobody picked.
+
+### Uploading: a photo, and alignment is not optional
+
+**A part may carry a photograph, and the library shows it instead of the render.** A render says what
+the mesh is; a photo says what the thing is — printed, in orange PETG, holding four screwdrivers.
+Twenty-seven of the 51 shipped parts are named for their fixing rather than their shape, and a shop
+whose evidence is a filename is a directory listing. Photos are keyed on part id in their own
+IndexedDB store and by nothing else, so a shipped part can have one too and absence is the answer to
+"is there a photo" — no flag anybody has to keep true. Downscaled to 640 px and re-encoded before
+storing: a phone photo is 4 MB, the quota is shared with the STL bytes the 3D view needs, and what
+breaks when it fills is the wall's meshes, somewhere else entirely. Measured on a real import:
+3.17 MB PNG in, 6 KB WebP out.
+
+**An import is two steps and the second one cannot be skipped.** Step 1 describes the part (name,
+type, fastener, footprint, photo); step 2 is the alignment tool, and the part joins the library only
+when that is saved. The detector declines to guess a mounting face for 27 of 51 shipped parts
+(PARKED P1) and it can be wrong as well as absent — a part whose face nobody chose sits wrong on the
+wall, and the moment it is being added is the one moment somebody is certainly looking at it.
+`PartInspector` gained one prop, `intent`, which changes only the labels and lifts the `dirty` guard
+on Save: there is nothing to be dirty against on a part that does not exist yet, and the detector's
+own answer is a legitimate choice.
+
+The bytes go into IndexedDB *before* step 2 opens, because `meshLibrary` reads an imported part's
+mesh from exactly there and the inspector draws the real model. That makes those bytes the only thing
+an abandoned import leaves behind, and `cancelImport` sweeps them at either step.
+
+**The alignment is written as an OVERRIDE**, the same record a shipped part's correction gets — one
+mechanism, one export, and `Setup (n)` carries an imported part's mounting to the repo like anything
+else.
+
+### The bug this uncovered: overrides were applied before the merge
+
+`applyOverrides(shippedCatalog, …)` ran first and the imports were bolted on afterwards, so an
+override keyed on a `user/…` id was written, stored, exported — and never applied. You could line an
+imported part up, watch the dialog save it, and find it on the wall the way the detector guessed.
+Every part now goes through one pipe: `applyOverrides(mergeCatalog(shipped, mine), overrides)`.
+
+Same shape as D50, D52 and D66: two owners of one fact, and the one that reached the screen was the
+stale one. It had no symptom until the import flow started depending on it.
+
+### The bug found by looking at the app, and the two more that came out of it
+
+The library opened onto a dimmed page with nothing on it. The dialog was there, 1554 px below the
+fold: the scrim's implicit grid track sized to the MAX-CONTENT height of 51 cards — 3971 px in a
+1000 px viewport — because the dialog's own `block-size: min(56rem, 100%)` is a percentage against a
+track whose size depends on its content, which is cyclic, so the percentage was dropped and the
+oversized row was then centred faithfully. A definite track breaks the cycle:
+`grid-template-rows: minmax(0, 1fr)`.
+
+**The first write-up of this said the other modals "get away with it because their content is
+shorter". That was wrong, and checking it is what found the rest.** Measured at a 480 px viewport:
+
+- **`ImportDialog` was broken and live.** Its footer sat at y=775 in a 480 px window — `Cancel` and
+  `Next: line it up` both 295 px below the fold, on a `position: fixed` scrim that does not scroll.
+  On a short window an import could be neither completed nor cancelled, in the code path this very
+  decision had just made mandatory.
+- **`AlignPanel` had already hit it and never diagnosed it.** Its CSS carried a comment saying the
+  grid version laid the panel out "BELOW its own fixed parent — a 768 px box reporting `top: 1236`
+  inside a container spanning 0–900", called it "a grid sizing interaction not worth unpicking", and
+  worked around it with flex. Same mechanism, found blind, papered over.
+- `PartInspector` survives it, because a bare `max-block-size: 100%` resolves where the
+  `min(46rem, 100%)` next door does not. Surviving by accident is not a property worth keeping.
+
+Three copies of one rule, two of them broken, one of them saved by luck — the repo's signature
+failure, in CSS this time. So the rule now exists once, as `.modal-scrim` in `base.css`, and each
+backdrop wears the class. A fourth modal cannot get this wrong without deliberately opting out.
+
+### The sweep, and the guard the sweep needed
+
+Writing the bytes to IndexedDB before the alignment step is what lets the inspector draw the real
+mesh, and it makes those bytes the only residue of an abandoned import. `cancelImport` clears them on
+Cancel — but a closed tab runs no handler, so `sweepOrphans` deletes stored models and photos that no
+part claims, once, at startup. Measured on a real browser: it collected two stranded models from
+earlier sessions and left the live part's model and photo untouched.
+
+**A sweep is destructive, so it needed a guard that the rest of the module does not.** `loadUserParts`
+returned `{parts: [], dropped: []}` both when there were no imports and when localStorage refused to
+open — Safari in private mode throws on access. Handing that empty list to the sweep would report
+that every model and photo in IndexedDB belongs to nothing, and delete a person's entire upload
+history because the metadata hiccuped once. `LoadResult.readable` now separates "nothing stored" from
+"could not look", and the sweep runs only on the first. A corrupt or non-list store counts as
+unreadable for the same reason; a single junk ENTRY does not, because there the list was read and
+that row's bytes really are orphaned.
+
+It also sweeps against the WHOLE catalogue rather than the imports alone. Photos are keyed on part id
+and nothing else *precisely* so a shipped part can have one — sweeping against imports would have
+deleted it. `orphanedIds` is pure and states all of this in `tests/import.test.ts`.
+
+---
+
+## D72 — 3MF is read as a first-class upload, with no new dependency
+
+"I should also be able to upload .3mf files." The ask is one line; the format is not, and three of
+its differences from STL are ways to be wrong that look right.
+
+**No dependency.** `DecompressionStream('deflate-raw')` is a platform API in both browsers and Node,
+which is exactly the two places this has to work — the app, and a `vitest` run with
+`environment: 'node'`. So `src/core/zip.ts` is a hundred lines of header parsing and nothing else.
+The alternatives were worse: three ships `fflate` at `three/examples/jsm/libs/…`, a transitive path
+npm may hoist differently and three may move between versions; and three's own `3MFLoader` needs
+`DOMParser`, which Node does not have, so it could not live in a module the tests can reach. The
+model XML is read with a tag scanner for the same reason, and its limits are stated where it is
+defined rather than discovered later.
+
+**Units are the 25.4× mistake.** An STL carries no unit and this app assumes millimetres throughout.
+A 3MF DECLARES one, and it is allowed to be `inch`. Read at face value, an inch file gives a part
+25.4 times too big — it would not fit the wall, and no number on screen would say why. Every
+coordinate is scaled exactly once, on the way in, so that by the time a mesh is a `MeshData` the
+question is settled; and a unit the spec does not define is REFUSED rather than assumed to be
+millimetres, because assuming is how the failure gets to the printer.
+
+**Transforms are the orientation mistake.** An STL's coordinates are final. A 3MF's are per-object,
+placed by `<build><item transform>` and possibly nested through `<components>`. Ignoring them moves
+a part and, worse, turns it — and orientation is the one thing this app cannot recover from, because
+`detect()` reads the mounting face off whatever geometry it is handed. Composition is child-then-
+parent, which is what nesting actually means, and there is a test that distinguishes the two orders.
+
+**Mirroring is the one that looks fine.** A transform with a negative determinant flips handedness,
+and a mirrored accessory is a left-hand hook on a right-hand wall — the same class of error the
+cyclic axis permutation in `meshLibrary.orient` exists to prevent. Triangles under such a transform
+have their winding put back.
+
+The test for that had to be rewritten before it meant anything. The obvious assertion — that
+`measureMesh` still reports 1000 mm³ — passes whether the winding is flipped or not, because
+`stl.ts` takes the ABSOLUTE value of the volume; and the bounding box cannot help either, since
+mirroring a symmetric cube does not move it. The test now computes a signed volume itself, and was
+checked by disabling the flip and watching it go red. A test that cannot fail is worse than no test,
+because it reads like coverage.
+
+**A 3MF may hold a whole build PLATE**, and there is no way to tell that from a single object
+assembled out of components. Merging is right for the second and wrong for the first, so the items
+are merged and the fact is SAID: the count comes back from the reader and the import dialog warns.
+The person who exported the file knows instantly which they meant; the file does not.
+
+**The bytes stay in the format they arrived in.** An imported 3MF is stored as a 3MF and read back
+through the same dispatcher, keyed on `part.file`. Converting to STL on the way in would mean the
+bytes in storage are not the file the person chose.
+
+### The seam this moved
+
+`proposePart` is now asynchronous, because a ZIP cannot be inflated synchronously in a browser. The
+asynchrony stops at the file boundary: `proposeFromMesh` is the synchronous core, and the
+classification, requirement and estimate rules — most of `tests/import.test.ts` — are still a pure
+function of a mesh. `parseModelFile` sniffs the leading `PK\x03\x04` before trusting the extension,
+because a 3MF renamed `.stl` is common and no STL can begin that way.
+
+`tools/scan.py` and `models/` remain STL-only. 3MF is an upload format here, not a catalogue format.
+
+### Verified, and one bug from doing so
+
+A real shipped model was converted to an indexed 3MF, declared in INCHES, deflated, and dropped into
+the running app: it came back 27.554 × 27.792 × 13.589 mm and 2.559 cm³ — the catalogue's own
+measurements for that STL, to three decimals — was lined up, added, placed on the wall, and drew its
+thumbnail from the stored 3MF bytes through `meshLibrary`.
+
+The bug that run found was in the message, not the geometry: the unit warning said **"Drawn in
+inchs"**, because it pluralised by appending an s. English plurals are irregular and the spec's unit
+names are American, so there is a name table now, and it says millimetres like the rest of the app.
+
+---
+
+## D73 — A part is placed at the BOX CENTRE of its cells, not their mean
+
+Reported as "the space on the wall alignment does not match the 3D viewer". It did not, and the
+alignment dialog was innocent: it was faithfully copying the wall, and the wall had the same error.
+The two agreed with each other and both disagreed with the geometry, which is why nothing looked
+wrong until somebody opened an asymmetric part.
+
+`meshLibrary.orient` centres a part's geometry on its own wall-plane BOUNDING BOX. Four separate
+places then positioned that mesh at the MEAN of the cells it covers — the placed item in
+`WallView3D`, the fastener drawn under it, the hover outline, and the inspector's wall patch. A mean
+is pulled toward wherever there are more cells; a box centre depends only on the extremes. They are
+the same point for a symmetric footprint and different for anything else.
+
+On `insert-hollow-tre` — cells (0, 0), (0, 1), (1, 0), an L — the gap is **3.406 mm**, so the part
+was drawn a seventh of a cell off the holes it plugs into, everywhere it was drawn. Only one shipped
+footprint is asymmetric enough to show it, which is exactly why it survived: every other part in the
+catalogue passes either convention.
+
+`cellsCentreMm` in `hex.ts` is now the single answer, beside `cellsBoundsMm`. The panel path already
+did the right thing by hand — `(block.minX + block.maxX) / 2` — and now goes through the same
+function rather than being a fifth copy that happens to agree.
+
+**The test states the geometry, not the call.** "Does this module call the right helper" is a test of
+the code as written; what was wrong here was a fact about millimetres. So
+`tests/part-centring.test.ts` takes every WALL-CLIP part — the ones whose silhouette really is their
+cells — orients its mesh, places it the way a view places it, and requires the gap at each edge to
+mirror the gap opposite. Measured across all 17 the gap is 0.63 mm in x and 0.55 mm in y, identical
+for every part, which is the plate margin. Insert-fed parts are excluded and the reason is stated:
+their footprint is a bound rather than a measurement (PARKED P1) and their geometry legitimately
+overhangs it — `shelf-4`'s tray reaches 80 mm past the cells it hangs on.
+
+The file also pins the defect itself: under the old mean-based centring `insert-hollow-tre`'s two
+gaps sum to −6.81 mm instead of zero. Without that case the suite would be green in a world where
+the bug was never fixed.
+
+## D74 — The cells are chosen on the alignment step, and only there
+
+The import asked "which cells does this part take" twice: once in `ImportDialog` with a footprint
+editor, and again one click later in `PartInspector` with the same editor. The first is the worse
+place to ask, because there is nothing to answer it against — a hex grid on its own. On the
+alignment step the identical editor sits beside the part shown against a real patch of wall, which
+is the only view in which "does it cover that cell" is a question a person can see the answer to.
+
+So step 1 is what the part IS — name, type, fastener, photograph — and step 2 is where it GOES. The
+dialog lost a column with the editor and is now a single one.
+
+`withFootprint` is still called on confirm, with the cells unchanged: the TYPE can change on step 1,
+and the wall-mount count and the panel block are derived from it. Re-stating the same cells
+deliberately does not clear `needsReview` — only an actual edit turns a bound into a decision, and
+that rule is what keeps the flag honest.
+
+## D75 — No photograph means the render, shown rather than described
+
+The photo slot was an empty grey box with an icon in it, which asks "is this required?". It now
+shows the part rendered from its own model — the same picture the library falls back to — so the
+answer to skipping it is visible in advance rather than discovered in the gallery afterwards.
+
+That needed the model's bytes in IndexedDB one step earlier than before: `meshLibrary` reads an
+imported part's mesh from there, and the render is `thumbnailFor` through the ordinary path rather
+than a second renderer. Nothing else about the part is written at that point, so `cancelImport` still
+has exactly one thing to undo, and `sweepOrphans` still catches a tab closed mid-import.
+
+---
+
+## D76 — `LATTICE_ANCHOR` was counted twice when re-centring a plate mesh
+
+Reported with a screenshot of the alignment stage: the gold socket rings straddled the honeycomb's
+walls instead of sitting in its holes. Measured, the offset was **13.6254664 mm — exactly
+`LATTICE_ANCHOR.x`**, which is `MARGIN_X`, two thirds of a column. This is D63's class again: the
+anchor applied where a DISPLACEMENT was wanted.
+
+`hexToMm(c)` is `M·c + LATTICE_ANCHOR`. Adding two of its results — or adding one to a quantity that
+already carries the anchor — counts the anchor twice. Both places that re-centre a
+bounding-box-centred plate mesh did precisely that:
+
+- `WallView3D` translated the stock instance by `hexToMm(origin) + cellsCentreMm(blockAt00)`, and
+  both terms carry the anchor;
+- `PartInspector` positioned its wall patch by `-mid - (hexToMm(anchor) - blockCentre)`, in which
+  `mid` and `blockCentre` cancel their anchors against each other and the bare `hexToMm(anchor)`
+  leaves one behind.
+
+**Why it survived: every plate is wrong by the same amount.** The honeycomb stays perfectly
+continuous, so nothing about the wall looks off. Only something drawn at the TRUE lattice position
+reveals it — a placed part, a fixing, a socket ring — by appearing to sit between holes rather than
+in them. The reporter saw it in the alignment dialog because that view puts a part and a plate side
+by side at high zoom, which is the one place the two frames are visible at once.
+
+The generated and drawn plate paths were never affected. They build geometry in lattice coordinates
+and translate by `hexToMm(origin)` alone: one anchored quantity, used once. Only the stock-STL path
+needs re-centring, because `orient` has already moved the mesh to its own bounding-box centre.
+
+The fix removes the arithmetic rather than correcting it. A stock plate is now placed at
+`cellsCentreMm(panelCells(origin, columns, rows))` — the centre of the block at its REAL origin,
+which is one anchored quantity used as one absolute position and cannot double-count anything. The
+inspector's patch is placed relative to `at({q: 0, r: 0})`, the same helper every cell in that group
+is drawn with, so the plate and the cells are anchored by the same call.
+
+**The assumption underneath is measured, not asserted.** Placing a plate by its centre only works if
+its material is symmetric about its cell block. It is: the oriented mesh comes out 170.317 × 177.000
+against a block of exactly 170.317 × 177.000, and `tests/plate-alignment.test.ts` checks that for all
+seven shipped plates rather than trusting HSW-SPEC §4.
+
+**The test states geometry and was checked against the old code.** For every shipped plate, from five
+different origins, every one of its cells must land on `hexToMm` of the wall cell it represents, to
+1e-9. Reverting the placement rule fails 8 cases; the fix passes all of them. It also carries the
+general rule as a case of its own — a difference of two `hexToMm` results is anchor-free, a sum
+carries two anchors — because that is the mistake worth recognising next time rather than this one
+instance of it.
+
+---
+
+## D77 — The border round a blocked zone is clipped to the ZONE, not to the honeycomb
+
+Reported as "the blocked zone with border gets really bugged and does not get a clean border like
+the outer edge". Two faults, one on top of the other.
+
+**`outwardOf` asks which side of the ASSEMBLY a piece is beyond, and a hole is beyond none of them.**
+So a hole's pieces were given no inner clip at all — the rule that makes the outer band a rail of one
+thickness (D69) never fired — and each was emitted as a whole solid hexagon. The rim of an aperture
+was a ring of lumps.
+
+Clipping them against the cells they lean on fixes the straight runs and not the corners: a piece
+with real cells on both sides of its own centre has no side to face, so no plane fires and the
+hexagon survives whole. Measured on the reported case — an 86 × 86 switch on a 500 × 400 wall — that
+still left **369 mm² of plate inside the switch's own rectangle**. Not a complaint about a ragged
+edge: it is plastic where the switch goes, and the plate would not sit flat on the wall.
+
+**The deeper fault is that a hole had no straight line to clip to.** The outer edge has one — the
+assembly's own bounds — and that is exactly why four plates down one side come out flush. A hole had
+only the honeycomb's stepped rim, because a cell is cut the moment it CLASHES with a zone, so the
+aperture is always bigger than the zone and lands on no line at all.
+
+So the generator is now told the line. `BorderSpec.keepClear` carries the blocked-zone rectangles,
+each already grown by its clearance so the border keeps off exactly what the cells keep off, and a
+hole piece is pushed to the side of the rectangle its own centre is already outside. Measured after:
+**0 mm² inside the switch.**
+
+**The corner is deliberately under-filled.** "Hexagon minus rectangle" is an L, an L is not convex,
+and this generator has no polygon boolean anywhere by design (D59) — a border is half-planes and a
+convex polygon clipped by one stays convex. A piece at a corner therefore takes both planes and keeps
+only their intersection, giving up the two arms. Material missing from a corner costs nothing;
+material left in the aperture costs the print.
+
+**And the rail does not stretch.** It is `t` thick measured from the honeycomb, so where the cut left
+the cells further than `t` from the zone the aperture stays wider there — straight where the rail
+reaches, stepped where it does not. Wider is the safe direction and the test says so rather than
+pretending otherwise.
+
+The test that matters is an AREA, not a distance. The first version measured how near a border vertex
+came to an edge of the zone and reported 19.79 mm, which sounded alarming and meant almost nothing —
+a legitimate 3.6 mm rail lying along the boundary scores that too. Sampling the border polygons on a
+0.5 mm grid and asking how many square millimetres fall inside the rectangle is the question actually
+being asked, and it is paired with a case proving the same hole is NOT clear when the generator is
+told only about cells, so the check cannot pass by drawing nothing.
+
+## D78 — A blocked zone is not drawn in 3D
+
+It was a red slab the size of the zone, standing 5 mm off the wall, on the argument that you need to
+see whether a part is about to sit on one. It was the biggest object on the wall and it was opaque,
+so it hid the very thing it pointed at: the cut plates, the edge raised round them, and any part near
+the zone. The one view where you can check that a border came out clean round a socket was the view
+that covered it up — which is how D77 stayed unexamined.
+
+It also says nothing the wall does not. The honeycomb is CUT there: the hole IS the zone, at its own
+size, and nothing can be dropped in it because there are no cells. A marker that duplicates an
+absence is noise laid over the answer. The plan view still draws zones with their names and sizes,
+which is where they are positioned in the first place.
+
+---
+
+## D79 — A zone-facing border piece is filled SOLID to the zone, not railed to the honeycomb
+
+D77 stopped the border printing into a blocked zone and it still looked wrong, which is the report
+that followed: "still not a good looking border".
+
+Reproduced before touching anything — the aperture's edge was a **staircase**. A rail is `t` thick
+measured from the honeycomb, and a cell is cut the moment it CLASHES with a zone, so the aperture is
+bigger than the zone by up to a whole cell. Where the cut happened to fall close the rail reached
+the zone's line and the edge was straight; everywhere else it stopped at the honeycomb's own
+hexagonal steps. Straight in places, scalloped in between, which is worse than uniformly scalloped
+because it reads as damage.
+
+So a piece that meets a zone is not railed at all. It is drawn SOLID and clipped only to stay out of
+the zone. The material between the last cell and the switch is plate, which is what it is on a plate
+you would cut by hand, and the aperture is then the zone rectangle exactly: one straight line per
+side, all the way round. It costs no cell — the pieces are empty POSITIONS, so a rim cell's own
+mouth is untouched and still mountable.
+
+The outer edge keeps its `t` rail (D69), and so does a hole belonging to no zone — a step, or the gap
+where a plate does not reach. Those have no straight line to fill out to and inventing one would be
+guessing.
+
+**The corner is an L, and an L is not convex.** Taking both of the zone's half-planes at once keeps
+only their intersection and leaves a notch at each corner of the aperture. Instead the hexagon is
+split along the zone's own vertical edge into two convex pieces that meet on a line and do not
+overlap: everything left of it is outside the zone whatever its height, and everything right of it
+needs only the horizontal plane. No polygon boolean, and the two halves share a face exactly the way
+two neighbouring border pieces already do.
+
+## D80 — A blocked zone is a UNION OF RECTANGLES, not a polygon
+
+Asked for custom-shaped zones. The representation is a list of rectangles, and that is a geometry
+decision rather than a UI one.
+
+The border generator clips convex pieces with half-planes and has no polygon boolean anywhere by
+deliberate design (D59). A rectangle hands it four half-planes directly. An arbitrary polygon would
+have to be decomposed before it could be clipped against at all, and a CONCAVE one — which is the
+whole point of a custom shape — cannot be clipped against in one piece. A union of rectangles keeps
+every clip convex, covers the shapes people actually have (an L round a consumer unit, a T for a
+pipe with a spur), and leaves every zone drawn before it valid and unchanged.
+
+**One reader.** `obstacleRects` is the only thing that looks at `shape`, and `cellClashes`, the
+border's `keepClear` and the plan's drawing all go through it. Two readers is how the cells get cut
+to one shape and the border clipped to another.
+
+**The bounding box is kept and is NOT what gets blocked.** `xMm/yMm/widthMm/heightMm` stay as the
+shape's extent, because the tag on the plan reads them and the resize handles grab them. Blocking by
+them would eat the hollow of an L — which is honeycomb the user deliberately kept, and which
+`zoneHit` also has to fall through so a click there reaches the wall.
+
+Consequences that had to be handled rather than discovered: a shaped zone is MOVED through
+`moveZone`, which shifts the parts with the box — writing x/y alone would leave a zone blocking
+where it is not drawn. A part that fails to parse is dropped rather than taking the zone with it,
+the same salvage rule the rest of `persist.ts` follows. And `shape` is omitted from the JSON when
+absent, so every layout saved before this round-trips to the bytes it always had.
+
+**Shift-drag with the Blocked-zone tool adds a rectangle to the selected zone**, rather than a third
+tool. It is the same gesture on the same tool and the only thing it needs to say is "this one goes
+with that one"; a separate mode would have to be entered, and its target chosen, before the drag
+started.
+
+**Not done:** a shaped zone cannot be resized by its handles, only moved, renamed and added to.
+Resizing a bounding box has no single meaning for an L — the arms could scale, or the box could
+stretch and the arms stay — and guessing would be worse than the handles doing nothing.
+
+---
+
+## D81 — Cells a zone eats are PRINTED, cut; the planner still treats them as gone
+
+`inner box.jpeg` — a printed plate with a light switch through it — settles what the inside edge of a
+blocked zone should look like: a straight aperture closed by a thin, even wall, with the open cells
+running right up to it. The cut goes THROUGH the cells, leaving partial hexagons.
+
+We removed any cell a zone touched and filled the gap with border. That gave a straight aperture with
+an apron behind it up to a WHOLE CELL deep, hexagons paved over and showing through as bumps. The
+band swung from nearly nothing to ~23 mm depending on where the lattice fell against the switch.
+Straight, and nothing like the plate.
+
+**The two views of the plate diverge here, and that is the point.** `panelModelSpec` now returns the
+eaten cells separately as `clipped`, and it is the one place allowed to know this (D56). The PLANNER
+goes on treating them as gone — a cell a switch passes through is not somewhere to mount anything, so
+it must not be counted, offered or fixed into, and `cells` is untouched so the parts list, the file
+name and the fixing plan all see what they saw before. The PLATE gets them, cut off flush.
+
+**Every ring of a clipped cell is cut by the same half-planes** — the outline and all four bore
+levels. That is what keeps the mesh watertight: two neighbouring cells that both meet the zone are
+truncated identically along their shared edge, so the edge still cancels and no wall is drawn inside
+the solid. Verified on a real case: 30 clipped cells, 5 714 triangles, 0 unmatched edges.
+
+**The inner skin needed a new merge.** It paired bore ring j with ring j+1 by INDEX, which is exact
+while every level is the same hexagon at a different size. A clip breaks that — one level can lose a
+corner the next keeps — so the strip folded through itself. `addSkirt` merges by bearing instead, the
+same argument `addAnnulus` already makes for a flat cap, stood on its side. A bore cut past its own
+cell centre would break that argument's precondition, so those cells print SOLID.
+
+**A corner cell keeps its arm, as a solid offcut.** At a zone's corner, hexagon-minus-quadrant is an
+L. Taking both planes keeps only their intersection and bites a notch out of every corner of the
+aperture — which was the last thing visibly wrong with it. A border piece is split along the zone's
+edge into two convex halves (D79), but a CELL cannot be split that way: its bore would split with it,
+and two half-bores meeting on that line would grow a membrane across the hole. So the cell keeps the
+whole side facing the zone's edge — outside the zone at any height — and the arm beyond it is filled
+by a SECOND, SOLID piece at the same position, under its own key. Solid costs nothing: the offcut is
+a sliver in one cell's outer margin, where a hole would do nothing anyway. The two pieces share their
+straight edge and cancel there, the way two neighbouring cells already do.
+
+### Three faults this uncovered, none of them in the new code
+
+- **The reach test used the wrong radius.** Deciding whether a border piece meets a zone used the
+  MOUTH's corner radius (12.7 mm) where a piece is the whole cell (13.6 mm). Pieces overlapping a
+  zone by up to 0.9 mm were skipped, leaving a rail lying in the aperture.
+- **An OUTER piece never checked `keepClear` at all.** A zone can overrun the plate's edge — a switch
+  near the top of the wall — and the rail along that edge ran straight through it. Outer pieces now
+  take the zone planes on top of their rail clip, and one whose centre is INSIDE a zone is dropped
+  outright: there is no side of the zone to push it to, so it is in the aperture.
+- **With the frame off there are no zones to clip against**, so a clipped cell would be drawn whole
+  and fill the aperture solid. No zones now means the eaten cells are not drawn at all, which is
+  exactly what a plate without a frame has always been.
+
+Each was found by measuring the mesh rather than reading it — counting vertices that fall inside the
+zone rectangle, and isolating the source by rebuilding the plate with the cells, the border and the
+clipped cells switched off in turn.
+
+---
+
+## D82 — The aperture wall is a rail of `t`, the same as the outer edge
+
+Reported as "the border thickness should be the same as the outer edge and should have no jagged
+edges". Both came from the same thing.
+
+Cells were cut flush at the zone (D81) and the band between was filled solid. That made the wall
+whatever happened to be left of each cell: thick where the cut fell in the web between two bores,
+paper-thin where it grazed one, and RAGGED where it clipped a bore open onto the aperture — a hole
+half-cut is a scallop, not a wall. The outer edge meanwhile is a rail of exactly `thicknessMm`, so
+the two did not match either.
+
+Cells are now cut back to the zone **grown by `t`**, and the band between the zone and that line is
+filled. The wall is then bounded by two straight, parallel lines a fixed `t` apart: the same rail the
+outside of the plate gets, with nothing left to be jagged. Where the cells end is exactly where the
+rail begins, so the two meet on one line and the join is internal.
+
+The rail's inner line is the zone, which is what keeps the aperture the size that was blocked out.
+Its outer line is `zone + t`, which is where the cells stop. Both are properties of the zone
+rectangle rather than of the lattice, which is why the result no longer depends on where the cut
+happens to fall against a bore.
+
+`tests/zone-aperture.test.ts` states it as containment: every border piece belonging to an aperture
+lies inside the band, so nothing reaches into the zone and nothing extends past `t`. The older test
+that compared the plate's mass against a "paved" version was DELETED rather than adjusted — the
+comparison had stopped meaning anything, because the border is now bounded to the band in both
+arms of it, so neither one paves. A test whose baseline has quietly become the same as its subject
+is worse than no test.
+
+---
+
+## D83 — The cut cell prints the aperture wall; the border keeps off
+
+D82 said the wall round a blocked zone is a rail of `t`, the same as the outer edge, and split the
+job in two: the cells the zone ate were cut back to `zone + t`, and the border filled the band
+between the zone and that line. The cutting happened. The filling never did.
+
+A border piece only ever grows on a lattice position the plate has left EMPTY — that one rule is
+what stops a border appearing on a seam — and every position round an aperture is a position the
+plate prints as a CUT CELL. So the pieces that were supposed to fill the band were dropped as
+overlaps by the very guard that keeps a partial cell and a phantom from being printed twice, and the
+band was planned by one half of the design and printed by neither.
+
+The result, measured on an 86 × 120 switch, was the opposite of what D82 claimed:
+
+| | intended | actual |
+|---|---|---|
+| aperture, each side | the zone | `zone + t`, and up to 10.0 mm out where a cell was dropped whole |
+| wall thickness | `t` (3.60) | 0.00 to 26 mm |
+
+The 0.00 is a bore left open onto the aperture — a cell sliced through its own hole — which is
+exactly the ragged edge D82 was written to remove. It was invisible to the tests because they asked
+about *border polygons*, and there were none: `expect(round.length).toBeGreaterThan(0)` passed on
+pieces belonging to the plate's outside that happened to fall in the band.
+
+So the wall is now the cut cell's own material, and the cut takes TWO lines instead of one:
+
+- the **outline** is cut at the zone rectangle, so the aperture is that rectangle exactly — one
+  straight line per side, wherever the lattice happens to fall against it;
+- the **bores** are cut at the zone grown by `t`, so between the aperture and the nearest opening
+  there is `t` of solid plate.
+
+One piece of geometry owns that edge and nothing has to meet anything. It also settles the case the
+two-owner design could not: across a seam the plate that would grow the border piece and the plate
+that prints the cell are not even the same plate, so the band would have been printed twice. The
+border's zone-filling branch is deleted; a hole belonging to no zone — a step, a gap where a plate
+does not reach — keeps its reach rail, and an OUTER rail still clips against a zone that overruns
+the plate's edge.
+
+Two smaller things fell out of it.
+
+A cell whose CENTRE lands inside the zone used to be dropped whole, and what it took with it was the
+sliver of itself lying outside the zone — which is wall. That is where the 6.2 mm and 10.0 mm bites
+came from. It now keeps that sliver, on the nearest side: a hexagon 27 mm across cannot poke out of
+opposite sides of a switch, and the side it pokes out of most is the side the wall is on. Its bore
+line falls beyond its own centre, so the piece prints solid, which is right — it is all wall.
+
+And the watertightness argument changed shape without weakening. It used to be "every ring of a
+clipped cell is cut by the same half-planes"; it is now "the outline cut is a function of the ZONE
+alone", which is the part that was ever load-bearing — two neighbours truncate identically along the
+edge they share, so it still cancels. Bores are private to a cell and may differ freely.
+
+`tests/zone-aperture.test.ts` no longer asks about polygons. It slices the finished mesh at the
+plate's own face and runs scanlines across it, which is the only way to state "the wall is 3.6 mm"
+as a number: where the plate stops on each side of the aperture, how thick it is there, and — the
+request as it was actually made — that the same measurement taken on the OUTSIDE of the plate gives
+the same answer. Both halves were checked by breaking them deliberately and watching the tests go
+red.
+
+---
+
+## D84 — The border is part of the plate, not lying next to it
+
+Reported as "two loose 3.6 mm squares at the corners". Pulling on it found three defects stacked on
+one another, all of the same shape: geometry that TOUCHES but does not JOIN. Every one of them left
+the mesh watertight — a closed mesh can be several closed shells — so the whole suite stayed green
+while a bordered plate came off the printer in pieces.
+
+**The corners.** A lattice position outside the plate on TWO sides is a corner, and it was given both
+rails and handed their intersection: a `t × t` square at the very corner, touching neither run. Both
+rails' own material at that corner — the last `MARGIN_Y` of the side band, the first `MARGIN_X` of
+the top one — belonged to that same position and went with it. Two of the four corners came off (the
+stagger is chiral; at the other two the corner falls on a position that is outward on one side only).
+A corner now takes NEITHER rail. It is solid out to both its lines, which is what a plate's corner is.
+
+**The sides.** Railing the left and right to a uniform width was a mistake, and the reasoning behind
+it was sound about the wrong thing. It made the band the same width the whole way round; what it did
+not ask is what the honeycomb offers there to hold on to. A column of flat-top cells reaches its
+straight outer line at ONE POINT per cell — the hexagon's corner — and along no edge at all, so a
+uniform strip beside it is a comb hanging off a chain of points. Measured: the left and right strips
+were separate solids from the honeycomb on every plate that had them.
+
+A side is filled to its line again, as the reference plate in `Customiser/borders.webp` is and as D68
+described before D69 was extended: the band beyond the envelope is still exactly `t`, and the 6.8 mm
+scallop between two cells' corners is solid rather than open. The visible width therefore varies on
+the left and right and not on the top and bottom, and that is not a defect that can be designed away
+— **a straight outer edge, whole cells and a constant visible width are three things a hexagon
+lattice will give you two of.** The border's *specification* is unchanged and is honoured everywhere:
+`t` past the honeycomb, on all four sides and round every aperture.
+
+**The floating point, which was the real one.** A rail's line is `cellCentre ± MARGIN`, recomputed;
+the corners it is meant to land on come out of `cornerPositions`, which averages three cells to snap
+them. The two agree to about 3e-15 mm and the sign of the disagreement is decided by rounding. Tested
+exactly, one end of a shared edge then reads as outside its own rail line and the other as inside,
+and Sutherland–Hodgman interpolates the cut between distances of ±1.8e-15 — which lands it at
+`t = 0.5`, the MIDDLE of the edge. The piece comes out with a spurious vertex halfway along a face it
+shares with a cell; that face never cancels against the cell's; a wall is drawn between two solids
+that are touching. On plates that rounded the wrong way the entire top or bottom rail printed as a
+loose strip the width of the plate, and nothing said so.
+
+`clipConvex` now counts a point ON a plane as inside, to within `SAME`, and `cutEdge` snaps a cut
+that lands within `SAME` of an endpoint onto that endpoint. Both planes here are axis-aligned with
+unit normals, so the tolerance is a real distance in millimetres. It is the same rule
+`cornerPositions` exists for, one level up: anything matching vertices by coordinate on this lattice
+has to snap first.
+
+**What the tests were missing.** `meshIsClosed` was doing its job and answering a different question.
+`tests/honeycomb-frame.test.ts` now asserts the top face is ONE connected component, joined by shared
+EDGES and never by shared vertices — the distinction is the whole finding, since a by-vertex test
+calls a point-contact comb attached. Swept over sizes, because every failure was parity-dependent and
+a single size passes by luck: five side combinations × seven block shapes, all one solid.
+
+Left unfixed and worth knowing: where the stagger puts a half-cell pocket at a corner, the side band
+stops one pitch short of the outer line rather than turning it square. That is the open pocket of D69
+seen end-on, it costs about 3.6 × 15.4 mm at one corner, and it neither detaches anything nor reaches
+past any line. The test states the bound it actually holds to — the band runs the full height of every
+cell in the outer column — rather than a rounder claim that is false.
+
+---
+
+## D85 — A band ends where the PLATE does, not where its own neighbours do
+
+Reported as "the outer edge is jagged". It was, on two sides: measured on a bordered plate, the
+silhouette stepped in by up to **30.8 mm** on the left and right, at two of the four corners. The top
+and bottom were straight to the bit. Which two corners depended on the block, because the stagger is
+chiral, so a single plate size could look fine.
+
+The reach is the rule that makes this border work: a phantom takes its lines from the cells it leans
+on, which is what sets the band's thickness to `t` and what makes an L-shaped plate step in exactly
+where its cells step in. Local rule, global result. It is the right rule ACROSS a band and the wrong
+one ALONG it, and the flat-top lattice guarantees a wrong end: the outermost COLUMN sits half a pitch
+short of its neighbour, so the side band stopped `t` past the last cell of its own column while the
+plate — whose bounds are set by the taller neighbouring column, and whose top rail spans the full
+width — carried on above it. The silhouette fell back to whatever hexagon was next, and near the top
+of a cell that is its 6.8 mm corner-to-flat, hence 30.8 rather than 11.8.
+
+So a band that runs in Y now takes its Y limits from the plate's own straight lines, and one that
+runs in X takes its X limits from them; each still takes the ACROSS direction from its reach, so the
+thickness rule and the L-shape rule are untouched. Only where that side is switched on — with no top
+edge there is no top line to run to.
+
+It cannot run away, and that is worth stating because a ceiling that big looks like one that could.
+A piece is bounded by its own hexagon, which reaches half a cell past its centre, and the ring walk
+never puts a centre more than one step from a real cell. The lines are a ceiling, not a licence to
+grow: the growth guard is unchanged, so no new positions are created, and the inside of an L stays
+empty.
+
+`tests/honeycomb-frame.test.ts` measures the silhouette off the finished mesh — sliced at the plate's
+own face and scanned, so a step of any depth anywhere along a side comes out as a number — over six
+block sizes, and requires zero drift on every edged side. Reverted, it reports 30.7 mm.

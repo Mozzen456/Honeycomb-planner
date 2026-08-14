@@ -1,0 +1,299 @@
+/* =============================================================================
+   PartLibrary — the gallery you shop for parts in
+   =============================================================================
+
+   Tokens only: no colour literal, no raw length, no raw duration. The one place
+   this view is deliberately louder than the rest of the app is the card image —
+   a gallery whose pictures are the same size as its text is a list with extra
+   steps, and the picture is the evidence people actually decide on.
+   ============================================================================= */
+
+/* Centring, padding and backdrop come from `.modal-scrim` in base.css — the one
+   place that rule lives, and the note there explains why the track has to be
+   definite. This file adds nothing to the scrim; the class is on the element. */
+
+.lib {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  inline-size: min(84rem, 100%);
+  block-size: min(56rem, 100%);
+  border: var(--border-width-hair) solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-lg);
+  /* Same reason as .catalog-panel__scroll: a scrolling box inside a fixed
+     overlay must contain its overflow or the viewport inherits it and the
+     page behind starts scrolling instead. */
+  contain: layout paint;
+}
+
+.lib:focus-visible {
+  outline: none; /* it takes focus programmatically; the ring would be noise */
+}
+
+/* --- head ----------------------------------------------------------------- */
+
+.lib__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5) var(--space-3);
+  border-block-end: var(--border-width-hair) solid var(--border-subtle);
+}
+
+.lib__title {
+  font-size: var(--font-size-xl);
+  line-height: var(--line-height-tight);
+}
+
+.lib__sub {
+  margin-block-start: var(--space-0-5);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+}
+
+.lib__headtools {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.lib__search {
+  inline-size: 16rem;
+  max-inline-size: 40vw;
+  font-size: var(--font-size-sm);
+}
+
+.lib__search:focus-visible {
+  border-color: var(--accent);
+}
+
+.lib__sort select {
+  font-size: var(--font-size-sm);
+}
+
+/* A file input styled as a button: the native control cannot be. */
+.lib__upload {
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.lib__upload input[type='file'] {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.lib__close {
+  display: grid;
+  place-items: center;
+  inline-size: var(--icon-size-md);
+  block-size: var(--icon-size-md);
+  border-radius: var(--radius-sm);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xl);
+  line-height: var(--line-height-none);
+  transition: color var(--duration-fast) var(--ease-standard);
+}
+
+.lib__close:hover { color: var(--text-primary); }
+
+/* --- shelves -------------------------------------------------------------- */
+
+.lib__shelves {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-5);
+  border-block-end: var(--border-width-hair) solid var(--border-subtle);
+}
+
+.lib__shelf {
+  padding: var(--space-1) var(--space-3);
+  border: var(--border-width-hair) solid transparent;
+  border-radius: var(--radius-pill);
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  transition:
+    color var(--duration-fast) var(--ease-standard),
+    background-color var(--duration-fast) var(--ease-standard);
+}
+
+.lib__shelf:hover {
+  color: var(--text-primary);
+  background: var(--surface-2);
+}
+
+.lib__shelf[data-active='true'] {
+  color: var(--accent-on);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+/* --- grid ----------------------------------------------------------------- */
+
+.lib__scroll {
+  overflow-y: auto;
+  padding: var(--space-4) var(--space-5);
+  contain: layout paint;
+}
+
+.lib__grid {
+  display: grid;
+  /* auto-fill, not auto-fit: with three cards left, auto-fit stretches them
+     across the whole width and the gallery stops looking like a grid. */
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: var(--space-4);
+}
+
+.lib__empty {
+  padding: var(--space-6) var(--space-4);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+  text-align: center;
+}
+
+/* --- card ----------------------------------------------------------------- */
+
+.lib-card {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  border: var(--border-width-hair) solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  transition:
+    border-color var(--duration-fast) var(--ease-standard),
+    box-shadow var(--duration-fast) var(--ease-standard);
+}
+
+.lib-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md);
+}
+
+.lib-card[data-chosen='true'] {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+}
+
+.lib-card__shot {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  background: var(--surface-3);
+  border-block-end: var(--border-width-hair) solid var(--border-subtle);
+}
+
+.lib-card__shot img {
+  inline-size: 100%;
+  block-size: 100%;
+  /* `contain` for a render (it is framed already, on transparency) and for a
+     photo alike: a photograph of a hook cropped to fill would lose the hook. */
+  object-fit: contain;
+}
+
+.lib-card__body {
+  display: grid;
+  align-content: start;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-3) var(--space-2);
+}
+
+.lib-card__name {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-snug);
+  overflow-wrap: anywhere;
+}
+
+.lib-card__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.lib-card__tag {
+  padding: 0 var(--space-1);
+  border: var(--border-width-hair) solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-2xs);
+  line-height: var(--line-height-snug);
+}
+
+.lib-card__tag--mine {
+  color: var(--accent);
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+}
+
+.lib-card__tag--check {
+  color: var(--warning-fg);
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+}
+
+.lib-card__stats {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-2xs);
+}
+
+.lib-card__est {
+  margin-inline-end: var(--space-0-5);
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+.lib-card__actions {
+  display: flex;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3) var(--space-3);
+}
+
+.lib-card__actions > .button:first-child {
+  flex: 1 1 auto;
+  justify-content: center;
+}
+
+.lib-card__added {
+  color: var(--success-fg);
+  border-color: var(--success-border);
+  background: var(--success-bg);
+}
+
+.lib-card__icon {
+  flex: 0 0 auto;
+  min-inline-size: var(--space-6);
+  justify-content: center;
+}
+
+/* --- foot ----------------------------------------------------------------- */
+
+.lib__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-5);
+  border-block-start: var(--border-width-hair) solid var(--border-subtle);
+}
+
+.lib__hint {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-relaxed);
+}
+
+@media (max-width: 48rem) {
+  .lib__head { align-items: start; }
+  .lib__search { inline-size: 100%; max-inline-size: none; }
+  .lib__headtools { inline-size: 100%; flex-wrap: wrap; }
+  .lib__grid { grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); }
+}

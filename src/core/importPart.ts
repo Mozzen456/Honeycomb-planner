@@ -1,11 +1,16 @@
 /**
- * Turn a dropped STL into a catalogue part.
+ * Turn a dropped model file — STL or 3MF — into a catalogue part.
  *
- * This is the assembly step: `stl.ts` reads and measures the mesh, `detect.ts`
- * works out its cells, and this file writes the `CatalogPart` the rest of the
- * app already knows how to place, cost and print. The classification and
- * requirement rules are deliberately the same ones `tools/scan.py` applies, so
- * an imported insert behaves exactly like a scanned one in the BOM.
+ * This is the assembly step: `modelFile.ts` reads the bytes into a mesh
+ * whichever format they are, `stl.ts` measures it, `detect.ts` works out its
+ * cells, and this file writes the `CatalogPart` the rest of the app already
+ * knows how to place, cost and print. The classification and requirement rules
+ * are deliberately the same ones `tools/scan.py` applies, so an imported insert
+ * behaves exactly like a scanned one in the BOM.
+ *
+ * Asynchronous because a 3MF is a ZIP and there is no synchronous inflate in a
+ * browser. Nothing else about the assembly is async, and `proposeFromMesh` is
+ * the synchronous core if you already hold a mesh.
  *
  * Two things are different from a scanned part and both are visible rather than
  * hidden:
@@ -20,7 +25,8 @@
 
 import { detect, type Detection } from './detect';
 import { PITCH, ROW_STEP } from './constants';
-import { estimatePrint, measureMesh, parseStl, type MeshMeasure } from './stl';
+import { parseModelFile } from './modelFile';
+import { estimatePrint, measureMesh, type MeshData, type MeshMeasure } from './stl';
 import { anchorOf } from './overrides';
 import type { Catalog, CatalogPart, Hex, PartType } from './types';
 
@@ -240,18 +246,39 @@ function requirements(
 // ---------------------------------------------------------------------------
 
 /**
- * Measure a dropped file and propose the part it describes.
+ * Read a dropped file — STL or 3MF — and propose the part it describes.
  *
- * Throws only if the bytes are not an STL at all — everything else is reported
- * as a warning on a usable proposal, because a part the user can correct beats
- * a refusal they cannot.
+ * Throws only if the bytes are neither format at all; everything else is
+ * reported as a warning on a usable proposal, because a part the user can
+ * correct beats a refusal they cannot.
  */
-export function proposePart(
+export async function proposePart(
   fileName: string,
   buffer: ArrayBuffer,
   catalog: Catalog,
+): Promise<ImportProposal> {
+  const { mesh, warnings: fileWarnings } = await parseModelFile(fileName, buffer);
+  return proposeFromMesh(fileName, mesh, catalog, fileWarnings);
+}
+
+/**
+ * The synchronous half: everything from a mesh onwards.
+ *
+ * Split out so the format reader is the only asynchronous thing in the import
+ * path, and so this — the classification, the requirements, the estimate — can
+ * be exercised from a mesh built by hand.
+ *
+ * `fileWarnings` are the READER's findings (drawn in inches, six objects
+ * merged) and they go at the FRONT of the list. They describe the file itself,
+ * and something wrong at that level makes everything below it suspect, so it
+ * should not be read third.
+ */
+export function proposeFromMesh(
+  fileName: string,
+  mesh: MeshData,
+  catalog: Catalog,
+  fileWarnings: readonly string[] = [],
 ): ImportProposal {
-  const mesh = parseStl(buffer);
   const measure = measureMesh(mesh);
   const detection = detect(mesh);
   const taken = new Set(catalog.parts.map((p) => p.id));
@@ -267,7 +294,7 @@ export function proposePart(
     supports: measure.supports,
   });
 
-  const warnings: string[] = [];
+  const warnings: string[] = [...fileWarnings];
   if (detection.needsReview) {
     warnings.push(
       detection.tier === 'insert-fed'

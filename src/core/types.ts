@@ -136,16 +136,45 @@ export interface PlacedPanel {
  * tape: a light switch is 86 × 86, a double socket 146 × 86. The planner turns
  * that into cells and cuts them out of whichever panels they land in.
  */
+/** One rectangle of a zone, in wall millimetres. Lower-left corner and size. */
+export interface ZoneRect {
+  xMm: number;
+  yMm: number;
+  widthMm: number;
+  heightMm: number;
+}
+
 export interface Obstacle {
   id: string;
   label: string;
-  /** Lower-left corner, in the same wall millimetres as `WallSpec`. */
+  /**
+   * Lower-left corner and size, in the same wall millimetres as `WallSpec`.
+   *
+   * When `shape` is present these are its BOUNDING BOX and nothing more — the
+   * tag on the plan reads them, and moving the zone moves them together with
+   * the parts. The blocked area itself is always `obstacleRects`.
+   */
   xMm: number;
   yMm: number;
   widthMm: number;
   heightMm: number;
   /** Extra gap to leave all round — for a switch plate's bevel, or fingers. */
   clearanceMm: number;
+  /**
+   * A zone made of more than one rectangle — an L round a consumer unit, a run
+   * of pipe with a spur off it.
+   *
+   * A UNION OF RECTANGLES rather than a polygon, and that is a geometry
+   * decision, not a UI one: the border generator clips convex pieces with
+   * half-planes and has no polygon boolean anywhere by design (D59). A
+   * rectangle gives four half-planes directly; an arbitrary polygon would have
+   * to be decomposed before it could be clipped against, and a concave one
+   * cannot be clipped against at all in one piece.
+   *
+   * Absent means the zone is just the rectangle above, which is what every zone
+   * drawn before this existed is — and what it must still serialise as.
+   */
+  shape?: ZoneRect[];
 }
 
 export interface PlacedItem {
@@ -167,6 +196,36 @@ export interface WallSpec {
   heightMm: number;
 }
 
+/**
+ * A straight, closed edge round the honeycomb — the frame the community's builds
+ * have, and something no shipped plate can give you.
+ *
+ * Per side, because a wall that runs into a ceiling wants an edge on three sides
+ * and not the fourth. The edge is ADDITIVE — the walls between cells run out to
+ * a straight line and the notches behind it fill solid — so it costs no cells
+ * and every hexagon stays whole and mountable. It applies to the OUTSIDE of the
+ * assembly only: a seam between two plates is not an outside, so plates still
+ * interlock. Any panel carrying an edge is a CUSTOM panel and has to be
+ * generated, never printed from a shipped STL.
+ */
+export interface WallFrame {
+  left: boolean;
+  right: boolean;
+  bottom: boolean;
+  top: boolean;
+  /** An edge round the holes too — a blocked zone, or a step in the outline. */
+  holes: boolean;
+  /**
+   * How far the edge reaches past the outermost cell, in millimetres.
+   *
+   * A free number rather than the customiser's single/double switch, because
+   * this border is ADDITIVE — it adds material outside the honeycomb instead of
+   * cutting cells in half — so any thickness is a legal plate and 3.6 is only
+   * the default because it is what the reference photograph measures.
+   */
+  thicknessMm: number;
+}
+
 export interface LayoutDoc {
   schemaVersion: number;
   id: string;
@@ -178,6 +237,15 @@ export interface LayoutDoc {
   groups: Group[];
   /** Switches, sockets and pipes the wall has to go round. */
   obstacles?: Obstacle[];
+  /** Which outer edges carry a frame. Absent means none, which is the default. */
+  frame?: WallFrame;
+  /**
+   * The parts shopped for this wall, in the order they were chosen — what the
+   * rail shows. Absent means none have been chosen yet, which is not the same
+   * as none being USED: a placed part counts whether it is listed or not. See
+   * `projectParts.ts`, which is the only module that reads this field.
+   */
+  library?: string[];
 }
 
 // ---------------------------------------------------------------------------

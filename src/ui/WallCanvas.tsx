@@ -13,16 +13,54 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 
 import { MARGIN_X, MARGIN_Y, PITCH, ROW_STEP } from '../core/constants';
 import {
+  edgeCorners,
+  hexCorners,
   hexKey,
   hexToMm,
+  keyToHex,
   mmToHex,
   panelCells,
+  placedPanelCells,
   type Point,
 } from '../core/hex';
 import { itemCells } from '../core/bom';
+import {
+  formatMm,
+  handlePoint,
+  measure,
+  resizeZone,
+  SNAP_RADIUS_MM,
+  snapPoint,
+  zoneFromDrag,
+  zoneHit,
+  zoneParts,
+  moveZone,
+  withZonePart,
+  MIN_ZONE_MM,
+  ZONE_HANDLES,
+  type Snap,
+} from '../core/measure';
+import { borderSpecFor, frameIsOn, NO_WALL_FRAME } from '../core/panelModel';
+import {
+  borderPolygons, DEFAULT_BORDER_MM, MAX_BORDER_MM, MIN_BORDER_MM,
+} from '../core/honeycomb';
+import { MAX_WALL_MM } from '../core/store';
+import { NumberField } from './NumberField';
+import { obstacleRects } from '../core/obstacles';
 import { partCells } from '../core/store';
-import type { Catalog, Hex, LayoutDoc, PlacedItem, Rotation } from '../core/types';
+import type {
+  Catalog, Hex, LayoutDoc, Obstacle, PlacedItem, Rotation, WallFrame,
+} from '../core/types';
 import './WallCanvas.css';
+
+/**
+ * What the pointer does on the plan.
+ *
+ * Modal rather than modifier-based because two of the three are DRAGS on empty
+ * wall, and a marquee, a measurement and a new zone cannot all be "drag on empty
+ * wall at once". The mode is shown, and Escape always returns to Select.
+ */
+export type PlanTool = 'select' | 'measure' | 'zone';
 
 export interface DragPayload {
   /** Dragging a new part from the catalogue. */
@@ -57,6 +95,16 @@ export interface WallCanvasProps {
   onSelect: (ids: string[], additive: boolean) => void;
   onStartItemDrag: (itemIds: string[], grabOffset: Hex) => void;
   placementValid: boolean;
+  /**
+   * Blocked zones after an edit — drawn, moved, resized or deleted.
+   *
+   * The whole list, not a patch, because that is what `store.setObstacles`
+   * takes: it re-cuts every panel from scratch each time, so moving a switch
+   * back where it was restores the cells it took.
+   */
+  onObstaclesChange: (obstacles: Obstacle[]) => void;
+  /** Put an edge round the wall, or take it off. Undefined means none. */
+  onFrameChange: (frame: WallFrame | undefined) => void;
 }
 
 interface View {
@@ -84,6 +132,8 @@ export function WallCanvas(props: WallCanvasProps) {
     onSelect,
     onStartItemDrag,
     placementValid,
+    onObstaclesChange,
+    onFrameChange,
   } = props;
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -91,6 +141,42 @@ export function WallCanvas(props: WallCanvasProps) {
   const [view, setView] = useState<View>({ scale: 0.35, originX: -40, originY: -40 });
   const [size, setSize] = useState({ w: 800, h: 600 });
   const [hover, setHover] = useState<Hex | null>(null);
+
+  // --- plan tools ---------------------------------------------------------
+  const [tool, setTool] = useState<PlanTool>('select');
+  /** The finished tape, kept on screen so the number can be READ and copied. */
+  const [tape, setTape] = useState<{ from: Snap; to: Snap } | null>(null);
+  /**
+   * A tape or a zone being dragged out right now.
+   *
+   * Mirrored into a REF and written synchronously, for exactly the reason the
+   * part drag is (see `dragRef`): state is only visible after a render, and
+   * pointerdown → pointermove → pointerup can all land before that render
+   * commits. Read from state, the release saw `sketch === null` and threw the
+   * gesture away — every quick flick measured nothing at all, and so did every
+   * synthetic drag.
+   */
+  const [sketch, setSketchState] = useState<{ from: Snap; to: Snap } | null>(null);
+  const sketchRef = useRef<{ from: Snap; to: Snap } | null>(null);
+  const setSketch = useCallback((next: { from: Snap; to: Snap } | null) => {
+    sketchRef.current = next;
+    setSketchState(next);
+  }, []);
+  const [zoneSel, setZoneSel] = useState<string | null>(null);
+  /** Where the pointer is, snapped — the crosshair and the readout. */
+  const [cursor, setCursor] = useState<Snap | null>(null);
+  /**
+   * A live zone move or resize.
+   *
+   * In a ref, for the same reason the part drag is: the gesture has to be
+   * visible to the very next pointer event, and state is only visible after a
+   * render. `origin` is the zone as it was when the grab started, so a drag is
+   * always computed from the original rather than accumulated frame by frame —
+   * accumulating drifts, and a resize that drifts changes size when you pause.
+   */
+  const zoneDragRef = useRef<
+    { id: string; origin: Obstacle; grab: Point; handle: { hx: number; hy: number } | null } | null
+  >(null);
   /**
    * Bumped whenever the theme changes, purely to force a repaint.
    *
@@ -121,29 +207,47 @@ export function WallCanvas(props: WallCanvasProps) {
 
   // --- geometry helpers ---------------------------------------------------
 
+  /**
+   * Wall millimetres to canvas pixels — and Y IS FLIPPED, on purpose.
+   *
+   * Screen y grows downward and wall y grows UP: the wall's origin is its
+   * bottom-left corner, which is what a tape measure reads against and what the
+   * 3D view uses. Mapping them straight through drew the plan upside down
+   * against the same document the 3D view drew the right way up, so the top of
+   * the wall in one was the bottom of it in the other (D70).
+   *
+   * `originY` is therefore the wall-mm y at the BOTTOM of the canvas.
+   */
   const toScreen = useCallback(
     (p: Point): Point => ({
       x: (p.x - view.originX) / view.scale,
-      y: (p.y - view.originY) / view.scale,
+      y: size.h - (p.y - view.originY) / view.scale,
     }),
-    [view],
+    [view, size.h],
   );
 
   const toWall = useCallback(
     (x: number, y: number): Point => ({
       x: x * view.scale + view.originX,
-      y: y * view.scale + view.originY,
+      y: (size.h - y) * view.scale + view.originY,
     }),
-    [view],
+    [view, size.h],
   );
 
-  /** Index of every panel cell, for tinting and for off-panel detection. */
+  /**
+   * Index of every panel cell, for tinting and for off-panel detection.
+   *
+   * `placedPanelCells`, NOT `panelCells` on the raw block: a cell cut out for an
+   * obstacle or a frame is not on the plate and must not be drawn. This read the
+   * full block, so a blocked zone changed the parts list and the 3D view and
+   * left the plan showing an unbroken honeycomb straight through the light
+   * switch — the one place the cut most needs to be visible, since drawing the
+   * zone is what you came to the plan to do.
+   */
   const panelIndex = useMemo(() => {
     const m = new Map<string, string>();
     for (const p of doc.panels) {
-      for (const c of panelCells(p.origin, p.columns, p.rows)) {
-        m.set(hexKey(c), p.id);
-      }
+      for (const c of placedPanelCells(p)) m.set(hexKey(c), p.id);
     }
     return m;
   }, [doc.panels]);
@@ -169,7 +273,9 @@ export function WallCanvas(props: WallCanvasProps) {
     if (doc.panels.length < 2) return [] as Array<{ cell: Hex; dir: number }>;
     const out: Array<{ cell: Hex; dir: number }> = [];
     for (const p of doc.panels) {
-      const cells = panelCells(p.origin, p.columns, p.rows);
+      // The cells the plate really has, so the hole left by a zone reads as an
+      // outside edge rather than growing a seam round itself.
+      const cells = placedPanelCells(p);
       const own = new Set(cells.map(hexKey));
       for (const c of cells) {
         for (let i = 0; i < 6; i++) {
@@ -187,6 +293,49 @@ export function WallCanvas(props: WallCanvasProps) {
   const partOf = useCallback(
     (partId: string) => catalog.parts.find((p) => p.id === partId),
     [catalog],
+  );
+
+  /** Cells that really exist, for snapping. Rebuilt only when the panels do. */
+  const snapCells = useMemo(() => {
+    const out: Hex[] = [];
+    for (const key of panelIndex.keys()) {
+      const comma = key.indexOf(',');
+      out.push({ q: Number(key.slice(0, comma)), r: Number(key.slice(comma + 1)) });
+    }
+    return out;
+  }, [panelIndex]);
+
+  /**
+   * The plate edges the border adds, as segments to draw.
+   *
+   * Derived the same way the generator derives them — an edge exists where the
+   * next lattice position is EMPTY — so the plan cannot show an edge the plate
+   * will not have. In particular a seam between two plates has no edge, because
+   * the position is taken.
+   */
+  const borderShapes = useMemo(() => {
+    const spec = borderSpecFor(doc.panels, doc.frame, undefined, doc.obstacles);
+    if (!spec) return [];
+    return borderPolygons([...spec.occupied].map(keyToHex), spec);
+  }, [doc.panels, doc.frame]);
+
+  /**
+   * A pointer position as a snapped wall point.
+   *
+   * The radius is scaled by the view so it is a constant number of PIXELS on
+   * screen: 8 mm is a comfortable grab at 100 % and invisible at 10 %, where a
+   * whole wall is 200 px wide and nothing would ever catch.
+   */
+  const snapAt = useCallback(
+    (p: Point, free: boolean): Snap =>
+      snapPoint(p, {
+        cells: snapCells,
+        obstacles: doc.obstacles,
+        wall: doc.wall,
+        radiusMm: SNAP_RADIUS_MM * Math.max(1, view.scale * 2),
+        enabled: !free,
+      }),
+    [snapCells, doc.obstacles, doc.wall, view.scale],
   );
 
   // --- sizing -------------------------------------------------------------
@@ -275,6 +424,12 @@ export function WallCanvas(props: WallCanvasProps) {
       ghostBadFill: tok('--canvas-ghost-invalid-fill', '#F0867B'),
       text: tok('--canvas-label', '#aab3bb'),
       textDim: tok('--canvas-label-muted', '#7C838A'),
+      zone: tok('--canvas-zone', '#B26B00'),
+      zoneFill: tok('--canvas-zone-fill', 'rgba(178,107,0,0.2)'),
+      zoneClearance: tok('--canvas-zone-clearance', 'rgba(178,107,0,0.45)'),
+      measure: tok('--canvas-measure', '#e8edf2'),
+      measureHalo: tok('--canvas-measure-halo', '#101418'),
+      frame: tok('--canvas-frame', '#c05a2a'),
     };
 
     ctx.clearRect(0, 0, size.w, size.h);
@@ -391,12 +546,18 @@ export function WallCanvas(props: WallCanvasProps) {
         if (seamEdges.length > 0 && drawGrid) {
           const seams = new Path2D();
           for (const { cell, dir } of seamEdges) {
-            const centre = toScreen(hexToMm(cell));
-            // Edge `dir` lies between corners dir and dir+1 of a pointy-top hex.
-            const a1 = (Math.PI / 180) * (60 * dir - 60);
-            const a2 = (Math.PI / 180) * (60 * dir);
-            seams.moveTo(centre.x + R0 * Math.cos(a1), centre.y + R0 * Math.sin(a1));
-            seams.lineTo(centre.x + R0 * Math.cos(a2), centre.y + R0 * Math.sin(a2));
+            // Corners taken in WALL space from `hexCorners` and then mapped,
+            // rather than rebuilt from angles in screen space. Screen space is
+            // y-flipped, so an angle written there runs the other way round the
+            // hexagon and every seam lands on the wrong edge — the same
+            // off-by-one `edgeCorners` exists to stop, arriving by a different
+            // route (D70).
+            const corners = hexCorners(cell);
+            const [c1, c2] = edgeCorners(dir);
+            const a = toScreen(corners[c1]!);
+            const b = toScreen(corners[c2]!);
+            seams.moveTo(a.x, a.y);
+            seams.lineTo(b.x, b.y);
           }
           // Deliberately quiet. A seam is reference information, not the
           // subject: at full weight it was the boldest thing on the wall,
@@ -478,6 +639,15 @@ export function WallCanvas(props: WallCanvasProps) {
       ctx.stroke(bad);
     }
 
+    // 5b. Blocked zones, and the frame.
+    //
+    // Drawn AFTER the honeycomb rather than under it: the cells inside a zone
+    // have been cut out, so the zone shows through the gap it made, and seeing
+    // the two together is the whole point — a zone whose rectangle does not
+    // line up with the missing hexagons is a zone in the wrong place.
+    drawZones(ctx, doc, toScreen, C, zoneSel, tool);
+    drawBorder(ctx, borderShapes, toScreen, C);
+
     // 6. Marquee.
     if (marquee) {
       const a = toScreen(marquee.a);
@@ -491,19 +661,59 @@ export function WallCanvas(props: WallCanvasProps) {
       ctx.strokeRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y));
     }
 
+    // 6b. The zone being dragged out, before it exists as a document object.
+    if (tool === 'zone' && sketch) {
+      const a = toScreen(sketch.from);
+      const b = toScreen(sketch.to);
+      ctx.fillStyle = C.zoneFill;
+      ctx.fillRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y));
+      ctx.strokeStyle = C.zone;
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([5, 4]);
+      ctx.strokeRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y));
+      ctx.setLineDash([]);
+      label(
+        ctx, C,
+        `${formatMm(Math.abs(sketch.to.x - sketch.from.x), 0)} × ` +
+          `${formatMm(Math.abs(sketch.to.y - sketch.from.y), 0)} mm`,
+        (a.x + b.x) / 2, Math.min(a.y, b.y) - 10,
+      );
+    }
+
+    // 6c. The tape: the one being dragged, or the last one taken.
+    const shown = tool === 'measure' ? (sketch ?? tape) : tape;
+    if (shown) drawTape(ctx, shown, toScreen, C, size);
+
+    // 6d. The snap crosshair, so you can see WHAT it caught before committing.
+    if (cursor && cursor.kind !== 'free' && (tool === 'measure' || tool === 'zone')) {
+      const p = toScreen(cursor);
+      ctx.strokeStyle = C.measure;
+      ctx.lineWidth = 1.25;
+      ctx.beginPath();
+      ctx.moveTo(p.x - 7, p.y);
+      ctx.lineTo(p.x + 7, p.y);
+      ctx.moveTo(p.x, p.y - 7);
+      ctx.lineTo(p.x, p.y + 7);
+      ctx.stroke();
+      if (!sketch) label(ctx, C, cursor.label, p.x, p.y - 14);
+    }
+
     // 7. Scale readout.
     ctx.fillStyle = C.textDim;
     ctx.font = '11px ui-monospace, SFMono-Regular, Menlo, monospace';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'bottom';
+    const zones = (doc.obstacles ?? []).length;
     ctx.fillText(
-      `${doc.wall.widthMm} × ${doc.wall.heightMm} mm · ${panelIndex.size} cells · ${(100 / view.scale).toFixed(0)}%`,
+      `${doc.wall.widthMm} × ${doc.wall.heightMm} mm · ${panelIndex.size} cells` +
+        `${zones > 0 ? ` · ${zones} blocked` : ''} · ${(100 / view.scale).toFixed(0)}%`,
       12,
       size.h - 10,
     );
   }, [
     doc, catalog, selection, drag, hover, marquee, invalidCells, placementValid,
     size, view, toScreen, toWall, panelIndex, partOf, seamEdges, themeTick,
+    tool, tape, sketch, zoneSel, cursor, borderShapes,
   ]);
 
   // --- interaction --------------------------------------------------------
@@ -585,8 +795,26 @@ export function WallCanvas(props: WallCanvasProps) {
     };
   }, [dragRef]);
 
+  /** Pointer position in wall millimetres. */
+  const wallAt = useCallback(
+    (ev: { clientX: number; clientY: number }): Point => {
+      const rect = canvasRef.current?.getBoundingClientRect();
+      return toWall(ev.clientX - (rect?.left ?? 0), ev.clientY - (rect?.top ?? 0));
+    },
+    [toWall],
+  );
+
   const onPointerDown = (ev: React.PointerEvent<HTMLCanvasElement>) => {
-    (ev.target as Element).setPointerCapture?.(ev.pointerId);
+    // Capture is an optimisation — it keeps the gesture alive past the canvas
+    // edge — and it is allowed to fail: the browser rejects it for a pointer
+    // that is no longer active, and it throws rather than returning false.
+    // Unguarded, that exception aborts the rest of this handler, so the press
+    // that failed to capture also fails to select, measure or start a zone.
+    try {
+      (ev.target as Element).setPointerCapture?.(ev.pointerId);
+    } catch {
+      /* the gesture still works, it just stops at the canvas edge */
+    }
     const cell = cellAt(ev);
 
     // Middle button or space-drag pans.
@@ -595,6 +823,41 @@ export function WallCanvas(props: WallCanvasProps) {
       return;
     }
     if (ev.button !== 0) return;
+
+    const at = wallAt(ev);
+    const snapped = snapAt(at, ev.shiftKey);
+
+    // Measure: every press starts a fresh tape. The previous one stays on
+    // screen until then, because a measurement you cannot read twice is not
+    // much use — you take it, then go and look at the thing you measured.
+    if (tool === 'measure') {
+      setTape(null);
+      setSketch({ from: snapped, to: snapped });
+      return;
+    }
+
+    if (tool === 'zone') {
+      setSketch({ from: snapped, to: snapped });
+      return;
+    }
+
+    // Select: a zone comes first, but only where it can be grabbed — its own
+    // rectangle or a handle. Nothing can be placed inside a zone (its cells are
+    // cut), so this can never steal a click meant for a part.
+    const zones = doc.obstacles ?? [];
+    const grabbed = grabZone(zones, at, zoneSel, view.scale);
+    if (grabbed) {
+      setZoneSel(grabbed.id);
+      zoneDragRef.current = {
+        id: grabbed.id,
+        origin: grabbed.zone,
+        grab: at,
+        handle: grabbed.handle,
+      };
+      onSelect([], false);
+      return;
+    }
+    if (zoneSel !== null) setZoneSel(null);
 
     const hitId = itemIndex.get(hexKey(cell));
     pressRef.current = { x: ev.clientX, y: ev.clientY, cell, itemId: hitId };
@@ -611,7 +874,9 @@ export function WallCanvas(props: WallCanvasProps) {
       setView((v) => ({
         ...v,
         originX: d.ox - (ev.clientX - d.x) * v.scale,
-        originY: d.oy - (ev.clientY - d.y) * v.scale,
+        // `+`, not `−`: wall y runs up the screen now, so dragging the pointer
+        // down has to raise the wall-mm value at the bottom edge.
+        originY: d.oy + (ev.clientY - d.y) * v.scale,
       }));
       return;
     }
@@ -619,6 +884,31 @@ export function WallCanvas(props: WallCanvasProps) {
     // While a drag is live the window listener owns pointer tracking, so the
     // canvas must not also report the move or every frame is handled twice.
     if (drag) return;
+
+    const at = wallAt(ev);
+
+    // A zone being moved or resized. Always recomputed from the ORIGINAL zone
+    // and the total delta, never from the last frame — accumulating drifts, and
+    // a rectangle that drifts changes size whenever the pointer pauses.
+    const zd = zoneDragRef.current;
+    if (zd) {
+      const zones = doc.obstacles ?? [];
+      const next = zd.handle
+        ? resizeZone(zd.origin, zd.handle.hx, zd.handle.hy, snapAt(at, ev.shiftKey))
+        // Through `moveZone`: a zone with a shape has to move its rectangles
+        // with its box, or it blocks somewhere it is not drawn.
+        : moveZone(zd.origin, at.x - zd.grab.x, at.y - zd.grab.y);
+      onObstaclesChange(zones.map((o) => (o.id === zd.id ? next : o)));
+      return;
+    }
+
+    if (tool === 'measure' || tool === 'zone') {
+      const snapped = snapAt(at, ev.shiftKey);
+      setCursor(snapped);
+      const live = sketchRef.current;
+      if (live) setSketch({ ...live, to: snapped });
+      return;
+    }
 
     const cell = cellAt(ev);
     setHover(cell);
@@ -652,6 +942,69 @@ export function WallCanvas(props: WallCanvasProps) {
       panRef.current = null;
       return;
     }
+
+    if (zoneDragRef.current) {
+      zoneDragRef.current = null;
+      return;
+    }
+
+    // `sketchRef`, never the state: see the note where it is declared. The
+    // release can arrive before the render that would make `sketch` visible.
+    const live = sketchRef.current;
+
+    if (tool === 'measure') {
+      // Keep it, however short. A zero-length tape is a legitimate thing to
+      // leave on screen — it marks a point, and the next press replaces it.
+      if (live) setTape(live);
+      setSketch(null);
+      return;
+    }
+
+    if (tool === 'zone') {
+      if (live) {
+        const zone = zoneFromDrag(
+          live.from, live.to,
+          `zone${Date.now().toString(36)}`,
+          'Blocked zone',
+          // No clearance by default: the user drew the rectangle they meant.
+          // A preset obstacle carries one because 86 mm is the FACEPLATE and
+          // the bevel round it is extra; a hand-drawn zone already includes it.
+          0,
+        );
+        /*
+         * Shift ADDS this rectangle to the selected zone instead of making a
+         * new one, which is how a zone becomes an L or a T.
+         *
+         * A modifier rather than a third tool: it is the same gesture on the
+         * same tool, and the thing it needs to say is "this one goes with that
+         * one". A separate mode would have to be entered, and the zone it adds
+         * to chosen, before the drag even starts.
+         */
+        const addTo = ev.shiftKey
+          ? (doc.obstacles ?? []).find((o) => o.id === zoneSel)
+          : undefined;
+        if (zone && addTo) {
+          const grown = withZonePart(addTo, {
+            xMm: zone.xMm, yMm: zone.yMm, widthMm: zone.widthMm, heightMm: zone.heightMm,
+          });
+          onObstaclesChange((doc.obstacles ?? []).map((o) => (o.id === grown.id ? grown : o)));
+          setTool('select');
+          setSketch(null);
+          return;
+        }
+        if (zone) {
+          onObstaclesChange([...(doc.obstacles ?? []), zone]);
+          setZoneSel(zone.id);
+          // Straight back to Select, so the zone you just drew can be nudged
+          // without hunting for the tool switch — and so a stray click on the
+          // wall does not become a second zone.
+          setTool('select');
+        }
+      }
+      setSketch(null);
+      return;
+    }
+
     if (drag) {
       // Handled by the window-level listener; just clear local press state.
       pressRef.current = null;
@@ -678,8 +1031,62 @@ export function WallCanvas(props: WallCanvasProps) {
     // outside the canvas, and wandering past the edge mid-drag is normal.
     if (drag) return;
     setHover(null);
+    setCursor(null);
     panRef.current = null;
   };
+
+  /**
+   * Tool keys, and what Escape and Delete mean while a zone is selected.
+   *
+   * Deliberately NOT folded into the shell's key handler: it already declines
+   * to act on Delete when nothing is selected, which is exactly the case where
+   * a zone is, and Escape there clears the item selection without knowing a
+   * tool exists. Two handlers, each minding its own selection.
+   */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+      if (e.key === 'Escape') {
+        setTool('select');
+        setSketch(null);
+        setTape(null);
+        setZoneSel(null);
+        return;
+      }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && zoneSel !== null) {
+        e.preventDefault();
+        onObstaclesChange((doc.obstacles ?? []).filter((o) => o.id !== zoneSel));
+        setZoneSel(null);
+        return;
+      }
+      if (e.key.toLowerCase() === 'e') {
+        e.preventDefault();
+        const current = doc.frame;
+        onFrameChange(
+          frameIsOn(current)
+            ? undefined
+            : {
+                ...NO_WALL_FRAME,
+                left: true, right: true, bottom: true, top: true, holes: true,
+                thicknessMm: current?.thicknessMm ?? DEFAULT_BORDER_MM,
+              },
+        );
+        return;
+      }
+      const keys: Record<string, PlanTool> = { v: 'select', m: 'measure', b: 'zone' };
+      const next = keys[e.key.toLowerCase()];
+      if (next) {
+        setTool(next);
+        setSketch(null);
+        if (next !== 'select') setZoneSel(null);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [zoneSel, doc.obstacles, doc.frame, onObstaclesChange, onFrameChange]);
 
   const onWheel = (ev: React.WheelEvent<HTMLCanvasElement>) => {
     const rect = canvasRef.current?.getBoundingClientRect();
@@ -690,15 +1097,161 @@ export function WallCanvas(props: WallCanvasProps) {
       if (!ev.ctrlKey && !ev.metaKey && Math.abs(ev.deltaX) > Math.abs(ev.deltaY)) {
         return { ...v, originX: v.originX + ev.deltaX * v.scale };
       }
-      const before = { x: cx * v.scale + v.originX, y: cy * v.scale + v.originY };
+      const before = {
+        x: cx * v.scale + v.originX,
+        y: (size.h - cy) * v.scale + v.originY,
+      };
       const factor = Math.exp(ev.deltaY * 0.0015);
       const scale = clamp(v.scale * factor, MIN_SCALE, MAX_SCALE);
-      return { scale, originX: before.x - cx * scale, originY: before.y - cy * scale };
+      return {
+        scale,
+        originX: before.x - cx * scale,
+        originY: before.y - (size.h - cy) * scale,
+      };
     });
   };
 
+  /** The tape being dragged out, or the last one taken. */
+  const readout = useMemo(() => {
+    const shown = tool === 'measure' ? (sketch ?? tape) : tape;
+    return shown ? measure(shown.from, shown.to) : null;
+  }, [tool, sketch, tape]);
+
+  const borderOn = frameIsOn(doc.frame);
+
+  const TOOLS: { id: PlanTool; label: string; key: string; hint: string }[] = [
+    { id: 'select', label: 'Select', key: 'V', hint: 'Move parts and zones' },
+    { id: 'measure', label: 'Measure', key: 'M', hint: 'Drag between two points — hold Shift to ignore snapping' },
+    { id: 'zone', label: 'Blocked zone', key: 'B', hint: 'Drag a rectangle the honeycomb must keep out of' },
+  ];
+
   return (
-    <div className="wall-canvas" ref={wrapRef}>
+    <div className="wall-canvas" ref={wrapRef} data-tool={tool}>
+      <div className="wall-canvas__toolbar" role="group" aria-label="Plan tool">
+        {TOOLS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            aria-pressed={tool === t.id}
+            title={`${t.hint} (${t.key})`}
+            onClick={() => {
+              setTool(t.id);
+              setSketch(null);
+              if (t.id !== 'select') setZoneSel(null);
+            }}
+          >
+            {t.label}
+            <kbd>{t.key}</kbd>
+          </button>
+        ))}
+        {/*
+          The border, where you are looking at the wall.
+          It lives in the parts-list rail too, with the per-side checkboxes —
+          this is the switch you reach for while planning, and the thickness
+          beside it because "how thick" is the question you ask straight after
+          "on or off".
+        */}
+        <button
+          type="button"
+          className="wall-canvas__border"
+          aria-pressed={borderOn}
+          title="A straight, closed edge round the outside of the honeycomb (E)"
+          onClick={() => {
+            const current = doc.frame;
+            if (frameIsOn(current)) {
+              onFrameChange(undefined);
+              return;
+            }
+            onFrameChange({
+              ...NO_WALL_FRAME,
+              left: true, right: true, bottom: true, top: true, holes: true,
+              thicknessMm: current?.thicknessMm ?? DEFAULT_BORDER_MM,
+            });
+          }}
+        >
+          Border
+          <kbd>E</kbd>
+        </button>
+        {borderOn && doc.frame && (
+          <label className="wall-canvas__thickness">
+            <NumberField
+              value={doc.frame.thicknessMm}
+              min={MIN_BORDER_MM}
+              max={MAX_BORDER_MM}
+              step={0.2}
+              decimals={1}
+              onCommit={(v) => onFrameChange({ ...doc.frame!, thicknessMm: v })}
+              aria-label="Border thickness in millimetres"
+            />
+            <span>mm</span>
+          </label>
+        )}
+
+        {readout && (
+          <>
+            {/*
+              The measurement in the DOM as well as on the canvas.
+              A number painted into a canvas cannot be read by a screen reader,
+              cannot be selected, and cannot be copied into the note you are
+              writing about your wall — and this is the one number in the app a
+              person actually wants to write down. `aria-live` so it is announced
+              as the tape is dragged out.
+            */}
+            <output className="wall-canvas__readout tabular-nums" aria-live="polite">
+              <strong>{formatMm(readout.distanceMm)}</strong> mm
+              <span>
+                {formatMm(Math.abs(readout.dxMm))} × {formatMm(Math.abs(readout.dyMm))}
+              </span>
+            </output>
+            <button
+              type="button"
+              className="wall-canvas__clear"
+              title="Clear the measurement (Esc)"
+              onClick={() => { setTape(null); setSketch(null); }}
+            >
+              Clear
+            </button>
+          </>
+        )}
+      </div>
+      {/*
+        One tag per blocked zone, as real HTML over the canvas.
+
+        Painted text can be read and nothing else. A switch plate is 146 × 86 and
+        that is a number you TYPE — dragging a rectangle until it looks about
+        right is how you end up cutting one hexagon too few. The tag is also the
+        only way the zones reach a screen reader, and the only way their sizes
+        can be copied out.
+
+        Anchored to the zone's top-left corner rather than its middle, so the
+        body of the zone stays free to grab and drag.
+      */}
+      <div className="wall-canvas__zonetags" aria-label="Blocked zones">
+        {(doc.obstacles ?? []).map((o) => {
+          const a = toScreen({ x: o.xMm, y: o.yMm });
+          const b = toScreen({ x: o.xMm + o.widthMm, y: o.yMm + o.heightMm });
+          const left = Math.min(a.x, b.x);
+          const top = Math.min(a.y, b.y);
+          const wide = Math.abs(b.x - a.x);
+          const tall = Math.abs(b.y - a.y);
+          // Too small on screen to hold a tag: it would cover the zone it
+          // describes and land on top of its neighbours.
+          if (wide < 46 || tall < 22) return null;
+          return (
+            <ZoneTag
+              key={o.id}
+              zone={o}
+              left={left}
+              top={top}
+              selected={o.id === zoneSel}
+              onSelect={() => setZoneSel(o.id)}
+              onChange={(next) =>
+                onObstaclesChange((doc.obstacles ?? []).map((z) => (z.id === o.id ? next : z)))}
+            />
+          );
+        })}
+      </div>
+
       <canvas
         ref={canvasRef}
         className="wall-canvas__surface"
@@ -813,12 +1366,19 @@ export function visibleCells(
   doc: LayoutDoc,
   panelIndex: ReadonlyMap<string, string>,
 ): Hex[] {
-  const tl = toWall(0, 0);
-  const br = toWall(size.w, size.h);
+  // Both canvas corners, then min/max — NOT "top-left is the minimum". Wall y
+  // runs up the screen, so `toWall(0, 0)` is the canvas's top edge and therefore
+  // the LARGEST y (D70). Taking it as the minimum culled the whole wall.
+  const a = toWall(0, 0);
+  const b = toWall(size.w, size.h);
+  const minX = Math.min(a.x, b.x);
+  const maxX = Math.max(a.x, b.x);
+  const minY = Math.min(a.y, b.y);
+  const maxY = Math.max(a.y, b.y);
   const pad = PITCH;
   const inView = (c: Hex) => {
     const p = hexToMm(c);
-    return p.x >= tl.x - pad && p.x <= br.x + pad && p.y >= tl.y - pad && p.y <= br.y + pad;
+    return p.x >= minX - pad && p.x <= maxX + pad && p.y >= minY - pad && p.y <= maxY + pad;
   };
 
   const out: Hex[] = [];
@@ -841,14 +1401,14 @@ export function visibleCells(
   // turn because this path only runs on an EMPTY wall, before any panel is
   // solved. With panels the range comes from `panelIndex` above, so the stale
   // arithmetic never showed once anything was on screen.
-  const qMin = Math.max(0, Math.floor(Math.max(tl.x, 0) / ROW_STEP) - 1);
+  const qMin = Math.max(0, Math.floor(Math.max(minX, 0) / ROW_STEP) - 1);
   const qMax = Math.min(
     Math.ceil(doc.wall.widthMm / ROW_STEP),
-    Math.ceil(br.x / ROW_STEP) + 1,
+    Math.ceil(maxX / ROW_STEP) + 1,
   );
   for (let q = qMin; q <= qMax; q++) {
-    const yLo = Math.max(tl.y, 0);
-    const yHi = Math.min(br.y, doc.wall.heightMm);
+    const yLo = Math.max(minY, 0);
+    const yHi = Math.min(maxY, doc.wall.heightMm);
     const rMin = Math.floor(yLo / PITCH - q / 2) - 1;
     const rMax = Math.ceil(yHi / PITCH - q / 2) + 1;
     for (let r = rMin; r <= rMax; r++) {
@@ -877,20 +1437,404 @@ function outlineRegion(
   scale: number,
 ): Path2D {
   const set = new Set(cells.map(hexKey));
-  const R = (PITCH / Math.sqrt(3) - 1.6) / scale;
+  // The inset is in screen pixels, so it converts to an across-flats in wall mm.
+  const acrossFlats = PITCH - 2 * 1.6 * scale;
   const path = new Path2D();
   for (const c of cells) {
-    const centre = toScreen(hexToMm(c));
+    // Corners in WALL space, then mapped. Rebuilt from angles in screen space
+    // they would run the other way round the hexagon, because screen y is
+    // flipped — every outline one edge out, which is exactly the defect
+    // `edgeCorners` was introduced for (D70).
+    const corners = hexCorners(c, acrossFlats);
     for (let i = 0; i < 6; i++) {
       const d = HEX_DIRS[i]!;
       if (set.has(hexKey({ q: c.q + d.q, r: c.r + d.r }))) continue;
-      const a1 = (Math.PI / 180) * (60 * i - 60);
-      const a2 = (Math.PI / 180) * (60 * i);
-      path.moveTo(centre.x + R * Math.cos(a1), centre.y + R * Math.sin(a1));
-      path.lineTo(centre.x + R * Math.cos(a2), centre.y + R * Math.sin(a2));
+      const [c1, c2] = edgeCorners(i);
+      const a = toScreen(corners[c1]!);
+      const b = toScreen(corners[c2]!);
+      path.moveTo(a.x, a.y);
+      path.lineTo(b.x, b.y);
     }
   }
   return path;
+}
+
+/**
+ * A blocked zone's name and size, as controls rather than paint.
+ *
+ * Click either to edit it. The size is two fields and an unambiguous `×`, not
+ * one "146 x 86" string to parse: a measurement someone types under pressure
+ * should not be able to fail on a separator.
+ */
+function ZoneTag(props: {
+  zone: Obstacle;
+  left: number;
+  top: number;
+  selected: boolean;
+  onSelect: () => void;
+  onChange: (next: Obstacle) => void;
+}) {
+  const { zone, left, top, selected, onSelect, onChange } = props;
+  const [editing, setEditing] = useState<'name' | 'size' | null>(null);
+  /**
+   * The name being typed, held back like the numbers are.
+   *
+   * Committed per keystroke it goes through `setObstacles`, which re-cuts every
+   * plate on the wall — for a rename, which cannot change a single cell.
+   */
+  const [nameDraft, setNameDraft] = useState<string | null>(null);
+
+  const commitName = (): void => {
+    if (nameDraft !== null && nameDraft !== zone.label) onChange({ ...zone, label: nameDraft });
+    setNameDraft(null);
+    setEditing(null);
+  };
+
+  return (
+    <div
+      className="zone-tag"
+      data-selected={selected || undefined}
+      style={{ left: `${left}px`, top: `${top}px` }}
+      onPointerDown={(e) => {
+        // The tag is a control, not part of the wall: keep the press away from
+        // the canvas underneath, which would start a marquee or a new zone.
+        e.stopPropagation();
+        onSelect();
+      }}
+    >
+      {editing === 'name' ? (
+        <input
+          className="zone-tag__name zone-tag__input"
+          autoFocus
+          value={nameDraft ?? zone.label}
+          aria-label="Zone name"
+          onChange={(e) => setNameDraft(e.target.value)}
+          onBlur={commitName}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') e.currentTarget.blur();
+            if (e.key === 'Escape') { setNameDraft(null); setEditing(null); }
+          }}
+        />
+      ) : (
+        <button
+          type="button"
+          className="zone-tag__name"
+          title="Rename this zone"
+          onClick={() => setEditing('name')}
+        >
+          {zone.label}
+        </button>
+      )}
+
+      {editing === 'size' ? (
+        <span className="zone-tag__size tabular-nums">
+          {/*
+            `confirm`, not live. Typing `220` over `146` would otherwise re-cut
+            every plate on the wall at `2`, at `22` and at `220`, and leave three
+            undo steps for one measurement. Enter or OK applies it; Escape drops
+            it; leaving the field applies it too, because a typed measurement
+            silently thrown away is worse than one applied a moment early.
+          */}
+          <NumberField
+            className="zone-tag__input"
+            value={zone.widthMm}
+            min={MIN_ZONE_MM}
+            max={MAX_WALL_MM}
+            step={1}
+            commitOn="confirm"
+            onCommit={(v) => onChange({ ...zone, widthMm: v })}
+            aria-label={`${zone.label} width in millimetres`}
+          />
+          <span aria-hidden="true">×</span>
+          <NumberField
+            className="zone-tag__input"
+            value={zone.heightMm}
+            min={MIN_ZONE_MM}
+            max={MAX_WALL_MM}
+            step={1}
+            commitOn="confirm"
+            onCommit={(v) => onChange({ ...zone, heightMm: v })}
+            aria-label={`${zone.label} height in millimetres`}
+          />
+          <button
+            type="button"
+            className="zone-tag__ok"
+            onClick={() => setEditing(null)}
+            aria-label="Apply this size"
+          >
+            OK
+          </button>
+        </span>
+      ) : (
+        <button
+          type="button"
+          className="zone-tag__size tabular-nums"
+          title="Type the exact size of the thing the honeycomb has to miss"
+          onClick={() => setEditing('size')}
+        >
+          {formatMm(zone.widthMm, 0)} × {formatMm(zone.heightMm, 0)} mm
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * What the pointer grabbed on a zone: a resize handle, the body, or nothing.
+ *
+ * Handles are tested first and only on the SELECTED zone, because they stick
+ * out past the rectangle — an unselected zone's handles are not drawn, and
+ * grabbing something invisible is worse than missing it. The tolerance is in
+ * pixels converted to millimetres, so the target stays the same size on screen
+ * however far you are zoomed out.
+ */
+function grabZone(
+  zones: readonly Obstacle[],
+  at: Point,
+  selectedId: string | null,
+  scale: number,
+): { id: string; zone: Obstacle; handle: { hx: number; hy: number } | null } | null {
+  const tolMm = (HANDLE_PX / 2 + 3) * scale;
+  const selected = zones.find((o) => o.id === selectedId);
+  if (selected) {
+    for (const { hx, hy } of ZONE_HANDLES) {
+      const p = handlePoint(selected, hx, hy);
+      if (Math.abs(p.x - at.x) <= tolMm && Math.abs(p.y - at.y) <= tolMm) {
+        return { id: selected.id, zone: selected, handle: { hx, hy } };
+      }
+    }
+  }
+  // Last drawn is on top, so search backwards.
+  for (let i = zones.length - 1; i >= 0; i--) {
+    const o = zones[i]!;
+    if (zoneHit(o, at)) return { id: o.id, zone: o, handle: null };
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Plan-tool drawing. Pure: context, data, a mapper and the palette — no state.
+// ---------------------------------------------------------------------------
+
+interface Palette {
+  zone: string;
+  zoneFill: string;
+  zoneClearance: string;
+  measure: string;
+  measureHalo: string;
+  text: string;
+  frame: string;
+  /** The plate. The border is drawn in it, because the border IS the plate. */
+  panel: string;
+  grid: string;
+}
+
+/**
+ * Text with a halo, so a number stays readable wherever it lands.
+ *
+ * A measurement crosses bare wall, plate and open cell in one run, and any
+ * single colour is unreadable against one of the three. Stroking the background
+ * colour behind the glyphs is what a CAD drawing does and costs one extra pass.
+ */
+function label(
+  ctx: CanvasRenderingContext2D,
+  C: Palette,
+  text: string,
+  x: number,
+  y: number,
+  /**
+   * Canvas size, to keep the label on it.
+   *
+   * A tape between two wall corners puts its rise label past the right-hand
+   * edge, where it lands under the parts list and is simply gone. Nudging it
+   * back in beats dropping it: an approximate position for a number you can
+   * read is worth more than an exact one you cannot.
+   */
+  bounds?: { w: number; h: number },
+): void {
+  ctx.font = '12px ui-monospace, SFMono-Regular, Menlo, monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  if (bounds) {
+    const half = ctx.measureText(text).width / 2 + 6;
+    x = Math.min(Math.max(x, half), bounds.w - half);
+    y = Math.min(Math.max(y, 12), bounds.h - 12);
+  }
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = C.measureHalo;
+  ctx.strokeText(text, x, y);
+  ctx.fillStyle = C.measure;
+  ctx.fillText(text, x, y);
+}
+
+/** The handle squares of the selected zone, in screen pixels. */
+const HANDLE_PX = 7;
+
+function drawZones(
+  ctx: CanvasRenderingContext2D,
+  doc: LayoutDoc,
+  toScreen: (p: Point) => Point,
+  C: Palette,
+  selectedId: string | null,
+  tool: PlanTool,
+): void {
+  for (const o of doc.obstacles ?? []) {
+    const selected = o.id === selectedId;
+    /*
+     * Every rectangle of the shape, not the bounding box.
+     *
+     * An L drawn as its box would show the hollow as blocked when it is not —
+     * the honeycomb is still there and still takes parts. `zoneParts` and
+     * `obstacleRects` are the two readings of one list (drawn, and grown by the
+     * clearance); nothing here re-derives either.
+     */
+    const parts = zoneParts(o);
+    const boxOf = (r: { xMm: number; yMm: number; widthMm: number; heightMm: number }) => {
+      const a = toScreen({ x: r.xMm, y: r.yMm });
+      const b = toScreen({ x: r.xMm + r.widthMm, y: r.yMm + r.heightMm });
+      return {
+        x: Math.min(a.x, b.x), y: Math.min(a.y, b.y),
+        w: Math.abs(b.x - a.x), h: Math.abs(b.y - a.y),
+      };
+    };
+
+    // The clearance ring first, so the solid rectangles sit on top of it.
+    if (o.clearanceMm > 0) {
+      ctx.strokeStyle = C.zoneClearance;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      for (const g of obstacleRects(o)) {
+        const ga = toScreen({ x: g.minX, y: g.minY });
+        const gb = toScreen({ x: g.maxX, y: g.maxY });
+        ctx.strokeRect(
+          Math.min(ga.x, gb.x), Math.min(ga.y, gb.y),
+          Math.abs(gb.x - ga.x), Math.abs(gb.y - ga.y),
+        );
+      }
+      ctx.setLineDash([]);
+    }
+
+    ctx.fillStyle = C.zoneFill;
+    for (const r of parts) { const q = boxOf(r); ctx.fillRect(q.x, q.y, q.w, q.h); }
+    ctx.strokeStyle = C.zone;
+    ctx.lineWidth = selected ? 2.5 : 1.5;
+    for (const r of parts) { const q = boxOf(r); ctx.strokeRect(q.x, q.y, q.w, q.h); }
+
+    // The label and the size are NOT painted here. They are real HTML controls
+    // over the canvas, because a measurement you can only look at is half a
+    // feature — you need to be able to type the switch plate's actual 146 × 86
+    // rather than nudge a rectangle until it looks about right.
+
+    // Handles only on the selected zone, and only when they can be used: eight
+    // squares on every zone would bury the honeycomb the plan exists to show.
+    if (selected && tool !== 'measure') {
+      ctx.fillStyle = C.zone;
+      ctx.strokeStyle = C.measureHalo;
+      ctx.lineWidth = 1;
+      for (const { hx, hy } of ZONE_HANDLES) {
+        const p = toScreen(handlePoint(o, hx, hy));
+        ctx.fillRect(p.x - HANDLE_PX / 2, p.y - HANDLE_PX / 2, HANDLE_PX, HANDLE_PX);
+        ctx.strokeRect(p.x - HANDLE_PX / 2, p.y - HANDLE_PX / 2, HANDLE_PX, HANDLE_PX);
+      }
+    }
+  }
+}
+
+/**
+ * The border, drawn as the SAME PLATE it is part of.
+ *
+ * Filled in the plate's own colour, not a colour of its own, and that is the
+ * whole point. A border is not a thing stuck to the honeycomb — it is more of
+ * the same 8 mm plate, and the plate is one piece of plastic.
+ *
+ * Drawn in its own tone it read as a separate band, and the band's INNER
+ * boundary — the honeycomb's zig-zag, stepping half a pitch between staggered
+ * columns — looked like a jagged edge on the border. There is no such edge. The
+ * only boundary a printed plate has there is where the holes begin, which is
+ * exactly what the reference photograph shows and what this now draws (D68).
+ *
+ * The shapes come from `borderPolygons`, which is the generator's own walk, so
+ * there is exactly one answer to "where is the edge".
+ */
+function drawBorder(
+  ctx: CanvasRenderingContext2D,
+  shapes: readonly (readonly Point[])[],
+  toScreen: (p: Point) => Point,
+  C: Palette,
+): void {
+  if (shapes.length === 0) return;
+  const path = new Path2D();
+  for (const poly of shapes) {
+    for (let i = 0; i < poly.length; i++) {
+      const q = toScreen(poly[i]!);
+      if (i === 0) path.moveTo(q.x, q.y);
+      else path.lineTo(q.x, q.y);
+    }
+    path.closePath();
+  }
+  ctx.fillStyle = C.panel;
+  ctx.fill(path);
+  // A hairline on the outside only, so the plate's edge stays findable against
+  // the wall behind it at low zoom. The stroke follows the same shapes, so it
+  // cannot describe a different edge from the fill.
+  ctx.strokeStyle = C.grid;
+  ctx.lineWidth = 0.75;
+  ctx.globalAlpha = 0.35;
+  ctx.stroke(path);
+  ctx.globalAlpha = 1;
+}
+
+/** A tape measure: the run, its two ticks, and the numbers. */
+function drawTape(
+  ctx: CanvasRenderingContext2D,
+  tape: { from: Snap; to: Snap },
+  toScreen: (p: Point) => Point,
+  C: Palette,
+  bounds: { w: number; h: number },
+): void {
+  const a = toScreen(tape.from);
+  const b = toScreen(tape.to);
+  const m = measure(tape.from, tape.to);
+
+  // The right-angled legs first, dashed and quiet: they answer "how far across
+  // and how far up", which is what you actually mark on a wall with a pencil.
+  ctx.strokeStyle = C.measure;
+  ctx.globalAlpha = 0.35;
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath();
+  ctx.moveTo(a.x, a.y);
+  ctx.lineTo(b.x, a.y);
+  ctx.lineTo(b.x, b.y);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.globalAlpha = 1;
+
+  ctx.lineWidth = 1.75;
+  ctx.beginPath();
+  ctx.moveTo(a.x, a.y);
+  ctx.lineTo(b.x, b.y);
+  ctx.stroke();
+
+  // End ticks perpendicular to the run, so a zero-length tape is still visible.
+  const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+  const nx = (-(b.y - a.y) / len) * 6;
+  const ny = ((b.x - a.x) / len) * 6;
+  ctx.beginPath();
+  ctx.moveTo(a.x - nx, a.y - ny);
+  ctx.lineTo(a.x + nx, a.y + ny);
+  ctx.moveTo(b.x - nx, b.y - ny);
+  ctx.lineTo(b.x + nx, b.y + ny);
+  ctx.stroke();
+
+  label(ctx, C, `${formatMm(m.distanceMm)} mm`, (a.x + b.x) / 2, (a.y + b.y) / 2 - 12, bounds);
+  if (Math.abs(m.dxMm) > 0.5 && Math.abs(m.dyMm) > 0.5) {
+    label(ctx, C, formatMm(Math.abs(m.dxMm)), (a.x + b.x) / 2, a.y + (a.y < b.y ? -12 : 12), bounds);
+    // Beside the vertical leg, on the side the diagonal is NOT — otherwise the
+    // rise sits on top of the run.
+    label(ctx, C, formatMm(Math.abs(m.dyMm)), b.x + (b.x >= a.x ? 26 : -26), (a.y + b.y) / 2, bounds);
+  }
 }
 
 function itemsInRect(doc: LayoutDoc, catalog: Catalog, a: Point, b: Point): string[] {

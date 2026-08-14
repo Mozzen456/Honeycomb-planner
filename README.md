@@ -17,10 +17,11 @@ npm install
 npm run dev
 ```
 
-Then: set your wall size, pick your printer, hit **Solve panels**, and drag accessories on.
+Then: set your wall size, pick your printer, hit **Solve panels**, press **Browse parts…** to pick
+what you want on the wall, and drag it on from the rail.
 
 ```bash
-npm test          # 515 tests over the pure engines
+npm test          # 893 tests over the pure engines
 npm run typecheck
 npm run build
 ```
@@ -28,13 +29,37 @@ npm run build
 Needs Node 18 or newer. `node_modules` is not committed — install it fresh rather than copying it
 between machines, or the CLI shims will not be executable.
 
+## Shopping for parts
+
+The catalogue is a shop, and the rail on the left is what you took from it. **Browse parts…** opens
+the library: every part as a card with a picture, its type, how many cells it takes, and what it
+costs to print, with shelves for accessories, inserts, fasteners, panels and your own uploads.
+**Add to project** puts a part in the rail, ready to drag onto the wall.
+
+The parts you chose are saved with the layout, so they travel down a share link — and anything you
+place on the wall counts as chosen whether you added it first or not.
+
 ## Add your own models
 
-**Drop an STL anywhere on the window** — or use **Import**. The file is measured in the browser and
-you get a review dialog showing what was found: bounding box, volume, how far it stands off the
-wall, its cell footprint, and a print estimate. Set the type, draw the footprint by clicking cells,
-choose the insert it bolts to, and it joins the catalogue under **Imported**. It then behaves like
-any other part — placeable, counted in the parts list, present in every export.
+**Drop an STL or a 3MF anywhere on the window** — or use **Upload a model** in the library. The
+file is measured in the browser and you get a review dialog showing what was found: bounding box,
+volume, how far it stands off the wall, its cell footprint, and a print estimate.
+
+Set the type, draw the footprint by clicking cells, choose the insert it bolts to, and **add a photo
+of the printed part** — the library shows that instead of the render, because a photo tells you what
+the thing is and a render only tells you the shape.
+
+A 3MF is read with its **units and placement applied**: a model drawn in inches is converted to
+millimetres and says so, and the transforms that place its objects are honoured, so the part arrives
+the size and the way round it was exported. If the file holds several placed objects — a whole build
+plate rather than one model — they are merged into a single part and you are told, so you can go back
+and export just the one you meant.
+
+Then you **line it up**: the same alignment tool the shipped parts get, showing your model against a
+patch of real wall. Pick the face that mounts, nudge and turn it until it sits right, and it joins
+your library. That step is not optional — the detector cannot work out which face mounts for about
+half of these models, and a part added without an answer sits wrong on the wall. From then on it
+behaves like any other part: placeable, counted in the parts list, present in every export.
 
 Two things about an imported part are marked wherever they appear, including on the printed sheet:
 
@@ -45,8 +70,10 @@ Two things about an imported part are marked wherever they appear, including on 
   PrusaSlicer results and its measured error per family is in `HSW-SPEC.md` §7. If you need a real
   number, slice the file.
 
-Imports live in your browser (localStorage plus IndexedDB for the mesh), so they survive a reload
-and never touch the generated catalogue. Remove one with the × on its tile.
+Imports live in your browser (localStorage for the details, IndexedDB for the mesh and the photo),
+so they survive a reload and never touch the generated catalogue. Photos are scaled down to 640 px
+before they are stored, because that storage is shared with the meshes the 3D view needs. Delete an
+upload with the × on its library card; the × on a rail tile only takes the part out of this project.
 
 For a permanent, sliced, reproducible entry, put the file in `./models/` and run the scanner
 instead.
@@ -88,8 +115,9 @@ The UI is a thin shell on top.
 | `src/core/persist.ts` | save/load/share, hostile-input tolerant | `tests/persist.test.ts` |
 | `src/core/exporters.ts` | CSV, markdown, print page | `tests/exporters.test.ts` |
 | `src/core/stl.ts` | STL reading, mesh measurement, print estimate | `tests/stl.test.ts` |
+| `src/core/threemf.ts` | 3MF reading — units, transforms, winding | `tests/threemf.test.ts` |
 | `src/core/detect.ts` | footprint detection in the browser | `tests/detect.test.ts` |
-| `src/core/importPart.ts` | an STL becomes a catalogue part | `tests/import.test.ts` |
+| `src/core/importPart.ts` | an STL or 3MF becomes a catalogue part | `tests/import.test.ts` |
 | `src/core/userCatalog.ts` | imported parts, stored and merged | `tests/import.test.ts` |
 | `src/ui/tokens.css` | the design token layer — nothing else defines a colour | see `TOKENS.md` |
 

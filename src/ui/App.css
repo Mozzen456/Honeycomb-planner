@@ -429,3 +429,16 @@
   .app__empty { padding: var(--space-4); }
   .app__empty-steps { font-size: var(--font-size-xs); }
 }
+
+/* "Fit to printer" sits with the printer select, because it changes what that
+   select MEANS: with it on, the bed decides the plate size rather than just
+   filtering the shipped ones. */
+.app__fitprinter {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+  cursor: pointer;
+}

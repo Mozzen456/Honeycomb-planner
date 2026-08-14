@@ -471,6 +471,48 @@ dialog::backdrop {
   display: none !important;
 }
 
+/* The full-screen backdrop every modal sits on, and the ONE place its centring
+   is defined.
+   -----------------------------------------------------------------------------
+   The track is `minmax(0, 1fr)` on BOTH axes, not the implicit `auto` that
+   `place-items: center` alone leaves behind. That is the whole point of this
+   rule, and it has cost this codebase three separate bugs:
+
+     - `AlignPanel` laid its 768 px panel out at `top: 1236` inside a container
+       spanning 0–900, and was rescued by switching to flex without the cause
+       ever being found;
+     - `PartLibrary` opened onto a dimmed page with nothing on it — the dialog
+       was 1554 px below the fold;
+     - `ImportDialog` put its footer 295 px below a 480 px viewport, so on a
+       short window an import could be neither finished nor cancelled.
+
+   All three are one mechanism. A dialog asks for a height as a PERCENTAGE
+   (`block-size: min(56rem, 100%)`, `max-block-size: min(46rem, 100%)`). An auto
+   track sizes to its content, so that percentage resolves against something
+   that depends on the thing being sized — a cycle. The percentage is therefore
+   dropped, the dialog takes its max-content height, the track grows to match,
+   and `align-items: center` faithfully centres a 3971 px box in a 1000 px
+   window. Nothing looks wrong in the CSS; the dialog is simply somewhere else.
+
+   A definite `1fr` track breaks the cycle: the row is the scrim's own content
+   box, every percentage in the dialog resolves against it, and a dialog taller
+   than the window is capped instead of being pushed off it.
+
+   Padding and background stay here too, so a fourth modal cannot arrive with
+   its own idea of either. Anything else — how the scrim reacts to a pointer,
+   what it is called to a screen reader — belongs to the component. */
+.modal-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+  place-items: center;
+  padding: var(--space-4);
+  background: var(--scrim);
+}
+
 /* -----------------------------------------------------------------------------
    12. Reduced motion
    -------------------------------------------------------------------------- */

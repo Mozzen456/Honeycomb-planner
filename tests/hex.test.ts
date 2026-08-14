@@ -52,6 +52,7 @@ import {
   MARGIN_X,
   MARGIN_Y,
   DIAGONAL_NEIGHBOUR,
+  LATTICE_ANCHOR,
 } from '../src/core/constants';
 import type { Hex, Rotation } from '../src/core/types';
 
@@ -195,18 +196,42 @@ describe('constants and the forward map match HSW-SPEC §2/§4', () => {
     expect(2 * MARGIN_X).toBeCloseTo(27.25093, 5);
   });
 
-  it('hexToMm is exactly x = ROW_STEP·q, y = PITCH·(r + q/2)', () => {
+  it('hexToMm is x = ROW_STEP·q, y = PITCH·(r + q/2), anchored into the wall', () => {
     for (let q = -50; q <= 50; q++) {
       for (let r = -50; r <= 50; r++) {
         const p = hexToMm({ q, r });
-        expect(p.x).toBeCloseTo(ROW_STEP * q, 9);
-        expect(p.y).toBeCloseTo(PITCH * r + STAGGER * q, 9);
+        expect(p.x).toBeCloseTo(ROW_STEP * q + LATTICE_ANCHOR.x, 9);
+        expect(p.y).toBeCloseTo(PITCH * r + STAGGER * q + LATTICE_ANCHOR.y, 9);
       }
     }
   });
 
-  it('hexToMm is linear: hexToMm(a+b) === hexToMm(a) + hexToMm(b)', () => {
+  it('is anchored so a plate starts at the wall corner, not half a cell outside it', () => {
+    // The anchor is the whole point: the wall's origin is its CORNER and the
+    // lattice's is a cell CENTRE, and until `LATTICE_ANCHOR` existed nothing
+    // said so — cell (0, 0) sat at (0, 0), so the plate's outline began at
+    // −13.63 mm and the honeycomb hung off the left-hand edge of the wall (D63).
+    const origin = hexToMm({ q: 0, r: 0 });
+    expect(origin.x - MARGIN_X).toBeCloseTo(0, 9);
+
+    // X only, and the asymmetry is load-bearing. A column step cannot absorb
+    // the offset, so it has to come from the anchor...
+    expect(Number.isInteger(MARGIN_X / ROW_STEP)).toBe(false);
+    // ...while in Y the solver already lands the outline on zero by choosing
+    // which row a band starts at, because the stagger puts centres on every
+    // half pitch and MARGIN_Y IS half a pitch. Anchoring Y as well pushes every
+    // band up and the top row off the wall.
+    expect(LATTICE_ANCHOR.y).toBe(0);
+    expect(MARGIN_Y).toBe(PITCH / 2);
+    expect(hexToMm({ q: 1, r: 0 }).y).toBeCloseTo(MARGIN_Y, 9);
+  });
+
+  it('hexToMm is affine: differences add exactly', () => {
+    // Linear in the DIFFERENCES, which is the property everything relies on —
+    // rotations, footprints, seams and the generator all work in offsets. The
+    // anchor is a constant term and is deliberately not part of that.
     const rng = makeRng(0xc0ffee);
+    const zero = hexToMm(ORIGIN);
     let worst = 0;
     for (let i = 0; i < 5000; i++) {
       const a: Hex = { q: Math.floor(rng() * 200) - 100, r: Math.floor(rng() * 200) - 100 };
@@ -214,7 +239,11 @@ describe('constants and the forward map match HSW-SPEC §2/§4', () => {
       const pa = hexToMm(a);
       const pb = hexToMm(b);
       const pab = hexToMm(hexAdd(a, b));
-      worst = Math.max(worst, Math.abs(pab.x - (pa.x + pb.x)), Math.abs(pab.y - (pa.y + pb.y)));
+      worst = Math.max(
+        worst,
+        Math.abs(pab.x - zero.x - (pa.x - zero.x) - (pb.x - zero.x)),
+        Math.abs(pab.y - zero.y - (pa.y - zero.y) - (pb.y - zero.y)),
+      );
     }
     expect(worst).toBeLessThan(EPS);
   });
@@ -761,10 +790,13 @@ describe('neighbours', () => {
 
   it('the directions are ordered by increasing screen angle, as documented', () => {
     let previous = -Infinity;
+    const centre = hexToMm(ORIGIN);
     for (const d of HEX_DIRECTIONS) {
       const p = hexToMm(d);
+      // Measured from the cell we are stepping AWAY from, not from the mm
+      // origin — the lattice is anchored into the wall, so those differ.
       // Screen y is down, so this sweeps clockwise from due east.
-      const angle = Math.atan2(p.y, p.x);
+      const angle = Math.atan2(p.y - centre.y, p.x - centre.x);
       const norm = angle < -1e-12 ? angle + 2 * Math.PI : angle;
       expect(norm).toBeGreaterThan(previous);
       previous = norm;

@@ -14,19 +14,27 @@ import overridesJson from '../catalog/overrides.json';
 import { BEDS } from '../core/constants';
 import { computeBom } from '../core/bom';
 import { toCsv, toMarkdownChecklist, toPrintableHtml, downloadName } from '../core/exporters';
+import { buildHoneycombMesh, toBinaryStl } from '../core/honeycomb';
 import { proposePart, type ImportedPart, type ImportProposal } from '../core/importPart';
+import { isModelFile, MODEL_ACCEPT } from '../core/modelFile';
 import { applyOverrides, mountingOf, type MountingOverride } from '../core/overrides';
+import { panelModelFileName, panelModelSpecFor } from '../core/panelModel';
 import { decodeShareUrl, encodeShareUrl, deserialize, serialize } from '../core/persist';
-import { emptyDoc, Store, type EditorState, type DropResult } from '../core/store';
-import { solveTiling, type PanelSize } from '../core/tiling';
-import type { Catalog, Hex, InsertRequirement, Rotation } from '../core/types';
+import { resolveProjectParts } from '../core/projectParts';
 import {
-  deleteModelBytes, loadUserParts, mergeCatalog, putModelBytes, saveUserParts,
+  emptyDoc, MAX_WALL_MM, MIN_WALL_MM, Store, type EditorState, type DropResult,
+} from '../core/store';
+import { generatedPlateSizes, solveTiling, type PanelSize } from '../core/tiling';
+import type { Catalog, Hex, InsertRequirement, PlacedPanel, Rotation } from '../core/types';
+import {
+  deleteModelBytes, loadUserParts, mergeCatalog, putModelBytes, saveUserParts, sweepOrphans,
 } from '../core/userCatalog';
 import { BomPanel } from './BomPanel';
 import { CatalogPanel } from './CatalogPanel';
 import { ObstaclePanel } from './ObstaclePanel';
 import { ImportDialog } from './ImportDialog';
+import { PartLibrary } from './PartLibrary';
+import { forgetPhotoUrl, removePhoto, savePhoto } from './partPhotos';
 import {
   clearMounting, loadUserOverrides, mergeOverrideFiles, setFootprint, setMounting,
   setRequires, toOverrideFile, toSetupFile,
@@ -36,6 +44,7 @@ import { AlignPanel } from './AlignPanel';
 import { PartInspector } from './PartInspector';
 import { forgetPartMesh } from './meshLibrary';
 import { forgetThumbnail } from './partThumbnails';
+import { NumberField } from './NumberField';
 import { WallCanvas, ghostCells, type DragPayload } from './WallCanvas';
 import { WallView3D } from './WallView3D';
 import './App.css';
@@ -48,6 +57,7 @@ const shippedCatalog = catalogJson as unknown as Catalog;
 
 type Theme = 'system' | 'light' | 'dark';
 
+
 export function App() {
   /**
    * The catalogue is the generated one plus whatever the user imported.
@@ -55,7 +65,8 @@ export function App() {
    * in a WeakMap keyed on the Catalog object — a fresh merge per render would
    * rebuild that index per render.
    */
-  const [userParts, setUserParts] = useState<ImportedPart[]>(() => loadUserParts().parts);
+  const initialParts = useRef(loadUserParts());
+  const [userParts, setUserParts] = useState<ImportedPart[]>(() => initialParts.current.parts);
   /**
    * Corrections made in this browser, layered over the ones that ship. Both are
    * applied through the same `applyOverrides`, so a correction behaves
@@ -64,17 +75,45 @@ export function App() {
   const [userOverrides, setUserOverrides] = useState<UserOverrides>(() => loadUserOverrides());
   const [inspecting, setInspecting] = useState<string | null>(null);
   const [aligning, setAligning] = useState(false);
+  /** The library — the shop you pick parts out of before planning (D71). */
+  const [browsing, setBrowsing] = useState(false);
+  /**
+   * An import that has been described and is waiting to be lined up.
+   *
+   * Alignment is the second half of an import, not an afterthought: a part
+   * whose mounting face nobody chose sits wrong on the wall, and this is the
+   * one moment somebody is certainly looking at it. The part is NOT in the
+   * catalogue yet — its bytes are in IndexedDB (the inspector needs them to
+   * draw the mesh) and nothing else has happened, so cancelling here leaves
+   * only those bytes to sweep up.
+   */
+  const [pendingImport, setPendingImport] = useState<
+    { part: ImportedPart; photo: Blob | null } | null
+  >(null);
 
-  const baseCatalog = useMemo(
-    () => applyOverrides(shippedCatalog, mergeOverrideFiles(overridesJson, userOverrides)),
+  /**
+   * Corrections are applied AFTER the merge, not before.
+   *
+   * They used to be applied to the shipped catalogue and the imports bolted on
+   * afterwards, which meant an override keyed on a `user/…` id was written,
+   * exported and never applied — the part you had just lined up went on the
+   * wall the way the detector guessed. Same class as D50: two owners of one
+   * fact, and the one that reached the screen was the stale one. Now every part
+   * goes through the same pipe, and the import flow can rely on it (D71).
+   */
+  const overrideFile = useMemo(
+    () => mergeOverrideFiles(overridesJson, userOverrides),
     [userOverrides],
   );
   /** How many parts the pushable setup covers — shipped decisions and local ones. */
   const setupParts = useMemo(
-    () => Object.keys(mergeOverrideFiles(overridesJson, userOverrides).parts ?? {}).length,
-    [userOverrides],
+    () => Object.keys(overrideFile.parts ?? {}).length,
+    [overrideFile],
   );
-  const catalog = useMemo(() => mergeCatalog(baseCatalog, userParts), [baseCatalog, userParts]);
+  const catalog = useMemo(
+    () => applyOverrides(mergeCatalog(shippedCatalog, userParts), overrideFile),
+    [userParts, overrideFile],
+  );
 
   const storeRef = useRef<Store | null>(null);
   if (storeRef.current === null) {
@@ -98,8 +137,48 @@ export function App() {
    * available because it is faster to aim precisely in.
    */
   const [view, setView] = useState<'3d' | '2d'>('3d');
+  /**
+   * Size plates to the chosen printer, instead of using the seven shipped ones.
+   *
+   * Not on the document: it changes what the NEXT solve produces, and a saved
+   * layout already records what it produced. Storing it would let a reload
+   * silently re-plan someone's wall.
+   */
+  const [sizeToPrinter, setSizeToPrinter] = useState(false);
 
   useEffect(() => store.subscribe(setState), [store]);
+
+  /**
+   * Sweep up after imports that were abandoned by closing the tab.
+   *
+   * The bytes go into IndexedDB before the alignment step so the inspector can
+   * draw the real mesh, and `cancelImport` clears them on Cancel — but a closed
+   * tab cannot run a handler, so a few megabytes are stranded, in the same
+   * quota the 3D view's meshes come out of. Once, at startup, when no import
+   * can be in flight; running it mid-session would race a pending part, whose
+   * bytes are down and whose catalogue entry deliberately does not exist yet.
+   *
+   * Deliberately silent unless it finds something: "cleaned up 0 files" is not
+   * news, and a message about storage nobody asked about is alarming.
+   *
+   * **Skipped entirely unless the part list was READ successfully.** "No
+   * imports" and "could not look" are the same empty array, and acting on the
+   * second one would delete every model and photo a person had uploaded
+   * because Safari refused localStorage once. A destructive sweep needs to know
+   * what is alive, not merely fail to see it.
+   */
+  const swept = useRef(false);
+  useEffect(() => {
+    if (swept.current) return;
+    swept.current = true;
+    if (!initialParts.current.readable) return;
+    void sweepOrphans(catalog.parts).then((n) => {
+      if (n > 0) say(`Cleared ${n} leftover file${n === 1 ? '' : 's'} from an abandoned import`, 'ok');
+    });
+    // Startup only. `catalog` is complete on the first render — imported parts
+    // load synchronously from localStorage — so there is nothing to wait for.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -382,7 +461,7 @@ export function App() {
   // --- commands -----------------------------------------------------------
 
   const autoTile = useCallback(() => {
-    const available: PanelSize[] = catalog.parts
+    const shipped: PanelSize[] = catalog.parts
       .filter((p) => p.type === 'panel' && p.panel)
       .map((p) => ({
         partId: p.id,
@@ -391,6 +470,26 @@ export function App() {
         widthMm: p.panel!.widthMm,
         heightMm: p.panel!.heightMm,
       }));
+    /*
+     * Plates sized to the printer, or the seven that ship.
+     *
+     * Off by default, and that is deliberate: the shipped files are known-good
+     * and someone who has already printed a stack of them should not have their
+     * wall re-planned around plates nobody has tested. Switched on, the biggest
+     * plate the chosen bed can hold is used instead — a 350 mm printer gets
+     * 16 × 14, a Prusa Mini gets 8 × 7 — so choosing a bigger printer really
+     * does give bigger parts and fewer seams.
+     *
+     * The border is included in the fit, because a bordered plate is wider than
+     * its cells by the thickness on each side and would otherwise be planned to
+     * exactly the bed and then not fit it.
+     */
+    const border = state.doc.frame
+      ? Math.max(0, state.doc.frame.thicknessMm)
+      : 0;
+    const available: PanelSize[] = sizeToPrinter
+      ? generatedPlateSizes(state.doc.bedId, border)
+      : shipped;
     const res = solveTiling({
       wall: state.doc.wall,
       bedId: state.doc.bedId,
@@ -424,7 +523,7 @@ export function App() {
       `${res.panels.length} panels · ${res.cellCount} cells · ${(res.coverage * 100).toFixed(1)}% covered`,
       'ok',
     );
-  }, [state.doc.wall, state.doc.bedId, store, say]);
+  }, [catalog, state.doc.wall, state.doc.bedId, state.doc.frame, sizeToPrinter, store, say]);
 
   const onExport = useCallback(
     (format: 'csv' | 'markdown' | 'print' | 'json') => {
@@ -486,7 +585,7 @@ export function App() {
     [store, say],
   );
 
-  // --- STL import ---------------------------------------------------------
+  // --- model import (STL and 3MF) -------------------------------------------
 
   /**
    * Measure a dropped model and open the review dialog.
@@ -496,22 +595,42 @@ export function App() {
    * on the main thread deliberately: a worker would have to ship the catalogue
    * across for the classification step, and this is fast enough that the
    * complexity buys nothing.
+   *
+   * `await` rather than a plain call, because a 3MF is a ZIP and inflating it
+   * goes through `DecompressionStream`. The `finally` is what keeps the busy
+   * state honest across that — a rejected promise must clear it too, or a bad
+   * file leaves "Measuring…" on screen for ever.
    */
-  const importStl = useCallback(
+  const importModel = useCallback(
     (file: File) => {
       setBusy(`Measuring ${file.name}…`);
       const reader = new FileReader();
       reader.onload = () => {
-        try {
-          const buffer = reader.result as ArrayBuffer;
-          const proposal = proposePart(file.name, buffer, store.catalog);
-          stlBytes.current.set(proposal.part.id, buffer);
-          setImporting(proposal);
-        } catch (err) {
-          say(`Could not read ${file.name}: ${(err as Error).message}`, 'error');
-        } finally {
-          setBusy(null);
-        }
+        const buffer = reader.result as ArrayBuffer;
+        void proposePart(file.name, buffer, store.catalog)
+          .then(async (proposal) => {
+            modelBytes.current.set(proposal.part.id, buffer);
+            /*
+             * The bytes go to IndexedDB now, before the FIRST step opens.
+             *
+             * They used to be written between step 1 and step 2, when the
+             * alignment stage needed the mesh. Step 1 needs it too now: with no
+             * photograph chosen, the photo slot shows the part rendered from its
+             * own model, and `meshLibrary` reads an imported part's bytes from
+             * exactly here. Nothing else about the part is written, so
+             * `cancelImport` still has one thing to undo — and it already swept
+             * these at either step.
+             */
+            const stored = await putModelBytes(proposal.part.id, buffer);
+            if (!stored) {
+              say('This browser would not store the model, so the 3D views will draw a box', 'warn');
+            }
+            setImporting(proposal);
+          })
+          .catch((err: unknown) => {
+            say(`Could not read ${file.name}: ${(err as Error).message}`, 'error');
+          })
+          .finally(() => setBusy(null));
       };
       reader.onerror = () => {
         setBusy(null);
@@ -522,32 +641,94 @@ export function App() {
     [store, say],
   );
 
-  /** Bytes of the file being reviewed, held until the part is actually added. */
-  const stlBytes = useRef(new Map<string, ArrayBuffer>());
+  /**
+   * Bytes of the file being reviewed, held until the part is actually added.
+   *
+   * The ORIGINAL bytes, in whatever format they arrived: a 3MF is stored as a
+   * 3MF and read back as one by `meshLibrary`. Converting on the way in would
+   * mean the file in storage is not the file the person chose.
+   */
+  const modelBytes = useRef(new Map<string, ArrayBuffer>());
 
-  const addImportedPart = useCallback(
-    (part: ImportedPart) => {
+  /**
+   * Step 1 finished: hand the described part to the alignment step.
+   *
+   * The bytes go into IndexedDB HERE rather than at the end, because the
+   * inspector draws the part from its own model and `meshLibrary` fetches an
+   * imported part's bytes from exactly that store. Nothing else is written —
+   * the part is not in `userParts`, not in the catalogue and not in the
+   * project — so `cancelImport` has one thing to undo.
+   */
+  const beginAlignImport = useCallback((part: ImportedPart, photo: Blob | null) => {
+    // The bytes are already in IndexedDB — `importModel` put them there so the
+    // first step could render the part. Nothing left to do but change step.
+    setImporting(null);
+    setPendingImport({ part, photo });
+  }, []);
+
+  /** Abandon an import at either step. Nothing survives it but a log line. */
+  const cancelImport = useCallback((partId: string) => {
+    modelBytes.current.delete(partId);
+    void deleteModelBytes(partId);
+    forgetPartMesh(partId);
+    forgetThumbnail(partId);
+    setPendingImport(null);
+    setImporting(null);
+  }, []);
+
+  /**
+   * Step 2 finished: the part joins the library, with its alignment and photo,
+   * and goes straight into the project.
+   *
+   * Straight into the project because it was just uploaded for this wall —
+   * making someone find their own upload in the library to add it is the one
+   * step in the shopping metaphor that would only ever be friction.
+   *
+   * The alignment is written as an OVERRIDE, the same record the inspector
+   * writes for a shipped part, rather than baked into the stored part: one
+   * mechanism, one export, and `Setup (n)` carries an imported part's mounting
+   * to the repo exactly like everything else.
+   */
+  const finishImport = useCallback(
+    (
+      part: ImportedPart,
+      photo: Blob | null,
+      mounting: MountingOverride,
+      footprint: readonly Hex[],
+      sockets: readonly Hex[],
+      requires: readonly InsertRequirement[],
+    ) => {
       setUserParts((prev) => {
         const next = [...prev.filter((p) => p.id !== part.id), part];
         const problem = saveUserParts(next);
         if (problem !== null) say(problem, 'warn');
         return next;
       });
-      const bytes = stlBytes.current.get(part.id);
-      if (bytes) {
-        // The mesh is what the 3D view draws. Losing it costs the mesh and
-        // nothing else, so a browser that refuses IndexedDB still gets a part.
-        void putModelBytes(part.id, bytes).then((stored) => {
-          if (!stored) say('Added, but this browser would not store the model for the 3D view', 'warn');
+      setUserOverrides((prev) => {
+        const withFace = setMounting(prev, part.id, mounting, 'lined up when it was uploaded');
+        const withCells = setFootprint(
+          withFace, part.id, footprint, sockets, 'lined up when it was uploaded',
+        );
+        return setRequires(withCells, part.id, requires);
+      });
+      if (photo !== null) {
+        void savePhoto(part.id, photo).then((stored) => {
+          if (!stored) say('Added, but this browser would not store the photo', 'warn');
         });
-        stlBytes.current.delete(part.id);
       }
-      setImporting(null);
-      say(`Added ${part.name} — it is in the catalogue under Imported`, 'ok');
+      modelBytes.current.delete(part.id);
+      // Both caches are keyed on part id and an id can be reused by a later
+      // import, so neither may carry a previous model's shape into this one.
+      forgetPartMesh(part.id);
+      forgetThumbnail(part.id);
+      store.addToProject([part.id]);
+      setPendingImport(null);
+      say(`${part.name} is in your library and in this project — drag it onto the wall`, 'ok');
     },
-    [say],
+    [store, say],
   );
 
+  /** Delete an upload from the library for good — model, photo and all. */
   const removeImportedPart = useCallback(
     (partId: string) => {
       const placed = store.getState().doc.items.filter((i) => i.partId === partId).length;
@@ -562,12 +743,35 @@ export function App() {
         return next;
       });
       void deleteModelBytes(partId);
-      // Both caches are keyed on part id, and an imported id can be reused by a
-      // later import of a different model. Leaving either behind would show the
-      // removed part's shape under the new one's name.
+      void removePhoto(partId);
+      // Every cache is keyed on part id, and an imported id can be reused by a
+      // later import of a different model. Leaving any behind would show the
+      // removed part's picture under the new one's name.
       forgetPartMesh(partId);
       forgetThumbnail(partId);
-      say('Removed from the catalogue', 'ok');
+      forgetPhotoUrl(partId);
+      // It cannot stay in the project when it no longer exists.
+      store.removeFromProject(partId);
+      say('Deleted from your library', 'ok');
+    },
+    [store, say],
+  );
+
+  // --- the project's parts --------------------------------------------------
+
+  const addToProject = useCallback(
+    (partId: string) => {
+      store.addToProject([partId]);
+      const part = catalog.parts.find((p) => p.id === partId);
+      say(`${part?.name ?? partId} added — it is in the rail, ready to drag on`, 'ok');
+    },
+    [store, catalog, say],
+  );
+
+  const removeFromProject = useCallback(
+    (partId: string) => {
+      const result = store.removeFromProject(partId);
+      if (!result.ok) say(result.reason ?? 'That part is in use', 'error');
     },
     [store, say],
   );
@@ -575,11 +779,11 @@ export function App() {
   /** One entry point for both kinds of file, so a drop never has to be aimed. */
   const importFile = useCallback(
     (file: File) => {
-      if (/\.stl$/i.test(file.name)) importStl(file);
+      if (isModelFile(file.name)) importModel(file);
       else if (/\.json$/i.test(file.name)) importJson(file);
-      else say(`${file.name} is neither an STL model nor a saved layout`, 'error');
+      else say(`${file.name} is not a model (.stl or .3mf) or a saved layout`, 'error');
     },
-    [importStl, importJson, say],
+    [importModel, importJson, say],
   );
 
   // Drop anywhere on the window. The wall itself is a drag target for placing
@@ -606,6 +810,38 @@ export function App() {
     };
   }, [importFile]);
 
+  /**
+   * Generate a plate and hand it to the browser as an STL.
+   *
+   * Built here rather than in the panel that shows the button, for the same
+   * reason the exports are: a component that renders a list should not also own
+   * a Blob and an object URL. `panelModelSpecFor` is the single place that knows
+   * which cells a plate really has — the planner's view of a framed edge and the
+   * printer's are deliberately different (D56).
+   */
+  const downloadPlate = useCallback(
+    (panel: PlacedPanel, label: string) => {
+      try {
+        const spec = panelModelSpecFor(panel, state.doc);
+        const mesh = buildHoneycombMesh({
+          cells: spec.cells, clipped: spec.clipped, border: spec.border,
+        });
+        const stl = toBinaryStl(mesh, `${state.doc.name} — ${label}`);
+        const name = panelModelFileName(`${state.doc.name} ${label}`, spec.cells.length);
+        const url = URL.createObjectURL(new Blob([stl], { type: 'model/stl' }));
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = name;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        say(`${name} — ${mesh.triangleCount.toLocaleString()} triangles`, 'ok');
+      } catch (e) {
+        say(e instanceof Error ? e.message : 'That plate could not be generated', 'error');
+      }
+    },
+    [state.doc, say],
+  );
+
   // --- render -------------------------------------------------------------
 
   const selectedPartIds = useMemo(() => {
@@ -613,6 +849,18 @@ export function App() {
     for (const it of state.doc.items) if (state.selection.includes(it.id)) ids.add(it.partId);
     return ids;
   }, [state.doc.items, state.selection]);
+
+  /**
+   * What the rail shows: the parts shopped for this wall, resolved once.
+   *
+   * One resolver for the rail and the library, so they cannot come to different
+   * views about what the project contains — the recurring failure in this
+   * codebase is two readers of one fact (D50, D52, D57, D66).
+   */
+  const project = useMemo(
+    () => resolveProjectParts(state.doc, catalog),
+    [state.doc, catalog],
+  );
 
   return (
     <div className="app">
@@ -630,24 +878,24 @@ export function App() {
         <div className="app__wall-controls">
           <label>
             Wall
-            <input
-              type="number"
+            <NumberField
               value={state.doc.wall.widthMm}
-              min={50}
+              min={MIN_WALL_MM}
+              max={MAX_WALL_MM}
               step={10}
-              onChange={(e) => store.setWall(Number(e.target.value), state.doc.wall.heightMm)}
+              onCommit={(v) => store.setWall(v, state.doc.wall.heightMm)}
               aria-label="Wall width in millimetres"
             />
           </label>
           <span aria-hidden="true">×</span>
           <label>
             <span className="visually-hidden">Height</span>
-            <input
-              type="number"
+            <NumberField
               value={state.doc.wall.heightMm}
-              min={50}
+              min={MIN_WALL_MM}
+              max={MAX_WALL_MM}
               step={10}
-              onChange={(e) => store.setWall(state.doc.wall.widthMm, Number(e.target.value))}
+              onCommit={(v) => store.setWall(state.doc.wall.widthMm, v)}
               aria-label="Wall height in millimetres"
             />
           </label>
@@ -664,6 +912,15 @@ export function App() {
                 <option key={b.id} value={b.id}>{b.label}</option>
               ))}
             </select>
+          </label>
+
+          <label className="app__fitprinter" title="Generate plates as large as this printer can hold, instead of using the seven shipped ones">
+            <input
+              type="checkbox"
+              checked={sizeToPrinter}
+              onChange={(e) => setSizeToPrinter(e.target.checked)}
+            />
+            Fit to printer
           </label>
 
           <button type="button" className="app__primary" onClick={autoTile}>
@@ -718,11 +975,11 @@ export function App() {
               Mine ({Object.keys(userOverrides.parts).length})
             </button>
           )}
-          <label className="app__import" title="Add an STL model, or open a saved layout">
+          <label className="app__import" title="Add a model (.stl or .3mf), or open a saved layout">
             Import
             <input
               type="file"
-              accept=".stl,model/stl,application/json,.json"
+              accept={`${MODEL_ACCEPT},application/json,.json`}
               multiple
               onChange={(e) => {
                 for (const f of e.target.files ?? []) importFile(f);
@@ -745,13 +1002,16 @@ export function App() {
       <div className="app__body">
         <aside className="app__rail">
           <CatalogPanel
-            catalog={catalog}
+            parts={project.parts}
+            missing={project.missing}
+            catalogSize={catalog.parts.length}
+            onBrowse={() => setBrowsing(true)}
             filter={filter}
             onFilterChange={setFilter}
             selectedPartId={[...selectedPartIds][0]}
             onDragStart={(partId) => beginPartDrag(partId)}
             onActivate={placePartFromKeyboard}
-            onRemovePart={removeImportedPart}
+            onRemovePart={removeFromProject}
             onInspect={setInspecting}
           />
         </aside>
@@ -787,6 +1047,8 @@ export function App() {
               onDrop={onDrop}
               onDragCancel={cancelDrag}
               onStartItemDrag={beginItemDrag}
+              onObstaclesChange={(obstacles) => store.setObstacles(obstacles)}
+              onFrameChange={(frame) => store.setFrame(frame)}
               onSelect={(ids, additive) => {
                 const expanded = store.expandSelection(ids);
                 store.select(additive ? [...state.selection, ...expanded] : expanded);
@@ -809,11 +1071,14 @@ export function App() {
                   Press <strong>Solve panels</strong> and the planner works out which panels
                   to print and how they tile.
                 </li>
-                <li>Drag hooks, shelves and bins from the catalogue onto the cells.</li>
+                <li>
+                  Press <strong>Browse parts</strong> on the left, add the hooks, shelves and
+                  bins you want, then drag them from the rail onto the cells.
+                </li>
               </ol>
               <p className="app__empty-note">
-                Got your own model? Drop an STL anywhere on this window and it is measured,
-                classified and added to the catalogue.
+                Got your own model? Drop an STL or 3MF anywhere on this window. You give it a photo,
+                line it up against the wall, and it joins your library.
               </p>
             </div>
           )}
@@ -844,6 +1109,8 @@ export function App() {
               <ObstaclePanel
                 doc={state.doc}
                 onChange={(obstacles) => store.setObstacles(obstacles)}
+                onFrameChange={(frame) => store.setFrame(frame)}
+                onDownload={downloadPlate}
                 onCopy={(text, what) => {
                   void navigator.clipboard?.writeText(text);
                   say(`${what} settings copied — paste them into the customiser`, 'ok');
@@ -889,15 +1156,46 @@ export function App() {
         );
       })()}
 
+      {browsing && (
+        <PartLibrary
+          catalog={catalog}
+          doc={state.doc}
+          onAdd={addToProject}
+          onRemove={removeFromProject}
+          onInspect={(partId) => { setBrowsing(false); setInspecting(partId); }}
+          onDelete={removeImportedPart}
+          onUpload={(files) => { for (const f of files) importFile(f); }}
+          onClose={() => setBrowsing(false)}
+        />
+      )}
+
       {importing !== null && (
         <ImportDialog
           proposal={importing}
           catalog={catalog}
-          onCancel={() => {
-            stlBytes.current.delete(importing.part.id);
-            setImporting(null);
-          }}
-          onConfirm={addImportedPart}
+          onCancel={() => cancelImport(importing.part.id)}
+          onConfirm={beginAlignImport}
+        />
+      )}
+
+      {/*
+        The second half of an import: the same alignment tool a shipped part
+        gets, on a part that is not in the catalogue yet.
+
+        It is handed a catalogue with the pending part merged in — the inspector
+        looks its subject up there, and `meshLibrary` reads an imported part's
+        bytes from IndexedDB, which is why they were written before this opened.
+      */}
+      {pendingImport !== null && (
+        <PartInspector
+          key={pendingImport.part.id}
+          part={pendingImport.part}
+          catalog={mergeCatalog(catalog, [pendingImport.part])}
+          intent="import"
+          onSave={(m, footprint, sockets, requires) =>
+            finishImport(pendingImport.part, pendingImport.photo, m, footprint, sockets, requires)}
+          onClear={() => cancelImport(pendingImport.part.id)}
+          onClose={() => cancelImport(pendingImport.part.id)}
         />
       )}
     </div>

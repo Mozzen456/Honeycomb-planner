@@ -1,24 +1,48 @@
 /**
- * The catalogue rail — the left-hand shelf you drag parts off.
+ * The rail — the parts THIS wall is built from, and the shelf you drag them off.
  *
- * Pure presentation. It reads a `Catalog`, groups it, filters it and hands every
- * gesture back to the parent through `onDragStart`. It knows nothing about the
- * wall, the document or how a drag ends.
+ * It used to be the whole catalogue: fifty-one shipped parts plus every import,
+ * scrolled past to find the six a wall actually uses. Browsing and building are
+ * two different jobs, so they are now two places (D71) — `PartLibrary` is the
+ * shop, and this is what came home from it. Which means the rail answers a
+ * question it never could before: what is this wall made of?
+ *
+ * Pure presentation. It is handed the parts already resolved, groups them,
+ * filters them and hands every gesture back to the parent through `onDragStart`.
+ * It knows nothing about the wall, the document, or how a drag ends — and
+ * deliberately does not know how a part came to be in the project either, which
+ * is `projectParts.ts`'s single answer for everyone.
  *
  * The only state it owns is which groups are folded shut, which is a property of
  * this view and of nothing else.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import { isImported } from '../core/userCatalog';
-import { thumbnailFor } from './partThumbnails';
-import type { Catalog, CatalogPart, PartType } from '../core/types';
+import { PartImage } from './PartImage';
+import type { CatalogPart, PartType } from '../core/types';
 
 import './CatalogPanel.css';
 
 export interface CatalogPanelProps {
-  catalog: Catalog;
+  /**
+   * The project's parts, already resolved against the catalogue and in the
+   * order they were chosen. Resolving happens once, in `resolveProjectParts`,
+   * so the rail and the library cannot come to different views about what the
+   * project contains.
+   */
+  parts: readonly CatalogPart[];
+  /**
+   * Ids in the document that this catalogue has no part for — a shared layout
+   * naming somebody else's import. Reported rather than dropped: a rail that is
+   * quietly shorter than the file it loaded is indistinguishable from a bug.
+   */
+  missing?: readonly string[];
+  /** How many parts there are to choose from, for the browse button. */
+  catalogSize: number;
+  /** Open the library. The rail's primary action when the project is empty. */
+  onBrowse: () => void;
   /**
    * Fired for an HTML5 `dragstart`, for a `pointerdown`, and for keyboard
    * activation of a tile. A mouse produces both a pointerdown and a dragstart —
@@ -33,7 +57,11 @@ export interface CatalogPanelProps {
   selectedPartId?: string;
   filter?: string;
   onFilterChange?: (value: string) => void;
-  /** Offered on imported parts only — a generated part is the scanner's to remove. */
+  /**
+   * Take a part back out of the project. Offered on every part, not just
+   * imports: this removes it from the RAIL, not from the catalogue — deleting
+   * an upload for good is the library's job, where the consequence is visible.
+   */
   onRemovePart?: (partId: string) => void;
   /**
    * Open the mounting-face inspector for a part. Offered on EVERY part, not
@@ -59,10 +87,6 @@ const GROUPS: readonly { type: PartType; label: string; note: string }[] = [
   { type: 'fastener', label: 'Fasteners', note: 'Printed screws and clips' },
   { type: 'unknown', label: 'Unclassified', note: 'The scanner could not place these' },
 ];
-
-/** Imported parts get their own group, above the generated ones: they are the
- *  ones the user just added and is looking for. */
-const IMPORTED_GROUP = { label: 'Imported', note: 'STLs you added yourself' } as const;
 
 // ---------------------------------------------------------------------------
 // Formatting — display only
@@ -122,56 +146,6 @@ function activateFromKeyboard(
 }
 
 // ---------------------------------------------------------------------------
-// Preview
-// ---------------------------------------------------------------------------
-
-/**
- * A rendered preview of the part, drawn only once the tile is near the screen.
- *
- * Lazy on purpose. Fifty-one previews means fifty-one STL fetches and parses,
- * and the rail shows about six at a time — doing them all on mount would stall
- * the first paint of the catalogue to draw pictures nobody has scrolled to. The
- * observer's margin starts the work a screenful early so the image is usually
- * there before the tile is.
- *
- * A part with no preview keeps the plain tile: `models/` may be absent entirely
- * (the app builds with `base: './'` and can be opened from a file:// URL), and
- * a planner that cannot fetch a model still plans.
- */
-function PartPreview({ part }: { part: CatalogPart }): JSX.Element {
-  const ref = useRef<HTMLSpanElement | null>(null);
-  const [url, setUrl] = useState<string | null>(null);
-  const [near, setNear] = useState(false);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (el === null) return;
-    if (typeof IntersectionObserver !== 'function') { setNear(true); return; }
-    const io = new IntersectionObserver((entries) => {
-      if (entries.some((e) => e.isIntersecting)) {
-        setNear(true);
-        io.disconnect();
-      }
-    }, { rootMargin: '400px' });
-    io.observe(el);
-    return () => io.disconnect();
-  }, []);
-
-  useEffect(() => {
-    if (!near) return;
-    let live = true;
-    void thumbnailFor(part).then((u) => { if (live) setUrl(u); });
-    return () => { live = false; };
-  }, [near, part]);
-
-  return (
-    <span className="catalog-tile__preview" ref={ref} aria-hidden="true">
-      {url === null ? null : <img src={url} alt="" draggable={false} />}
-    </span>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Tile
 // ---------------------------------------------------------------------------
 
@@ -219,8 +193,11 @@ function CatalogTile(
         onPointerDown={(event) => onDragStart(part.id, event)}
         onKeyDown={(event) => activateFromKeyboard(event, part.id, onActivate)}
       >
-        <PartPreview part={part} />
-        <span className="catalog-tile__name">{name}</span>
+        <PartImage part={part} className="catalog-tile__preview" />
+        <span className="catalog-tile__name">
+          {name}
+          {imported ? <span className="catalog-tile__mine" title="You uploaded this">•</span> : null}
+        </span>
         <span className="catalog-tile__cells tabular-nums">
           {cells}
           <span className="visually-hidden"> cells</span>
@@ -250,12 +227,12 @@ function CatalogTile(
           ⌖
         </button>
       ) : null}
-      {imported && onRemove !== undefined ? (
+      {onRemove !== undefined ? (
         <button
           type="button"
           className="catalog-tile__remove hit-area"
-          aria-label={`Remove ${name} from the catalogue`}
-          title="Remove this imported part"
+          aria-label={`Take ${name} out of this project`}
+          title="Take this part out of the project — it stays in the library"
           onClick={() => onRemove(part.id)}
         >
           ×
@@ -271,16 +248,14 @@ function CatalogTile(
 
 export function CatalogPanel(props: CatalogPanelProps): JSX.Element {
   const {
-    catalog, onDragStart, onActivate, selectedPartId, filter, onFilterChange, onRemovePart,
-    onInspect,
+    parts, missing = [], catalogSize, onBrowse, onDragStart, onActivate, selectedPartId,
+    filter, onFilterChange, onRemovePart, onInspect,
   } = props;
 
   const [collapsed, setCollapsed] = useState<ReadonlySet<PartType>>(() => new Set<PartType>());
 
   const query = (filter ?? '').trim().toLowerCase();
   const filtering = query.length > 0;
-
-  const parts = catalog.parts ?? [];
 
   /** Name and file path, both lower-cased, both matched as plain substrings. */
   const matches = useMemo(() => {
@@ -294,22 +269,14 @@ export function CatalogPanel(props: CatalogPanelProps): JSX.Element {
   const groups = useMemo(() => {
     const buckets = new Map<PartType, CatalogPart[]>();
     for (const group of GROUPS) buckets.set(group.type, []);
-    const imported: CatalogPart[] = [];
     for (const part of matches) {
-      if (isImported(part)) {
-        imported.push(part);
-        continue;
-      }
       const bucket = buckets.get(part.type) ?? buckets.get('unknown');
       bucket?.push(part);
     }
-    const generated = GROUPS.map((group) => ({
+    return GROUPS.map((group) => ({
       ...group,
       parts: buckets.get(group.type) ?? [],
     })).filter((group) => group.parts.length > 0);
-    return imported.length > 0
-      ? [{ type: 'imported' as PartType, ...IMPORTED_GROUP, parts: imported }, ...generated]
-      : generated;
   }, [matches]);
 
   const toggle = (type: PartType): void => {
@@ -321,49 +288,79 @@ export function CatalogPanel(props: CatalogPanelProps): JSX.Element {
     });
   };
 
-  const unresolved = catalog.unresolved ?? [];
+  const empty = parts.length === 0;
 
   return (
-    <aside className="catalog-panel" aria-label="Part catalogue">
+    <aside className="catalog-panel" aria-label="Parts in this project">
       <header className="catalog-panel__head">
-        <h2 className="catalog-panel__title">Catalogue</h2>
+        <h2 className="catalog-panel__title">This project</h2>
 
-        <div className="catalog-panel__search">
-          <input
-            type="search"
-            className="catalog-panel__filter"
-            value={filter ?? ''}
-            readOnly={onFilterChange === undefined}
-            placeholder="Filter by name or file"
-            aria-label="Filter the catalogue by name or file path"
-            autoComplete="off"
-            spellCheck={false}
-            onChange={(event) => onFilterChange?.(event.target.value)}
-          />
-          {filtering && onFilterChange !== undefined ? (
-            <button
-              type="button"
-              className="catalog-panel__clear hit-area"
-              aria-label="Clear the filter"
-              title="Clear the filter"
-              onClick={() => onFilterChange('')}
-            >
-              ×
-            </button>
-          ) : null}
-        </div>
+        <button
+          type="button"
+          className="button button--primary catalog-panel__browse"
+          onClick={onBrowse}
+          title={`Browse all ${catalogSize} parts and add the ones you want`}
+        >
+          Browse parts…
+        </button>
 
-        <p className="catalog-panel__count tabular-nums">
-          {filtering ? `${matches.length} of ${parts.length} parts` : `${parts.length} parts`}
-        </p>
+        {/* The filter is for a rail with twenty parts in it, not for one with
+            three, so it goes away when it cannot earn its line. */}
+        {parts.length > 6 && (
+          <div className="catalog-panel__search">
+            <input
+              type="search"
+              className="catalog-panel__filter"
+              value={filter ?? ''}
+              readOnly={onFilterChange === undefined}
+              placeholder="Filter your parts"
+              aria-label="Filter this project's parts by name or file path"
+              autoComplete="off"
+              spellCheck={false}
+              onChange={(event) => onFilterChange?.(event.target.value)}
+            />
+            {filtering && onFilterChange !== undefined ? (
+              <button
+                type="button"
+                className="catalog-panel__clear hit-area"
+                aria-label="Clear the filter"
+                title="Clear the filter"
+                onClick={() => onFilterChange('')}
+              >
+                ×
+              </button>
+            ) : null}
+          </div>
+        )}
+
+        {!empty && (
+          <p className="catalog-panel__count tabular-nums">
+            {filtering
+              ? `${matches.length} of ${parts.length} parts`
+              : `${parts.length} part${parts.length === 1 ? '' : 's'}`}
+          </p>
+        )}
       </header>
 
       <div className="catalog-panel__scroll">
-        {groups.length === 0 ? (
+        {empty ? (
+          <div className="catalog-panel__start">
+            <p className="catalog-panel__starttitle">Nothing here yet</p>
+            <p className="catalog-panel__startbody">
+              Go shopping: pick the hooks, shelves and bins you want on this wall, and they
+              land here ready to drag on.
+            </p>
+            <button type="button" className="button button--primary" onClick={onBrowse}>
+              Browse {catalogSize} parts
+            </button>
+            <p className="catalog-panel__startnote">
+              Got your own model? Drop an STL or 3MF anywhere on this window — you measure it, give it
+              a photo and line it up, and it joins your library.
+            </p>
+          </div>
+        ) : groups.length === 0 ? (
           <p className="catalog-panel__empty">
-            {parts.length === 0
-              ? 'The catalogue is empty. Drop an STL here, or run the scanner over the model folder.'
-              : `Nothing matches “${filter ?? ''}”. Try part of a file name, or a word from the model’s title.`}
+            Nothing in this project matches “{filter ?? ''}”.
           </p>
         ) : (
           groups.map((group) => {
@@ -409,11 +406,12 @@ export function CatalogPanel(props: CatalogPanelProps): JSX.Element {
         )}
       </div>
 
-      {unresolved.length > 0 ? (
+      {missing.length > 0 ? (
         <footer className="catalog-panel__foot">
           <p className="catalog-panel__unresolved tabular-nums">
-            {unresolved.length} model {unresolved.length === 1 ? 'file' : 'files'} could not be
-            classified and are not shown.
+            {missing.length} part{missing.length === 1 ? '' : 's'} in this layout{' '}
+            {missing.length === 1 ? 'is' : 'are'} not in your library — it was saved by someone
+            with their own uploads.
           </p>
         </footer>
       ) : null}

@@ -18,10 +18,16 @@
  */
 
 export interface MeshData {
-  /** Triangle corners, 9 floats per triangle, in the STL's own frame. */
+  /**
+   * Triangle corners, 9 floats per triangle, in the model's own frame and in
+   * MILLIMETRES. An STL carries no unit and is taken as mm; a 3MF declares one
+   * and is converted on the way in (`threemf.ts`), so that by the time a mesh
+   * reaches this shape the question is already settled.
+   */
   positions: Float32Array;
   triangleCount: number;
-  format: 'binary' | 'ascii';
+  /** How it arrived. `3mf` meshes come from `threemf.ts`, not from this module. */
+  format: 'binary' | 'ascii' | '3mf';
 }
 
 export interface MeshMeasure {

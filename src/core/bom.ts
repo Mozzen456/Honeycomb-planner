@@ -35,9 +35,10 @@
  */
 
 import { customPanelGroups, isCustomPanel } from './customiser';
-import { fixingsFor, JUNCTION_FIXING_ID, type FixingPlan } from './fixings';
+import { fastenerCells, fixingsFor, JUNCTION_FIXING_ID, type FixingPlan } from './fixings';
 import { fastenersNeedReview, socketProvidesOf, socketsOf } from './overrides';
 import { hexKey, hexSub, keyToHex, placedPanelCells, placeFootprint } from './hex';
+import { isGeneratedSize, panelFrameKey, panelFrameSides } from './panelModel';
 import { crossesSeam } from './tiling';
 import type {
   Bom,
@@ -49,6 +50,7 @@ import type {
   LayoutDoc,
   PlacedItem,
   PlacedPanel,
+  Rotation,
 } from './types';
 
 // ---------------------------------------------------------------------------
@@ -124,6 +126,21 @@ function partIndex(catalog: Catalog): ReadonlyMap<string, CatalogPart> {
   }
   indexCache.set(catalog, map);
   return map;
+}
+
+/**
+ * The biggest shipped plate, used as the per-cell yardstick for a plate the app
+ * sized itself. Biggest because it has the most cells to average over, so its
+ * per-cell figure carries the least edge effect.
+ */
+function biggestPanel(index: ReadonlyMap<string, CatalogPart>): CatalogPart | undefined {
+  let best: CatalogPart | undefined;
+  for (const part of index.values()) {
+    if (part.type !== 'panel' || !part.panel) continue;
+    const cells = asArray(part.footprint).length;
+    if (best === undefined || cells > asArray(best.footprint).length) best = part;
+  }
+  return best;
 }
 
 const isFastener = (part: CatalogPart): boolean =>
@@ -259,6 +276,152 @@ export function fixingPlanFor(
   const anchor = junction?.anchor ?? ORIGIN;
   const junctionSockets = socketsOf(junction).map((c) => hexSub(c, anchor));
   return fixingsFor(doc as LayoutDoc, spacingMm, avoid, { cells: shared, junctionSockets });
+}
+
+/** One requirement of one placed item, resolved into cells on the wall. */
+export interface ItemFastening {
+  /** The item that needs it. */
+  itemId: string;
+  /** That item's part — what the BOM counts against. */
+  itemPartId: string;
+  /** The fastener itself. */
+  partId: string;
+  /**
+   * The item's own rotation, carried so a multi-cell fastener turns with the
+   * part it holds — the cells it must span are the part's cells.
+   */
+  rotation: Rotation;
+  /** Cells that get one installed: one instance anchored at each. */
+  cells: Hex[];
+  /** Cells where the wall already carries one, so nothing extra is printed. */
+  supplied: Hex[];
+}
+
+/**
+ * Where every placed accessory's OWN fastener goes.
+ *
+ * The wall drew the fixings that hold the PLATES up and nothing that holds the
+ * things ON them: you could seat a hook against an insert in the alignment tool
+ * and then find no insert under it in the big view. A fastening you cannot see
+ * is one you cannot check, which is the same argument that put the wall fixings
+ * in the picture in the first place.
+ *
+ * It is one plan for two consumers, deliberately. `computeBom` reads the
+ * `supplied` cells to know what NOT to order and the 3D view reads `cells` to
+ * know what to draw, so a fastener in the picture is a fastener on the list and
+ * the reverse. Splitting them is how the wall mount once vanished from the plan
+ * but stayed in the drawing (D48).
+ *
+ * INSERTS THE WALL ALREADY HAS. The combined wall fastener is one screw hole and
+ * three open sockets, and those sockets ARE inserts: an accessory hung on one
+ * does not also need an `insert-empty` printed for it. Only where somebody has
+ * SAID the socket does that job (`socketProvides`) — two sockets being the same
+ * size is not proof they are interchangeable, and this is a shopping list.
+ * Sockets come from placed items and from the junction fixings at the seams,
+ * which are in the wall whether or not anybody dropped one by hand. Each is
+ * consumed at most once, in document order, so two accessories over the same
+ * socket cannot both claim it.
+ */
+export function fasteningPlanFor(
+  doc: LayoutDoc | undefined,
+  catalog: Catalog,
+  fixings: FixingPlan = fixingPlanFor(doc, catalog),
+): ItemFastening[] {
+  const index = partIndex(catalog);
+
+  const socketAt = new Map<string, { provides: string; by: string }>();
+  const noteSocket = (item: PlacedItem, provides: string): void => {
+    for (const cell of itemSocketCells(item, catalog)) {
+      const key = hexKey(cell);
+      if (!socketAt.has(key)) socketAt.set(key, { provides, by: item.id });
+    }
+  };
+  for (const item of asArray(doc?.items)) {
+    const provides = socketProvidesOf(index.get(item.partId));
+    if (provides !== undefined) noteSocket(item, provides);
+  }
+  const junctionPart = index.get(JUNCTION_FIXING_ID);
+  const junctionProvides = socketProvidesOf(junctionPart);
+  if (junctionPart !== undefined && junctionProvides !== undefined) {
+    for (const [n, junction] of fixings.junctions.entries()) {
+      // Through `itemSocketCells`, so a planned fixing and a placed one place
+      // their sockets by the same transform.
+      noteSocket(
+        {
+          id: `fixing/${n}`,
+          partId: JUNCTION_FIXING_ID,
+          at: junction.anchor,
+          rotation: junction.rotation,
+        },
+        junctionProvides,
+      );
+    }
+  }
+
+  /**
+   * Does a socket that provides `has` satisfy a part that asks for `wants`?
+   *
+   * The same id, obviously. And any EMPTY insert answers any other: they are
+   * all just a hexagonal socket for a peg, so a part that asks for
+   * `insert-empty` is as well served by the hollow family's socket as by its
+   * own — which is what "an empty insert of any kind" means, and what a person
+   * choosing a fastener in the inspector expects when they then hang the part
+   * on a wall fastener's open hole.
+   *
+   * It is NOT symmetric with the bolted ones: an M3 bore answers only a part
+   * that wants an M3 insert. A plain socket has no thread, and a part that
+   * needs one still needs it.
+   */
+  const answers = (has: string, wants: string): boolean =>
+    has === wants || (isEmptyInsert(index.get(has)) && isEmptyInsert(index.get(wants)));
+
+  const out: ItemFastening[] = [];
+  const spent = new Set<string>();
+  for (const item of asArray(doc?.items)) {
+    const part = index.get(item.partId);
+    if (part === undefined) continue;
+    const wants = asArray(part.requires);
+    if (wants.length === 0) continue;
+    const cells = itemCells(item, catalog);
+    for (const req of wants) {
+      const fastener = req && index.get(req.partId);
+      if (!req || fastener === undefined) continue;
+      let left = countOf(req.count);
+      const supplied: Hex[] = [];
+      for (const cell of cells) {
+        if (left <= 0) break;
+        const key = hexKey(cell);
+        const socket = socketAt.get(key);
+        // Never its own socket, and never one already claimed.
+        if (socket === undefined || socket.by === item.id || spent.has(key)) continue;
+        if (!answers(socket.provides, req.partId)) continue;
+        spent.add(key);
+        left -= 1;
+        supplied.push(cell);
+      }
+      /*
+       * The rest go in cells of this item that nothing is already in — nearest
+       * its anchor first, by the same rule the alignment tool draws them with
+       * (`fastenerCells`), so the insert a person seated their part against is
+       * the insert that appears under it on the wall.
+       */
+      const anchor = fastener.anchor ?? ORIGIN;
+      const spread = asArray(fastener.footprint).map((c) => hexSub(c, anchor));
+      const placed = fastenerCells(
+        cells, item.at ?? ORIGIN, spread, left, new Set(supplied.map(hexKey)),
+      );
+      if (placed.length === 0 && supplied.length === 0) continue;
+      out.push({
+        itemId: item.id,
+        itemPartId: item.partId,
+        partId: req.partId,
+        rotation: item.rotation ?? 0,
+        cells: placed,
+        supplied,
+      });
+    }
+  }
+  return out;
 }
 
 /**
@@ -397,6 +560,10 @@ export function validate(doc: LayoutDoc, catalog: Catalog): Issue[] {
     else ids.add(byId);
   };
   const scanRefs = (id: string, partId: string): void => {
+    // A plate the app sized itself has no catalogue entry and never will —
+    // that is what "generated" means. Reporting it as missing would put an
+    // error on every plate of a wall tiled to the printer.
+    if (isGeneratedSize(partId)) return;
     const part = index.get(partId);
     if (part === undefined) {
       noteUnknown(partId, id);
@@ -583,6 +750,24 @@ export function computeBom(doc: LayoutDoc, catalog: Catalog): Bom {
   const index = partIndex(catalog);
   const issues = validate(doc, catalog);
 
+  /**
+   * Which border sides each plate touches, worked out ONCE.
+   *
+   * `panelFrameKey` walks the whole assembly to answer, and it is needed twice —
+   * to keep a bordered plate out of the stock count, and to group the generated
+   * plates — so asking per call would walk the wall twice per panel. Memoised on
+   * the panel id, which is unique within a document.
+   */
+  const docPanels = asArray(doc?.panels);
+  const frameKeys = new Map<string, string>();
+  const frameKeyOf = (panel: PlacedPanel): string => {
+    const seen = frameKeys.get(panel.id);
+    if (seen !== undefined) return seen;
+    const key = panelFrameKey(panel, docPanels, doc?.frame);
+    frameKeys.set(panel.id, key);
+    return key;
+  };
+
   // How many times each partId was placed on the wall (panels and items alike).
   const placements = new Map<string, number>();
   const asPanel = new Map<string, number>();
@@ -590,7 +775,10 @@ export function computeBom(doc: LayoutDoc, catalog: Catalog): Bom {
     // A panel cut round a light switch is NOT the stock plate any more, and
     // counting it as one would have you print 50 copies of a file when four of
     // them will not fit. Custom panels are reported on their own lines below.
-    if (isCustomPanel(panel)) continue;
+    // A plate carrying an EDGE is not the stock file either, and it is reported
+    // on its own generated line below. Counted here as well, a bordered wall
+    // orders every plate twice — once as a shipped STL and once as a download.
+    if (isCustomPanel(panel) || frameKeyOf(panel) !== '') continue;
     bump(placements, panel.partId, 1);
     bump(asPanel, panel.partId, 1);
   }
@@ -630,96 +818,17 @@ export function computeBom(doc: LayoutDoc, catalog: Catalog): Bom {
     );
   };
 
-  /*
-   * INSERTS THE WALL ALREADY HAS.
-   *
-   * The combined wall fastener is one screw hole and three open sockets, and
-   * those sockets are inserts: an accessory hung on one of them does not also
-   * need an `insert-empty` printed for it. Ordering both is the same
-   * double-count as a fixing being claimed twice — you end up printing a part
-   * that is already in the wall.
-   *
-   * Only where somebody has SAID the socket does that job (`socketProvides`).
-   * Two sockets being the same size is not proof they are interchangeable, and
-   * this is a shopping list.
-   *
-   * Sockets come from placed items and from the junction fixings the plan puts
-   * in at the seams — those are in the wall whether or not anybody dropped them
-   * by hand. Each is consumed at most once, in document order, so two
-   * accessories over the same socket cannot both claim it.
-   */
-  const socketAt = new Map<string, { provides: string; by: string }>();
-  const noteSocket = (item: PlacedItem, provides: string): void => {
-    for (const cell of itemSocketCells(item, catalog)) {
-      const key = hexKey(cell);
-      if (!socketAt.has(key)) socketAt.set(key, { provides, by: item.id });
-    }
-  };
-  for (const item of asArray(doc?.items)) {
-    const provides = socketProvidesOf(index.get(item.partId));
-    if (provides !== undefined) noteSocket(item, provides);
-  }
-  const junctionPart = index.get(JUNCTION_FIXING_ID);
-  const junctionProvides = socketProvidesOf(junctionPart);
-  if (junctionPart !== undefined && junctionProvides !== undefined) {
-    for (const [n, junction] of fixings.junctions.entries()) {
-      // Through `itemSocketCells`, so a planned fixing and a placed one place
-      // their sockets by the same transform.
-      noteSocket(
-        {
-          id: `fixing/${n}`,
-          partId: JUNCTION_FIXING_ID,
-          at: junction.anchor,
-          rotation: junction.rotation,
-        },
-        junctionProvides,
-      );
-    }
-  }
-
-  /**
-   * Does a socket that provides `has` satisfy a part that asks for `wants`?
-   *
-   * The same id, obviously. And any EMPTY insert answers any other: they are
-   * all just a hexagonal socket for a peg, so a part that asks for
-   * `insert-empty` is as well served by the hollow family's socket as by its
-   * own — which is what "an empty insert of any kind" means, and what a person
-   * choosing a fastener in the inspector expects when they then hang the part
-   * on a wall fastener's open hole.
-   *
-   * It is NOT symmetric with the bolted ones: an M3 bore answers only a part
-   * that wants an M3 insert. A plain socket has no thread, and a part that
-   * needs one still needs it.
-   */
-  const answers = (has: string, wants: string): boolean =>
-    has === wants || (isEmptyInsert(index.get(has)) && isEmptyInsert(index.get(wants)));
+  // Where every accessory's own fastener goes, and which of them the wall
+  // already carries — one plan, drawn by the 3D view and counted here.
+  const fastenings = fasteningPlanFor(doc, catalog, fixings);
 
   /** partId -> requiredId -> how many the wall already provides. */
   const provided = new Map<string, Map<string, number>>();
-  const spent = new Set<string>();
-  for (const item of asArray(doc?.items)) {
-    const part = index.get(item.partId);
-    if (part === undefined) continue;
-    const wants = asArray(part.requires);
-    if (wants.length === 0) continue;
-    const cells = itemCells(item, catalog);
-    for (const req of wants) {
-      if (!req || !index.has(req.partId)) continue;
-      let left = countOf(req.count);
-      for (const cell of cells) {
-        if (left <= 0) break;
-        const key = hexKey(cell);
-        const socket = socketAt.get(key);
-        // Never its own socket, and never one already claimed.
-        if (socket === undefined || socket.by === item.id || spent.has(key)) continue;
-        if (!answers(socket.provides, req.partId)) continue;
-        spent.add(key);
-        left -= 1;
-        const forPart = provided.get(item.partId) ?? new Map<string, number>();
-        forPart.set(req.partId, (forPart.get(req.partId) ?? 0) + 1);
-        provided.set(item.partId, forPart);
-      }
-    }
+  for (const f of fastenings) {
+    if (f.supplied.length === 0) continue;
+    const forPart = provided.get(f.itemPartId) ?? new Map<string, number>();
+    forPart.set(f.partId, (forPart.get(f.partId) ?? 0) + f.supplied.length);
+    provided.set(f.itemPartId, forPart);
   }
   /** How many of each insert the wall provided, for the lines to say so. */
   const providedTotals = new Map<string, number>();
@@ -822,13 +931,38 @@ export function computeBom(doc: LayoutDoc, catalog: Catalog): Bom {
    * a bore, so the true saving is slightly larger — and it is marked estimated
    * like every other modelled figure.
    */
-  for (const [index_, group] of customPanelGroups(asArray(doc?.panels)).entries()) {
+  // Keyed on the frame as well as the shape, or two plates that differ only in
+  // which edge is bordered collapse into one line here while the panel that
+  // offers the downloads lists them separately — and you print one twice and
+  // the other never. Same rule, one function, both callers.
+  const panels = docPanels;
+  const frame = doc?.frame;
+  const groups = customPanelGroups(panels, frameKeyOf);
+  // The reference a generated plate is costed against: the biggest shipped
+  // plate, per cell. A plate the app sized itself has no catalogue entry to
+  // scale from, and left at zero it would report a wall that prints in no time
+  // out of no filament — which is worse than an estimate, because it looks like
+  // an answer. Every cell of every plate is the same 8 mm block with the same
+  // bore, so per-cell is the honest unit, and the line is marked `estimated`
+  // like every other modelled figure.
+  const reference = biggestPanel(index);
+  const refCells = Math.max(1, asArray(reference?.footprint).length);
+  const refEst = reference
+    ? estimateOf(reference)
+    : { minutes: 0, grams: 0, metres: 0, supports: false };
+
+  for (const [index_, group] of groups.entries()) {
     const first = group.panels[0]!;
     const stock = index.get(first.partId);
-    const stockCells = Math.max(1, asArray(stock?.footprint).length);
-    const kept = group.params?.cellCount ?? stockCells;
-    const share = Math.min(1, kept / stockCells);
-    const est = stock ? estimateOf(stock) : { minutes: 0, grams: 0, metres: 0, supports: false };
+    const kept = group.params?.cellCount ??
+      Math.max(1, asArray(stock?.footprint).length);
+
+    // Scale from the plate's OWN stock file where there is one, and from the
+    // reference where there is not.
+    const base = stock ?? reference;
+    const baseCells = stock ? Math.max(1, asArray(stock.footprint).length) : refCells;
+    const est = stock ? estimateOf(stock) : refEst;
+    const share = base ? kept / baseCells : 0;
     const quantity = group.panels.length;
     const label = `Custom panel ${String.fromCharCode(65 + index_)}`;
 
@@ -837,9 +971,22 @@ export function computeBom(doc: LayoutDoc, catalog: Catalog): Bom {
     totalGrams += est.grams * share * quantity;
     totalMetres += est.metres * share * quantity;
 
+    // Say WHY it is custom. "Cut round an obstacle" on a plate that has no
+    // obstacle near it — it carries an edge — sends someone hunting the wall for
+    // a switch that is not there. The border cuts nothing, so the two reasons
+    // are independent and a plate can have both.
+    const sides = panelFrameSides(first, panels, frame);
+    const edged = (['top', 'bottom', 'left', 'right'] as const).filter((s) => sides[s]);
+    if (sides.holes) edged.push('holes' as never);
+    const reasons: string[] = [];
+    if (edged.length > 0) reasons.push(`edged ${edged.join(' + ')}`);
+    if ((first.omit ?? []).length > 0) reasons.push('cut round an obstacle');
+    if (isGeneratedSize(first.partId)) reasons.push('sized for your printer');
+    const why = reasons.length > 0 ? reasons.join(', ') : 'generated';
+
     printed.push({
       partId: `custom/${group.key}`,
-      name: `${label} — ${kept} cells, cut round an obstacle`,
+      name: `${label} — ${kept} cells, ${why}`,
       file: '',
       type: 'panel',
       quantity,

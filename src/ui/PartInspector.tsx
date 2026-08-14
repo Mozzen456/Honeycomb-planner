@@ -31,16 +31,19 @@ import * as THREE from 'three';
 
 import { CELL, INSERT, PANEL_DEPTH, PITCH } from '../core/constants';
 import {
-  cellsBoundsMm, hexCorners, hexKey, hexNeighbours, hexToMm, panelCells,
+  cellsBoundsMm, cellsCentreMm, hexCorners, hexKey, hexNeighbours, hexToMm, panelCells,
 } from '../core/hex';
-import { AXES, detect } from '../core/detect';
+import { fastenerCells } from '../core/fixings';
+import { AXES, detect, type Detection } from '../core/detect';
+import { measureInsertSeat, type InsertSeat } from '../core/insertSeat';
 import {
   anchorOf, MAX_OFFSET_MM, MAX_TILT_DEG, socketsOf, type MountingOverride,
 } from '../core/overrides';
+import type { MeshData } from '../core/stl';
 import type { Catalog, CatalogPart, Hex, InsertRequirement } from '../core/types';
 import { FootprintEditor } from './FootprintEditor';
 import { thumbnailFor } from './partThumbnails';
-import { loadPartMesh, loadRawMesh } from './meshLibrary';
+import { loadPartMesh, loadRawMesh, orient } from './meshLibrary';
 import { fileToScene, mountingMatrixInFileFrame, wallBasis } from './mountingTransform';
 import './PartInspector.css';
 
@@ -50,6 +53,20 @@ export interface PartInspectorProps {
   catalog: Catalog;
   /** What is saved for this part now, if anything. */
   current?: MountingOverride;
+  /**
+   * Why this dialog is open, which changes only what the buttons say and
+   * whether Save is reachable without touching anything.
+   *
+   * `'edit'` — correcting a part already in the catalogue. Save is disabled
+   * until something changes, because saving an unchanged correction writes an
+   * override that says nothing and then has to be explained to the next reader.
+   *
+   * `'import'` — the second half of an import (D71). The part does not exist
+   * yet, so there is nothing to be dirty against and the detector's own answer
+   * is a legitimate choice: Save must be reachable immediately, or accepting a
+   * correctly-detected part would need a nudge and a nudge back.
+   */
+  intent?: 'edit' | 'import';
   onSave: (
     mounting: MountingOverride,
     footprint: readonly Hex[],
@@ -214,7 +231,8 @@ function faceOf(normal: THREE.Vector3): { axis: Axis; end: End } {
 }
 
 export function PartInspector(props: PartInspectorProps): JSX.Element {
-  const { part, catalog, current, onSave, onClear, onClose } = props;
+  const { part, catalog, current, intent = 'edit', onSave, onClear, onClose } = props;
+  const importing = intent === 'import';
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [axis, setAxis] = useState<Axis>((current?.wallFaceAxis as Axis) ?? 'z');
   const [end, setEnd] = useState<End>(current?.matingEnd ?? 'low');
@@ -271,7 +289,7 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
    * in. Shown so a person can see exactly what they are overruling — and so the
    * dialog can never disagree with the detector about what the detector said.
    */
-  const [detected, setDetected] = useState<{ wallFaceAxis: string; matingEnd: string } | null>(null);
+  const [detected, setDetected] = useState<Detection | null>(null);
 
   const scene = useRef<{
     renderer: THREE.WebGLRenderer;
@@ -400,6 +418,15 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
     s.part = null;
   }, []);
 
+  /**
+   * The part's own mesh, kept so its SEAT can be re-measured when the face
+   * changes.
+   *
+   * Which face meets the wall decides which end of the part is inside it, so
+   * the seat is a function of the live axis and end — not of what was saved.
+   */
+  const rawRef = useRef<MeshData | null>(null);
+
   useEffect(() => {
     let live = true;
     void loadRawMesh(part).then((mesh) => {
@@ -409,6 +436,7 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
         setStatus('That model could not be loaded, so there is no face to pick.');
         return;
       }
+      rawRef.current = mesh;
       const geometry = new THREE.BufferGeometry();
       geometry.setAttribute('position', new THREE.BufferAttribute(mesh.positions.slice(), 3));
       geometry.computeVertexNormals();
@@ -459,7 +487,10 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
       s.half.set(size.x / 2, size.y / 2, size.z / 2);
 
       const detection = detect(mesh);
-      setDetected({ wallFaceAxis: detection.wallFaceAxis, matingEnd: detection.matingEnd });
+      // The whole detection, not two of its fields: `orient` needs the drawn
+      // orientation as well to put this part into wall coordinates, and a
+      // second detection here would be a second answer to a settled question.
+      setDetected(detection);
       // Nothing saved yet: start from the detector's answer, so the dialog opens
       // showing what the app is doing NOW rather than an arbitrary default.
       const known = current !== undefined
@@ -602,12 +633,9 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
   const panelPart = useMemo(() => {
     let needX = PITCH;
     let needY = PITCH;
-    const mid = { x: 0, y: 0 };
-    for (const c of cells) {
-      const m = hexToMm(c);
-      mid.x += m.x / cells.length;
-      mid.y += m.y / cells.length;
-    }
+    // The same centre the plate is built about below, so the panel is chosen
+    // for the patch that actually gets drawn.
+    const mid = cellsCentreMm(cells);
     for (const c of cells) {
       for (const n of [c, ...hexNeighbours(c)]) {
         const m = hexToMm(n);
@@ -683,6 +711,105 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
     return () => { live = false; };
   }, [panelPart]);
 
+  // --- the insert the part hangs on ------------------------------------------
+
+  /**
+   * The chosen fastener's REAL mesh, and how it seats in a cell.
+   *
+   * The inserts were drawn: a gold hexagonal disc, 22.5 across and 2.5 thick,
+   * one in every cell. That is the flange and nothing else — no body, no
+   * socket, no bolt head — and it is the wrong thing to line a part up against
+   * for the same reason a drawn honeycomb was (D45): what a person is matching
+   * their part to is the object they are going to print, and the feature they
+   * are matching it to is the SOCKET, which a disc does not have.
+   *
+   * `loadPartMesh` is the wall view's loader, so this is the same geometry the
+   * wall draws, with any correction saved for the insert itself already in it —
+   * and its cache, so the geometry must never be disposed here.
+   */
+  const fastenerPart = useMemo(
+    () => (fastenerId === '' ? null : catalog.parts.find((p) => p.id === fastenerId) ?? null),
+    [catalog, fastenerId],
+  );
+  const [insertMesh, setInsertMesh] = useState<{
+    geometry: THREE.BufferGeometry;
+    seat: InsertSeat;
+  } | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    if (fastenerPart === null) {
+      setInsertMesh(null);
+      return;
+    }
+    void loadPartMesh(fastenerPart).then((mesh) => {
+      if (!live) return;
+      // No model, or geometry that does not read as an insert: the drawn flange
+      // takes over. `measureInsertSeat` refusing is an answer, not a failure —
+      // drawing a body 7.5 mm into the wall on a guess would be worse than the
+      // disc it replaced.
+      setInsertMesh(
+        mesh === null || mesh.seat === null
+          ? null
+          : { geometry: mesh.geometry, seat: mesh.seat },
+      );
+    });
+    return () => { live = false; };
+  }, [fastenerPart]);
+
+  /**
+   * How the INSPECTED part seats, when it is itself a fitting.
+   *
+   * The dialog draws every part with its mating face on the plate, which is
+   * where `orient` leaves it and where the wall used to draw it. The wall now
+   * drops a fitting into its hole by the length of its body (`seatedZ`), so a
+   * dialog that kept drawing it flat on the face would be showing an insert
+   * 7.5 mm out of position: you line it up here and it sits somewhere else in
+   * the big view. Which is the one thing this whole file exists to prevent.
+   *
+   * Measured through `orient` under the LIVE face rather than read off
+   * `loadPartMesh`, whose geometry carries the SAVED mounting: pick a different
+   * face and the end that goes into the wall changes with it.
+   */
+  const partSeat = useMemo(() => {
+    const raw = rawRef.current;
+    if (raw === null || detected === null) return null;
+    if (part.type !== 'insert' && part.type !== 'fastener') return null;
+    const geometry = orient(raw, { ...detected, wallFaceAxis: axis, matingEnd: end });
+    const seat = measureInsertSeat(geometry.getAttribute('position').array as Float32Array);
+    geometry.dispose();
+    return seat;
+  }, [part, axis, end, detected, bodyTick]);
+
+  /**
+   * Which of the part's cells carry a fastener, and where each one lands.
+   *
+   * `fastenerCount` of them, not one per cell. One per cell is the seven-inserts
+   * -for-two-pegs error drawn as a picture (CLAUDE.md): a 7-cell shelf hanging
+   * on two pegs would show seven inserts, contradicting the number typed
+   * directly below it and the line the parts list orders.
+   *
+   * Nearest the anchor first, and a multi-cell fastener claims every cell it
+   * covers so the next one does not land on top of it. Deterministic, because a
+   * picture that reshuffles between renders is not something anyone can measure
+   * against.
+   */
+  const carriers = useMemo(() => {
+    const own = fastenerPart?.footprint ?? [];
+    // The fastener's own cells, as offsets from its anchor — the same shift
+    // `itemCells` makes before placing one on the wall.
+    const anchor = fastenerPart?.anchor ?? anchorOf(own.length > 0 ? own : [{ q: 0, r: 0 }]);
+    const spread = own.length > 0
+      ? own.map((c) => ({ q: c.q - anchor.q, r: c.r - anchor.r }))
+      : [{ q: 0, r: 0 }];
+    // `fastenerCells` and nothing local: the wall places these from the same
+    // function (`bom.fasteningPlanFor`), so the insert a person seats their part
+    // against here is the insert that turns up under it in the big view. A
+    // second copy of this rule is the bug that keeps coming back (D53).
+    const wanted = fastenerPart === null ? 0 : Math.max(1, Math.round(fastenerCount));
+    return { cells: fastenerCells(cells, anchorOf(cells), spread, wanted), spread };
+  }, [cells, fastenerPart, fastenerCount]);
+
   // --- the wall plate, against the chosen face ------------------------------
 
   useEffect(() => {
@@ -738,12 +865,7 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
      * difference is 20 mm: the part drawn beside its own holes rather than in
      * them.
      */
-    const mid = { x: 0, y: 0 };
-    for (const c of cells) {
-      const m = hexToMm(c);
-      mid.x += m.x / cells.length;
-      mid.y += m.y / cells.length;
-    }
+    const mid = cellsCentreMm(cells);
     const at = (c: Hex): { x: number; y: number } => {
       const m = hexToMm(c);
       return { x: m.x - mid.x, y: m.y - mid.y };
@@ -785,11 +907,26 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
         new THREE.MeshLambertMaterial({ color: 0x9aa4b2, side: THREE.DoubleSide }),
       );
       const a = hexToMm(anchor);
-      // `loadPartMesh` centres the plate on its own block and leaves its mating
-      // face at z = 0, so the mesh's front is a panel thickness further out.
+      /*
+       * Put the plate's own centre cell exactly where this dialog draws cell
+       * (0, 0) — `at({0, 0})`, the same helper every cell here is drawn with.
+       *
+       * The leading `at(...)` is not decoration. Without it the expression was
+       * `-mid - (hexToMm(anchor) - blockCentre)`, in which `mid` and
+       * `blockCentre` cancel their `LATTICE_ANCHOR` against each other and the
+       * bare `hexToMm(anchor)` leaves one behind — so the honeycomb sat
+       * `MARGIN_X` (13.6255 mm) off the cells drawn on it, two thirds of a
+       * column, and the socket rings straddled the plate's walls. Anchoring
+       * once, through the same function as everything else in the group, is
+       * what makes that impossible rather than merely fixed.
+       *
+       * `loadPartMesh` centres the plate on its own block and leaves its mating
+       * face at z = 0, so the mesh's front is a panel thickness further out.
+       */
+      const home = at({ q: 0, r: 0 });
       slab.position.set(
-        -mid.x - (a.x - panelMesh.blockCentre.x),
-        -mid.y - (a.y - panelMesh.blockCentre.y),
+        home.x - (a.x - panelMesh.blockCentre.x),
+        home.y - (a.y - panelMesh.blockCentre.y),
         -PANEL_DEPTH,
       );
       group.add(slab);
@@ -885,17 +1022,51 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
     }
 
     /*
-     * The inserts, when the part is seated on them.
+     * THE INSERTS, from their own STL, seated where they actually seat.
      *
      * HSW is two-level (HSW-SPEC §5): the insert clips into the cell and the
-     * accessory pegs into the insert. Its 22.5 mm flange cannot enter the
-     * 22.0 mm mouth, so it stands proud by `INSERT.flangeThickness` and the part
-     * rests on THAT, not on the wall. Drawn only when the seat says so, so the
-     * control has a visible consequence rather than being 2.5 mm of arithmetic.
+     * accessory pegs into the insert. So the thing a person is lining their
+     * part up against is not the wall — it is the socket in the top of an
+     * insert, 2.5 mm proud of the wall face — and until now this drew a gold
+     * disc where that insert goes. A disc has no socket, no bolt head and no
+     * body, which is to say it is exactly the drawing the panel used to be
+     * before it became a real plate (D45).
+     *
+     * Seated by measurement, not by convention. `meshLibrary` hands every part
+     * over with its mating face at z = 0, which for an insert means its whole
+     * 10 mm standing out in the room; `measureInsertSeat` finds the plane where
+     * it stops fitting through a 22.0 mm mouth, and that plane IS the wall's
+     * front face. Body inside the plate, flange proud on this side.
+     *
+     * Drawn whenever a fastener is chosen, not only when the part is seated on
+     * one: the insert is in the wall either way, and seeing it is what makes
+     * "sits on the wall face" versus "sits on its inserts" a judgement rather
+     * than a guess. The seat button still has its visible consequence — the
+     * PART moves by the flange, against an insert that stays put.
      */
-    if (seat === 'insert') {
-      const insertMat = new THREE.MeshPhongMaterial({ color: 0xc9a227, shininess: 16 });
-      for (const c of cells) {
+    const insertMat = new THREE.MeshPhongMaterial({ color: 0xc9a227, shininess: 16 });
+    for (const c of carriers.cells) {
+      if (insertMesh !== null) {
+        const body = new THREE.Mesh(insertMesh.geometry, insertMat);
+        /*
+         * Centred on the cells this one instance covers, which is the same
+         * convention `meshLibrary.orient` centres the mesh with and the same
+         * one the wall view places a multi-cell part by. For the usual one-cell
+         * insert that is simply the cell.
+         */
+        const block = cellsBoundsMm(carriers.spread.map((s) => ({ q: c.q + s.q, r: c.r + s.r })));
+        body.position.set(
+          (block.minX + block.maxX) / 2 - mid.x,
+          (block.minY + block.maxY) / 2 - mid.y,
+          // The flange's underside on the wall face: the body goes into the
+          // plate, the flange stands on it.
+          -insertMesh.seat.bodyMm,
+        );
+        group.add(body);
+      } else {
+        // No model to be had — the drawn flange, as before. It says where an
+        // insert is and nothing about what it looks like, which is honest
+        // enough for a fallback and not enough to align against.
         const flange = new THREE.Mesh(
           prism(INSERT.flangeAcrossFlats, INSERT.flangeThickness),
           insertMat,
@@ -927,18 +1098,22 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
     s.plate = group;
 
     // ...and on the way out, so a closed dialog leaves no buffers behind. The
-    // panel's own geometry is `meshLibrary`'s and the wall view's too — it is
-    // removed from the scene here and never disposed.
+    // panel's and the insert's geometry are `meshLibrary`'s and the wall view's
+    // too — cached per part id and shared with every placement of that part, so
+    // they are removed from the scene here and never disposed.
+    const shared = new Set<THREE.BufferGeometry>();
+    if (panelMesh !== null) shared.add(panelMesh.geometry);
+    if (insertMesh !== null) shared.add(insertMesh.geometry);
     return () => {
       const live = scene.current;
       if (live === null || live.plate !== group) return;
       live.stage.remove(group);
       group.traverse((o) => {
-        if (o instanceof THREE.Mesh && o.geometry !== panelMesh?.geometry) o.geometry.dispose();
+        if (o instanceof THREE.Mesh && !shared.has(o.geometry)) o.geometry.dispose();
       });
       live.plate = null;
     };
-  }, [axis, end, cells, sockets, seat, status, panelMesh, bodyTick]);
+  }, [axis, end, cells, sockets, seat, status, panelMesh, insertMesh, carriers, bodyTick]);
 
   // --- the six seating numbers ----------------------------------------------
 
@@ -977,14 +1152,27 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
   useEffect(() => {
     const s = scene.current;
     if (s === null || s.part === null) return;
-    s.part.matrix.copy(
-      mountingMatrixInFileFrame(mounting, axis, end, s.half.getComponent(AXIS_INDEX[axis])),
+    const matrix = mountingMatrixInFileFrame(
+      mounting, axis, end, s.half.getComponent(AXIS_INDEX[axis]),
     );
+    /*
+     * A fitting is dropped INTO the wall by the length of its body — the same
+     * number `seatedZ` drops it by in `WallView3D`, in the frame this dialog
+     * draws in. Written as a translation along the wall normal rather than
+     * folded into `mountingMatrix`, because it is not a correction: nobody
+     * chose it, it is where the part goes, and it must not appear in the six
+     * numbers that get saved.
+     */
+    if (partSeat !== null) {
+      const drop = new THREE.Vector3(0, 0, -partSeat.bodyMm).applyMatrix4(wallBasis(axis, end));
+      matrix.premultiply(new THREE.Matrix4().makeTranslation(drop.x, drop.y, drop.z));
+    }
+    s.part.matrix.copy(matrix);
     // Set by hand rather than by three.js, which will not recompute a world
     // matrix nobody told it had changed — and the raycast that picks a face
     // reads exactly that.
     s.part.updateMatrixWorld(true);
-  }, [mounting, axis, end, status, bodyTick]);
+  }, [mounting, axis, end, partSeat, status, bodyTick]);
 
   // --- picking --------------------------------------------------------------
 
@@ -1234,11 +1422,20 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
   };
 
   return (
-    <div className="inspector__scrim" role="dialog" aria-modal="true" aria-label={`Mounting face for ${part.name}`}>
+    <div className="modal-scrim inspector__scrim" role="dialog" aria-modal="true" aria-label={`Mounting face for ${part.name}`}>
       <div className="inspector">
         <header className="inspector__head">
-          <h2 className="inspector__title">{part.name}</h2>
-          <button type="button" className="inspector__close" onClick={onClose} aria-label="Close">
+          <div>
+            {importing && <p className="inspector__step">Step 2 of 2 · Line it up</p>}
+            <h2 className="inspector__title">{part.name}</h2>
+          </div>
+          <button
+            type="button"
+            className="inspector__close"
+            onClick={onClose}
+            aria-label={importing ? 'Cancel this import' : 'Close'}
+            title={importing ? 'Cancel — the part is not added' : 'Close'}
+          >
             ×
           </button>
         </header>
@@ -1250,6 +1447,14 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
           keys move the PART: <kbd>←</kbd><kbd>→</kbd> spin, <kbd>↑</kbd><kbd>↓</kbd> out and in,
           <kbd>shift</kbd> slide it across the wall and up it, <kbd>alt</kbd> tilt it.
           <kbd>+</kbd><kbd>−</kbd> zoom. Type into any field for an exact figure.
+          {partSeat !== null ? (
+            <>
+              {' '}This part is a <strong>fitting</strong>, so zero does not mean flat on the wall:
+              it is drawn seated in its hole, {partSeat.bodyMm.toFixed(1)} mm in and
+              {' '}{partSeat.proudMm.toFixed(1)} mm proud — measured on its own model, and exactly
+              where the wall draws it.
+            </>
+          ) : null}
         </p>
 
         <div
@@ -1391,7 +1596,7 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
             <FootprintEditor
               cells={cells}
               onToggle={toggleCell}
-              showInserts={seat === 'insert'}
+              inserts={carriers.cells}
               sockets={sockets}
               anchor={anchorOf(cells)}
               label={`Cells ${part.name} covers`}
@@ -1437,9 +1642,29 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
               An insert clips into a cell and the part pegs into the insert, so a part that is
               fastened sits on the insert&apos;s flange — {INSERT.flangeThickness.toFixed(1)} mm
               proud of the wall, measured, not typed. The depth above is counted from whichever
-              of the two you pick.
+              of the two you pick. The insert drawn on the stage is the real one, seated where
+              it seats: body through the mouth, flange on the face.
               {requiresText ? ` The catalogue orders ${requiresText} for this part.` : ''}
             </p>
+            {/*
+              The chosen insert measured against the datum that moves the part.
+
+              `seat: 'insert'` lifts by `INSERT.flangeThickness`, which every
+              shipped insert agrees with to the tenth (`tests/insert-seat`). An
+              imported one need not, and a part seated on a datum 0.8 mm from its
+              own flange is wrong in exactly the way this dialog exists to catch —
+              so the disagreement is said out loud, with the number to type into
+              the depth, rather than being absorbed silently.
+            */}
+            {insertMesh !== null
+              && Math.abs(insertMesh.seat.proudMm - INSERT.flangeThickness) > 0.1 ? (
+                <p className="inspector__hint">
+                  <strong>That insert measures {insertMesh.seat.proudMm.toFixed(1)} mm proud</strong>,
+                  not {INSERT.flangeThickness.toFixed(1)}. Sitting on it is
+                  {' '}{(insertMesh.seat.proudMm - INSERT.flangeThickness).toFixed(1)} mm out —
+                  add that to the depth.
+                </p>
+              ) : null}
           </div>
         </div>
 
@@ -1515,14 +1740,23 @@ export function PartInspector(props: PartInspectorProps): JSX.Element {
           <button
             type="button"
             className="button button--primary"
-            disabled={!dirty}
+            /* Never disabled while importing: see `intent`. The detector's own
+               answer is a legitimate choice, and there is no saved state to be
+               dirty against. */
+            disabled={!importing && !dirty}
             onClick={() => onSave(mounting, cells, sockets, requires)}
           >
-            Save mounting
+            {importing ? 'Add to my library' : 'Save mounting'}
           </button>
-          <button type="button" className="button" onClick={onClear} disabled={current === undefined}>
-            Clear correction
-          </button>
+          {importing ? (
+            <button type="button" className="button" onClick={onClose}>
+              Cancel
+            </button>
+          ) : (
+            <button type="button" className="button" onClick={onClear} disabled={current === undefined}>
+              Clear correction
+            </button>
+          )}
         </footer>
       </div>
     </div>

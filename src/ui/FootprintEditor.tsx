@@ -37,8 +37,15 @@ export interface FootprintEditorProps {
   onToggle: (cell: Hex) => void;
   /** Extra rings of empty cells around the selection, to grow into. */
   reach?: number;
-  /** Marks the cells as carrying an insert — the thing the part hangs on. */
-  showInserts?: boolean;
+  /**
+   * The cells that carry an insert — the thing the part hangs on.
+   *
+   * The CELLS and not a flag: it was `showInserts`, which drew a flange in every
+   * cell the part covers, so a seven-cell shelf hanging on two pegs showed seven
+   * inserts. That is the same error as ordering seven of them, drawn instead of
+   * counted (CLAUDE.md). Which cells they are is the caller's answer.
+   */
+  inserts?: readonly Hex[];
   /**
    * Cells of the part that something can be installed INTO — drawn open,
    * because that is what they are: a hole in the part rather than material.
@@ -56,10 +63,11 @@ export interface FootprintEditorProps {
 
 export function FootprintEditor(props: FootprintEditorProps): JSX.Element {
   const {
-    cells, onToggle, reach: extra = 2, showInserts = false, sockets = [],
+    cells, onToggle, reach: extra = 2, inserts = [], sockets = [],
     anchor = { q: 0, r: 0 },
   } = props;
   const chosen = new Set(cells.map(hexKey));
+  const fastened = new Set(inserts.map(hexKey));
   const open = new Set(sockets.map(hexKey));
   const anchorKey = hexKey(anchor);
 
@@ -132,7 +140,7 @@ export function FootprintEditor(props: FootprintEditorProps): JSX.Element {
         into. That overlap is the physical fact — the flange is wider than the
         hole, so it seats proud — and it is measured, not a drawing convention.
       */}
-      {showInserts && pts.filter(({ cell }) => chosen.has(hexKey(cell))).map(({ cell }) => (
+      {pts.filter(({ cell }) => fastened.has(hexKey(cell)) && chosen.has(hexKey(cell))).map(({ cell }) => (
         <polygon
           key={`insert-${hexKey(cell)}`}
           className="footprint__insert"

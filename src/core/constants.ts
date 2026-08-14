@@ -82,6 +82,34 @@ export const INSERT = {
 } as const;
 
 /**
+ * Where the lattice sits inside the wall rectangle.
+ *
+ * The wall's origin is its bottom-left CORNER — that is what a tape measure
+ * reads against. The lattice's origin is a cell CENTRE. Those are not the same
+ * point, and until this existed nothing said so: `hexToMm` put cell (0, 0)'s
+ * centre at (0, 0), so the plate's outline started at −13.63 mm and the whole
+ * honeycomb hung off the left-hand edge of the wall by half a cell, with the
+ * slack showing up as a gap on the right.
+ *
+ * `tiling.ts` had assumed this offset all along — `maxColumnIndex` counts
+ * columns from `ROW_STEP·q + MARGIN_X` and `maxRowsInBand` from
+ * `PITCH·shift + MARGIN_Y` — so the solver and the embedding disagreed by
+ * exactly this vector. Naming it puts the anchor in ONE place: `hexToMm` adds
+ * it, `mmToHex` takes it away, and every other module keeps working in whichever
+ * frame it already used, because a translation changes no relative geometry.
+ *
+ * **X only, and the asymmetry is the point.** In Y the solver can already land
+ * the outline on zero by choosing which row a band starts at: cell centres sit
+ * at `PITCH·(r + q/2)`, the stagger makes that any multiple of `PITCH/2`, and
+ * `MARGIN_Y` IS `PITCH/2` — so `r + q/2 = 0.5` hits it exactly. In X there is no
+ * such freedom: centres sit at `ROW_STEP·q`, and `ROW_STEP·q = MARGIN_X` has no
+ * integer solution, so the offset can only come from the anchor. Adding it to Y
+ * as well pushes every band half a pitch up and the top row off the wall — 8.6 mm
+ * over, measured on a 1200 × 900 wall with plates sized to a 256 bed.
+ */
+export const LATTICE_ANCHOR = { x: MARGIN_X, y: 0 } as const;
+
+/**
  * Diagonal neighbour distance. Slightly under PITCH because ROW_STEP is rounded.
  * Present so tests can assert it rather than rediscover it as a "bug".
  */

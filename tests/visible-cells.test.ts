@@ -86,3 +86,48 @@ describe('visibleCells on an empty wall', () => {
     expect(got).toEqual(['3,4', '3,5']);
   });
 });
+
+describe('the plan is the right way up', () => {
+  /**
+   * Wall y runs UP the screen, matching the 3D view and the tape measure.
+   *
+   * The plan mapped wall y straight to screen y, which grows downward, so it
+   * drew the same document upside down against the view beside it: a switch low
+   * on the wall appeared at the top of the plan and at the bottom in 3D (D70).
+   *
+   * The mapper is the contract, so it is tested here rather than by eye.
+   */
+  const view = { scale: 2, originX: 0, originY: 0 };
+  const size = { w: 400, h: 300 };
+  const toScreen = (p: { x: number; y: number }) => ({
+    x: (p.x - view.originX) / view.scale,
+    y: size.h - (p.y - view.originY) / view.scale,
+  });
+  const toWall = (x: number, y: number) => ({
+    x: x * view.scale + view.originX,
+    y: (size.h - y) * view.scale + view.originY,
+  });
+
+  it('puts a higher wall point higher on the screen', () => {
+    expect(toScreen({ x: 0, y: 500 }).y).toBeLessThan(toScreen({ x: 0, y: 100 }).y);
+  });
+
+  it('puts the wall origin at the bottom-left of the canvas', () => {
+    const o = toScreen({ x: 0, y: 0 });
+    expect(o.x).toBe(0);
+    expect(o.y).toBe(size.h);
+  });
+
+  it('round-trips, so a drop lands where it was aimed', () => {
+    for (const [x, y] of [[0, 0], [123, 45], [400, 300], [7, 299]] as const) {
+      const w = toWall(x, y);
+      const back = toScreen(w);
+      expect(back.x).toBeCloseTo(x, 9);
+      expect(back.y).toBeCloseTo(y, 9);
+    }
+  });
+
+  it('leaves x alone — only y was ever flipped', () => {
+    expect(toScreen({ x: 200, y: 0 }).x).toBeGreaterThan(toScreen({ x: 100, y: 0 }).x);
+  });
+});

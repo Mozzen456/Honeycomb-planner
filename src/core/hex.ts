@@ -10,7 +10,7 @@
  * so +q moves one cell right along a row and +r moves one row down-right.
  */
 
-import { PITCH, ROW_STEP, MARGIN_X, MARGIN_Y } from './constants';
+import { LATTICE_ANCHOR, PITCH, ROW_STEP, MARGIN_X, MARGIN_Y } from './constants';
 import type { Hex, Rotation } from './types';
 
 // ---------------------------------------------------------------------------
@@ -97,6 +97,24 @@ export function hexNeighbour(h: Hex, dir: number): Hex {
 
 export const hexNeighbours = (h: Hex): Hex[] => HEX_DIRECTIONS.map((d) => hexAdd(h, d));
 
+/**
+ * The two corners of `hexCorners` that bound the edge shared with neighbour
+ * `dir`: corners `dir` and `dir + 1`.
+ *
+ * A lattice fact, and one that has now been got wrong twice — once in
+ * `WallView3D`'s `unionOutline`, which drew edge k as corners k+1 → k+2 and
+ * turned the plate into a scatter of open wedges, and once in `WallCanvas`,
+ * which drew every part outline and every panel seam one edge round. It is
+ * FORCED by the corner angles: with corners at 0°, 60°, … the neighbour at
+ * `HEX_DIRECTIONS[0]` sits up and to the right, across the edge between corner 0
+ * and corner 1. Named here so nobody derives it a third time — the two off-by-one
+ * versions look entirely plausible on screen.
+ */
+export const edgeCorners = (dir: number): [number, number] => {
+  const d = ((Math.trunc(dir) % 6) + 6) % 6;
+  return [d, (d + 1) % 6];
+};
+
 // ---------------------------------------------------------------------------
 // Rotation
 // ---------------------------------------------------------------------------
@@ -153,8 +171,8 @@ export interface Point {
  * where the drawing says 170.32 × 177.
  */
 export const hexToMm = (h: Hex): Point => ({
-  x: ROW_STEP * h.q,
-  y: PITCH * (h.r + h.q / 2),
+  x: ROW_STEP * h.q + LATTICE_ANCHOR.x,
+  y: PITCH * (h.r + h.q / 2) + LATTICE_ANCHOR.y,
 });
 
 /**
@@ -165,8 +183,8 @@ export const hexToMm = (h: Hex): Point => ({
  * corners, which shows up as a drop landing one cell off.
  */
 export function mmToHex(p: Point): Hex {
-  const q = p.x / ROW_STEP;
-  const r = p.y / PITCH - q / 2;
+  const q = (p.x - LATTICE_ANCHOR.x) / ROW_STEP;
+  const r = (p.y - LATTICE_ANCHOR.y) / PITCH - q / 2;
   return hexRound(q, r);
 }
 
@@ -297,6 +315,40 @@ export function cellsBoundsMm(cells: readonly Hex[]): {
     if (p.y + MARGIN_Y > maxY) maxY = p.y + MARGIN_Y;
   }
   return { minX, minY, maxX, maxY };
+}
+
+/**
+ * Where to put a part's mesh so it lands on the cells it claims.
+ *
+ * The BOUNDING-BOX centre of the cells, and emphatically NOT their mean.
+ *
+ * `meshLibrary.orient` centres a part's geometry on its own wall-plane bounding
+ * box — `(min + max) / 2` on each axis. So the point in lattice space that the
+ * mesh's middle corresponds to is the middle of the cells' bounding box. Those
+ * two agree for a symmetric footprint and diverge for anything else: on the
+ * L-shaped `insert-hollow-tre` (cells (0,0), (0,1), (1,0)) the mean sits
+ * 3.406 mm to the left of the box centre, so the part was drawn 3.4 mm off the
+ * holes it goes into — on the wall, in the hover outline, and in the alignment
+ * dialog, all three having independently taken the mean.
+ *
+ * One function so they cannot drift apart again. The margins in
+ * `cellsBoundsMm` are equal on opposite sides and would cancel, so this
+ * computes from the centres directly and gets the same answer more cheaply.
+ */
+export function cellsCentreMm(cells: readonly Hex[]): { x: number; y: number } {
+  if (cells.length === 0) return { x: 0, y: 0 };
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const c of cells) {
+    const p = hexToMm(c);
+    if (p.x < minX) minX = p.x;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.y > maxY) maxY = p.y;
+  }
+  return { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
 }
 
 // ---------------------------------------------------------------------------

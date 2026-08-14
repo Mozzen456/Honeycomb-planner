@@ -38,6 +38,12 @@
   line-height: var(--line-height-tight);
 }
 
+/* The way into the library, and the rail's primary action while it is empty. */
+.catalog-panel__browse {
+  justify-content: center;
+  inline-size: 100%;
+}
+
 .catalog-panel__search {
   position: relative;
   display: grid;
@@ -110,6 +116,40 @@
   font-size: var(--font-size-xs);
   line-height: var(--line-height-relaxed);
   padding-block: var(--space-3);
+}
+
+/* -----------------------------------------------------------------------------
+   Empty project
+   -----------------------------------------------------------------------------
+   The rail starts empty now, so this is the first thing a new user reads in it.
+   It says what the rail is FOR and gives the one button that fills it — an
+   empty panel with a filter box above it says only that something is broken.
+   -------------------------------------------------------------------------- */
+
+.catalog-panel__start {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+  padding: var(--space-3) var(--space-1);
+}
+
+.catalog-panel__starttitle {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.catalog-panel__startbody,
+.catalog-panel__startnote {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-relaxed);
+}
+
+.catalog-panel__startnote {
+  margin-block-start: var(--space-2);
+  padding-block-start: var(--space-2);
+  border-block-start: var(--border-width-hair) solid var(--border-subtle);
 }
 
 /* -----------------------------------------------------------------------------
@@ -278,7 +318,14 @@
   letter-spacing: var(--letter-spacing-normal);
 }
 
-/* ---------- imported parts ---------- */
+/* A part you uploaded, marked on the tile itself. The library has room for the
+   word "Yours"; a 240 px rail has room for a dot. */
+.catalog-tile__mine {
+  margin-inline-start: var(--space-1);
+  color: var(--accent);
+}
+
+/* ---------- taking a part back out ---------- */
 
 .catalog-tile__remove {
   position: absolute;

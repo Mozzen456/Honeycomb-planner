@@ -16,6 +16,12 @@ coverage/
 __pycache__/
 *.pyc
 
+# Agent scratch. `.claude/worktrees/` holds live git worktrees for background
+# tasks — a whole second checkout of this repo, `.git` pointer and all — so
+# committing it would nest the repo inside itself. The config beside it
+# (launch.json, commands/) IS committed: it is project setup, not session state.
+.claude/worktrees/
+
 # OS noise
 .DS_Store
 Thumbs.db

@@ -111,6 +111,106 @@ export const panelKey = (p: { partId: string; origin: Hex }): string =>
   `${p.partId}@${p.origin.q},${p.origin.r}`;
 
 // ---------------------------------------------------------------------------
+// Plates the app sizes itself
+// ---------------------------------------------------------------------------
+
+/** Ids of plates generated to fit the printer, rather than taken from `models/`. */
+export const GENERATED_PREFIX = 'generated/';
+
+export const generatedSizeId = (columns: number, rows: number): string =>
+  `${GENERATED_PREFIX}${columns}x${rows}`;
+
+/**
+ * The printed size of a cell block, before any border.
+ *
+ * Derived from the lattice, and checked against the shipped plates: 8 × 7 gives
+ * 170.317 × 177.0, which is `wall-honeycomb-part` to four decimals, and 4 × 4
+ * gives 88.565 × 106.2, which is `wall-honeycomb-106x89-fixed`. Both are in
+ * `tests/plate-size.test.ts` — this is the arithmetic that decides whether a
+ * plate fits the bed, so it is held to the real files rather than to itself.
+ */
+export function plateFootprintMm(
+  columns: number,
+  rows: number,
+  borderMm = 0,
+): { widthMm: number; heightMm: number } {
+  return {
+    widthMm: (columns - 1) * ROW_STEP + 2 * MARGIN_X + 2 * borderMm,
+    heightMm: PITCH * (rows + 0.5) + 2 * borderMm,
+  };
+}
+
+/** The biggest block that fits a bed. Whole cells only — half a cell is no cell. */
+export function maxPlateForBed(
+  bed: Bed,
+  borderMm = 0,
+): { columns: number; rows: number } {
+  const usableW = bed.width - 2 * MARGIN_X - 2 * borderMm;
+  const usableH = bed.depth - 2 * borderMm;
+  const columns = Math.floor(usableW / ROW_STEP + EPS) + 1;
+  const rows = Math.floor(usableH / PITCH - 0.5 + EPS);
+  return { columns: Math.max(0, columns), rows: Math.max(0, rows) };
+}
+
+/**
+ * Every block size this printer can make, largest first.
+ *
+ * The whole grid up to the maximum, not just the maximum: the solver fills a
+ * wall greedily and needs the smaller sizes to finish the right-hand edge and
+ * the top band. Offering only the biggest plate leaves a strip of bare wall
+ * exactly one plate wide.
+ *
+ * Capped at `MAX_CANDIDATES` because the solver tries every variant at every
+ * position, and a 400 mm bed would otherwise offer 19 × 16 = 304 of them on
+ * every step of a garage wall. The cap drops the SMALLEST first — a 1 × 1 plate
+ * is a 23.6 mm chip nobody wants to print — so what survives is the useful end.
+ */
+const MAX_CANDIDATES = 120;
+
+/**
+ * What a bordered plate can carry beyond its own cells.
+ *
+ * The wall's edge is one continuous strip and the plates share it out, so the
+ * plate at a corner can end up owning a piece that reaches a full lattice step
+ * past its own block. Budgeted here rather than discovered at the printer:
+ * without it a bordered wall plans plates to exactly the bed and then three of
+ * them do not fit. Costs a column when a border is on, and nothing when it is
+ * not.
+ */
+const BORDER_OVERHANG_X = ROW_STEP;
+const BORDER_OVERHANG_Y = PITCH / 2;
+
+export function generatedPlateSizes(bedId: string, borderMm = 0): PanelSize[] {
+  const bed = BEDS.find((b) => b.id === bedId);
+  if (bed === undefined) return [];
+  const allowance = borderMm > 0
+    ? { width: BORDER_OVERHANG_X, depth: BORDER_OVERHANG_Y }
+    : { width: 0, depth: 0 };
+  const max = maxPlateForBed(
+    { ...bed, width: bed.width - allowance.width, depth: bed.depth - allowance.depth },
+    borderMm,
+  );
+  if (max.columns < 1 || max.rows < 1) return [];
+
+  const out: PanelSize[] = [];
+  for (let c = 1; c <= max.columns; c++) {
+    for (let r = 1; r <= max.rows; r++) {
+      const size = plateFootprintMm(c, r, borderMm);
+      out.push({
+        partId: generatedSizeId(c, r),
+        columns: c,
+        rows: r,
+        widthMm: size.widthMm + allowance.width,
+        heightMm: size.heightMm + allowance.depth,
+      });
+    }
+  }
+  out.sort((a, b) => b.columns * b.rows - a.columns * a.rows);
+  return out.slice(0, MAX_CANDIDATES);
+}
+
+
+// ---------------------------------------------------------------------------
 // Internals
 // ---------------------------------------------------------------------------
 

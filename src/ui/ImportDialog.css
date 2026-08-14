@@ -1,19 +1,16 @@
 /* The STL import review dialog. Tokens only — no colour, size or duration literals. */
 
-.import-scrim {
-  position: fixed;
-  inset: 0;
-  z-index: var(--z-modal);
-  display: grid;
-  place-items: center;
-  padding: var(--space-4);
-  background: var(--scrim);
-}
+/* The scrim is `.modal-scrim` in base.css. It used to carry its own copy of
+   that rule with an implicit `auto` track, which put this dialog's footer
+   295 px below a 480 px viewport — on a short window an import could be neither
+   finished nor cancelled, because `Cancel` and `Next` were both off screen. */
 
 .import {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  inline-size: min(60rem, 100%);
+  /* One column since the footprint editor moved to the alignment step, so the
+     dialog no longer needs to be two panels wide. */
+  inline-size: min(38rem, 100%);
   max-block-size: min(46rem, 100%);
   border: var(--border-width-hair) solid var(--border-subtle);
   border-radius: var(--radius-md);
@@ -33,6 +30,14 @@
   border-block-end: var(--border-width-hair) solid var(--border-subtle);
 }
 
+.import__step {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-2xs);
+  text-transform: uppercase;
+  letter-spacing: var(--letter-spacing-caps);
+  margin-block-end: var(--space-1);
+}
+
 .import__title {
   font-size: var(--font-size-lg);
   overflow-wrap: anywhere;
@@ -46,7 +51,7 @@
 
 .import__body {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-5);
   padding: var(--space-4) var(--space-5);
   overflow-y: auto;
@@ -73,6 +78,73 @@
   font-size: var(--font-size-xs);
   line-height: var(--line-height-relaxed);
   margin-block-end: var(--space-2);
+}
+
+/* --- the photograph ------------------------------------------------------ */
+
+.import__photo {
+  display: grid;
+  gap: var(--space-2);
+  margin-block-end: var(--space-2);
+}
+
+.import__photolabel {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.import__photorow {
+  display: grid;
+  grid-template-columns: 8rem minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+}
+
+.import__photoframe {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border: var(--border-width-hair) solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.import__photoframe img {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+}
+
+/* A photograph is cropped to fill the slot; a RENDER is framed on transparency
+   already, so cropping it would cut the part's own edges off. */
+.import__photoframe--render img {
+  object-fit: contain;
+}
+
+.import__photoactions {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+}
+
+/* A file input styled as a button: the native control cannot be, and a bare
+   one next to real buttons reads as a different kind of thing. */
+.import__photopick {
+  cursor: pointer;
+}
+
+.import__photopick input[type='file'] {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.import__photoerror {
+  color: var(--danger-fg);
+  font-size: var(--font-size-xs);
 }
 
 .import__facts {
@@ -104,22 +176,6 @@
   gap: var(--space-2);
 }
 
-.import__footprint {
-  display: grid;
-  align-content: start;
-  gap: var(--space-2);
-  min-inline-size: 0;
-}
-
-.import__footprint h3 {
-  font-size: var(--font-size-md);
-}
-
-.import__count {
-  color: var(--text-tertiary);
-  font-size: var(--font-size-xs);
-}
-
 .import__foot {
   display: flex;
   justify-content: flex-end;
@@ -128,6 +184,3 @@
   border-block-start: var(--border-width-hair) solid var(--border-subtle);
 }
 
-@media (max-width: 52rem) {
-  .import__body { grid-template-columns: minmax(0, 1fr); }
-}

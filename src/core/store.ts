@@ -14,6 +14,8 @@
 import { computeBom, itemCells, itemSocketCells, validate } from './bom';
 import { hexKey, hexRotate, panelCells, placedPanelCells, placeFootprint } from './hex';
 import { obstructedCells } from './obstacles';
+import { frameIsOn } from './panelModel';
+import { placementsOf, withPartAdded, withPartRemoved, withPartsAdded } from './projectParts';
 import { crossesSeam } from './tiling';
 import type {
   Bom,
@@ -24,6 +26,7 @@ import type {
   LayoutDoc,
   PlacedItem,
   Rotation,
+  WallFrame,
 } from './types';
 
 export interface Snapshot {
@@ -421,8 +424,9 @@ export class Store {
   }
 
   setPanels(panels: LayoutDoc['panels'], label = 'Lay out panels'): void {
+    const doc = this.current.doc;
     this.commit(label, {
-      doc: { ...this.current.doc, panels: cutAroundObstacles(panels, this.current.doc.obstacles) },
+      doc: { ...doc, panels: cutAroundObstacles(panels, doc.obstacles) },
       selection: this.current.selection,
     });
   }
@@ -434,14 +438,75 @@ export class Store {
    * take effect without pressing Solve again, or the wall on screen is a lie.
    */
   setObstacles(obstacles: LayoutDoc['obstacles'], label = 'Change obstacles'): void {
+    const doc = this.current.doc;
     this.commit(label, {
       doc: {
-        ...this.current.doc,
+        ...doc,
         obstacles,
-        panels: cutAroundObstacles(this.current.doc.panels, obstacles),
+        panels: cutAroundObstacles(doc.panels, obstacles),
       },
       selection: this.current.selection,
     });
+  }
+
+  /**
+   * Put an edge round the wall, or take it off.
+   *
+   * Does NOT re-cut the panels, and that is the point: this border is additive,
+   * so every cell stays where it was and anything already mounted stays mounted.
+   * The plates change shape — they are generated rather than stock now — but the
+   * layout on top of them is untouched.
+   */
+  setFrame(frame: WallFrame | undefined, label = 'Change border'): void {
+    const doc = this.current.doc;
+    const next: LayoutDoc = frameIsOn(frame)
+      ? { ...doc, frame: frame as WallFrame }
+      : (() => {
+          const { frame: _drop, ...rest } = doc;
+          return rest as LayoutDoc;
+        })();
+    this.commit(label, { doc: next, selection: this.current.selection });
+  }
+
+  // --- the project's parts --------------------------------------------------
+
+  /**
+   * Put parts in the project, so they appear in the rail.
+   *
+   * An undo step, unlike `setCatalog`: the catalogue is the shop and is not part
+   * of the document, but WHICH parts this wall is built from is a decision about
+   * this wall, and a decision you can take back. Adding what is already there
+   * commits nothing, so a double-click on Add does not cost an undo.
+   */
+  addToProject(partIds: readonly string[]): void {
+    const next = withPartsAdded(this.current.doc, partIds);
+    if (next === this.current.doc) return;
+    const added = (next.library ?? []).length - (this.current.doc.library ?? []).length;
+    this.commit(
+      added === 1 ? 'Add part to project' : `Add ${added} parts to project`,
+      { doc: next, selection: this.current.selection },
+    );
+  }
+
+  /**
+   * Take a part back out of the project.
+   *
+   * Refused while it is on the wall: `projectPartIds` unions the list with what
+   * is placed, so the rail would put it straight back and the click would look
+   * broken. Refusing with a count says what to do instead.
+   */
+  removeFromProject(partId: string): DropResult {
+    const placed = placementsOf(this.current.doc, partId);
+    if (placed > 0) {
+      return {
+        ok: false,
+        reason: `${placed} placement${placed === 1 ? '' : 's'} on the wall use${placed === 1 ? 's' : ''} that part — delete ${placed === 1 ? 'it' : 'them'} first`,
+      };
+    }
+    const next = withPartRemoved(this.current.doc, partId);
+    if (next === this.current.doc) return { ok: true };
+    this.commit('Remove part from project', { doc: next, selection: this.current.selection });
+    return { ok: true };
   }
 
   /**
@@ -506,7 +571,11 @@ export class Store {
     const item: PlacedItem = { id: newId('i'), partId, at, rotation };
     const items = [...this.current.doc.items, item];
     this.commit(`Place ${part.name}`, {
-      doc: { ...this.current.doc, items },
+      // Placing a part puts it in the project, so the rail keeps it after the
+      // placement is deleted. Dropping something straight onto the wall is a
+      // way of shopping for it — a shorter one than opening the library —
+      // and the two paths must not disagree about what the project uses.
+      doc: withPartAdded({ ...this.current.doc, items }, partId),
       selection: [item.id],
     });
     this.extendOccupancy(items, [item]);
@@ -731,9 +800,21 @@ export class Store {
 
 // ---------------------------------------------------------------------------
 
+/**
+ * What a wall dimension may be, in millimetres.
+ *
+ * Exported because the INPUT has to know the same range: a field that only
+ * commits in-range values is what lets you clear it and type a new number
+ * without the half-typed first digit collapsing the wall to its minimum. Two
+ * copies of this range and the field would silently refuse a size the store
+ * would have accepted.
+ */
+export const MIN_WALL_MM = 50;
+export const MAX_WALL_MM = 20000;
+
 function clampDim(v: number): number {
   if (!Number.isFinite(v)) return 100;
-  return Math.min(20000, Math.max(50, Math.round(v)));
+  return Math.min(MAX_WALL_MM, Math.max(MIN_WALL_MM, Math.round(v)));
 }
 
 /**
@@ -773,7 +854,11 @@ export function cutAroundObstacles(
   panels: readonly LayoutDoc['panels'][number][],
   obstacles: LayoutDoc['obstacles'],
 ): LayoutDoc['panels'] {
-  if (!obstacles || obstacles.length === 0) {
+  // Obstacles only. The BORDER cuts nothing — it adds material outside the
+  // honeycomb rather than slicing cells in half — so unlike the cut-based frame
+  // this replaced, it never touches `omit` and every cell stays mountable.
+  const noObstacles = !obstacles || obstacles.length === 0;
+  if (noObstacles) {
     return panels.map((p) => {
       if (p.omit === undefined) return p;
       const { omit: _drop, ...rest } = p;
@@ -784,14 +869,15 @@ export function cutAroundObstacles(
   for (const panel of panels) {
     const block = panelCells(panel.origin, panel.columns, panel.rows);
     const blocked = obstructedCells(obstacles, block);
-    if (blocked.size === 0) {
+    const cut = block.filter((c) => blocked.has(hexKey(c)));
+    if (cut.length === 0) {
       const { omit: _drop, ...rest } = panel;
       out.push(rest);
       continue;
     }
     // Every cell taken: there is no plate left to print here at all.
-    if (blocked.size >= block.length) continue;
-    out.push({ ...panel, omit: block.filter((c) => blocked.has(hexKey(c))) });
+    if (cut.length >= block.length) continue;
+    out.push({ ...panel, omit: cut });
   }
   return out;
 }

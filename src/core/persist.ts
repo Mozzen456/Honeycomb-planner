@@ -13,7 +13,11 @@
  */
 
 import { BEDS } from './constants';
-import type { Group, Hex, LayoutDoc, Obstacle, PlacedItem, PlacedPanel, Rotation, WallSpec } from './types';
+import { DEFAULT_BORDER_MM, MAX_BORDER_MM } from './honeycomb';
+import { MAX_PROJECT_PARTS } from './projectParts';
+import type {
+  Group, Hex, LayoutDoc, Obstacle, PlacedItem, PlacedPanel, Rotation, WallFrame, WallSpec, ZoneRect,
+} from './types';
 
 /** Schema version this build writes. Bumped whenever the document shape changes. */
 export const CURRENT_SCHEMA = 1;
@@ -35,6 +39,8 @@ const MAX_DECOMPRESSED_BYTES = 32 * 1024 * 1024;
 const MAX_DEPTH = 64;
 /** Longest name/id we keep. Beyond this the value is data smuggling, not a name. */
 const MAX_STRING = 4096;
+/** Rectangles in one zone. An L needs 2; a comb of 64 is not a light switch. */
+const MAX_ZONE_RECTS = 64;
 /** Sanity ceiling on collection sizes, so a hostile file cannot allocate forever. */
 const MAX_ARRAY = 200_000;
 
@@ -96,17 +102,44 @@ function canonicalDoc(doc: LayoutDoc): Record<string, unknown> {
       if (g.label !== undefined) out['label'] = g.label;
       return out;
     }),
+    // Same rule as `obstacles`: only when set, so a layout saved before frames
+    // existed round-trips to the bytes it always had.
+    ...(doc.frame
+      ? {
+          frame: {
+            left: doc.frame.left,
+            right: doc.frame.right,
+            bottom: doc.frame.bottom,
+            top: doc.frame.top,
+            holes: doc.frame.holes,
+            thicknessMm: doc.frame.thicknessMm,
+          },
+        }
+      : {}),
+    // The parts shopped for this wall. Same rule again: only when there are
+    // any, so a layout saved before the library existed round-trips unchanged.
+    ...(doc.library && doc.library.length > 0 ? { library: [...doc.library] } : {}),
     ...(doc.obstacles && doc.obstacles.length > 0
       ? {
-          obstacles: doc.obstacles.map((o) => ({
-            id: o.id,
-            label: o.label,
-            xMm: o.xMm,
-            yMm: o.yMm,
-            widthMm: o.widthMm,
-            heightMm: o.heightMm,
-            clearanceMm: o.clearanceMm,
-          })),
+          obstacles: doc.obstacles.map((o) => {
+            const out: Record<string, unknown> = {
+              id: o.id,
+              label: o.label,
+              xMm: o.xMm,
+              yMm: o.yMm,
+              widthMm: o.widthMm,
+              heightMm: o.heightMm,
+              clearanceMm: o.clearanceMm,
+            };
+            // Same absent-key rule as everywhere else: a plain rectangular zone
+            // must serialise to the bytes it always did.
+            if (o.shape && o.shape.length > 0) {
+              out['shape'] = o.shape.map((r) => ({
+                xMm: r.xMm, yMm: r.yMm, widthMm: r.widthMm, heightMm: r.heightMm,
+              }));
+            }
+            return out;
+          }),
         }
       : {}),
   };
@@ -589,6 +622,34 @@ export function migrate(raw: unknown): LoadResult {
       }
       errors.push(...local);
       const clearance = readCoordMm(o['clearanceMm'], `${where}.clearanceMm`, []) ?? 0;
+      /*
+       * A zone made of several rectangles. Read part by part, and a part that
+       * does not parse is DROPPED rather than taking the zone with it: the
+       * worst case is a zone missing one of its arms, which is visible on the
+       * plan, against a zone that vanished, which is not.
+       */
+      const shape: ZoneRect[] = [];
+      if (Array.isArray(o['shape'])) {
+        const raw = o['shape'] as unknown[];
+        for (let k = 0; k < raw.length && shape.length < MAX_ZONE_RECTS; k++) {
+          const part = raw[k];
+          if (!isPlainObject(part)) {
+            errors.push(`${where}.shape[${k}] is ${describe(part)}, not a rectangle; dropped.`);
+            continue;
+          }
+          const local: string[] = [];
+          const px = readCoordMm(part['xMm'], `${where}.shape[${k}].xMm`, local);
+          const py = readCoordMm(part['yMm'], `${where}.shape[${k}].yMm`, local);
+          const pw = readCoordMm(part['widthMm'], `${where}.shape[${k}].widthMm`, local);
+          const ph = readCoordMm(part['heightMm'], `${where}.shape[${k}].heightMm`, local);
+          if (px === null || py === null || pw === null || ph === null || pw <= 0 || ph <= 0) {
+            errors.push(...local);
+            errors.push(`${where}.shape[${k}] was dropped because it is not a usable rectangle.`);
+            continue;
+          }
+          shape.push({ xMm: px, yMm: py, widthMm: pw, heightMm: ph });
+        }
+      }
       obstacles.push({
         id: typeof o['id'] === 'string' && o['id'] !== '' ? (o['id'] as string) : `obstacle-${i}`,
         label: typeof o['label'] === 'string' ? (o['label'] as string) : 'Obstacle',
@@ -597,7 +658,73 @@ export function migrate(raw: unknown): LoadResult {
         widthMm: w,
         heightMm: h,
         clearanceMm: Math.max(0, clearance),
+        ...(shape.length > 0 ? { shape } : {}),
       });
+    }
+  }
+
+  // --- frame ----------------------------------------------------------------
+  // Read field by field, like everything else out of a stored document: a field
+  // nobody reads back is a setting that applies for one session and vanishes on
+  // reload, which is exactly how the chosen fastener was lost (D44).
+  let frame: WallFrame | undefined;
+  const rawFrame = value['frame'];
+  if (rawFrame !== undefined) {
+    if (!isPlainObject(rawFrame)) {
+      errors.push(`frame is ${describe(rawFrame)}, not a frame; dropped.`);
+    } else {
+      const side = (k: keyof WallFrame): boolean => {
+        const v = rawFrame[k];
+        if (typeof v === 'boolean') return v;
+        if (v !== undefined) errors.push(`frame.${k} is ${describe(v)}; treated as off.`);
+        return false;
+      };
+      // The thickness is a MEASUREMENT out of a stored document, so it goes
+      // through the same coordinate reader every other millimetre does — an
+      // edge 1e9 mm thick would swallow the wall.
+      const thickness = readCoordMm(rawFrame['thicknessMm'], 'frame.thicknessMm', errors);
+      const read: WallFrame = {
+        left: side('left'),
+        right: side('right'),
+        bottom: side('bottom'),
+        top: side('top'),
+        holes: side('holes'),
+        thicknessMm:
+          thickness !== null && thickness > 0 && thickness <= MAX_BORDER_MM
+            ? thickness
+            : DEFAULT_BORDER_MM,
+      };
+      // An edge on no side at all is no edge. Storing one would make an
+      // untouched document differ from its own reload.
+      if (read.left || read.right || read.bottom || read.top || read.holes) frame = read;
+    }
+  }
+
+  // --- library --------------------------------------------------------------
+  // The parts shopped for this wall. Read back field by field like everything
+  // else out of a stored document, and NOT reconciled against a catalogue: a
+  // layout naming an import you do not have is a fact about the layout, and
+  // dropping the id here would rewrite the document on the way through. The
+  // rail reports what it cannot resolve instead (see `resolveProjectParts`).
+  const library: string[] = [];
+  if (value['library'] !== undefined) {
+    const rawLibrary = readArray(value['library'], 'library', errors);
+    const seen = new Set<string>();
+    for (let i = 0; i < rawLibrary.length; i++) {
+      const id = readString(rawLibrary[i], `library[${i}]`, errors);
+      if (id === null || id === '') continue;
+      if (seen.has(id)) {
+        errors.push(`library[${i}] "${id}" is listed twice; kept once.`);
+        continue;
+      }
+      if (seen.size >= MAX_PROJECT_PARTS) {
+        errors.push(
+          `library lists more than ${MAX_PROJECT_PARTS} parts; the rest were dropped.`,
+        );
+        break;
+      }
+      seen.add(id);
+      library.push(id);
     }
   }
 
@@ -610,10 +737,12 @@ export function migrate(raw: unknown): LoadResult {
     panels,
     items,
     groups,
+    ...(library.length > 0 ? { library } : {}),
     // Only when there are any. An absent key must round-trip to an absent key,
     // or every layout saved before obstacles existed fails an equality check
     // against its own reload.
     ...(obstacles.length > 0 ? { obstacles } : {}),
+    ...(frame ? { frame } : {}),
   };
   return { doc, errors };
 }

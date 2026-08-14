@@ -1,20 +1,14 @@
 /* The align-all contact sheet. Tokens only — no colour, size or duration literals. */
 
-.align__scrim {
-  position: fixed;
-  inset: 0;
-  z-index: var(--z-modal);
-  /* Flex, not `grid` + `place-items: center`. With a grid the panel laid out
-     BELOW its own fixed parent — a 768 px box reporting `top: 1236` inside a
-     container spanning 0–900 — which is a grid sizing interaction not worth
-     unpicking when centring is the whole requirement. Flex centring of a single
-     child has no such ambiguity. */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-4);
-  background: var(--scrim);
-}
+/* The scrim is `.modal-scrim` in base.css.
+   This file used to centre with flex instead, under a comment saying the grid
+   version laid the panel out "BELOW its own fixed parent — a 768 px box
+   reporting top: 1236 inside a container spanning 0–900", and that the sizing
+   interaction was "not worth unpicking". It was worth unpicking: the same
+   mechanism went on to hide the whole parts library and then the import
+   dialog's footer. It is an implicit `auto` track sizing to max-content — see
+   the note in base.css — and a definite track fixes it at the cause, so this
+   panel can centre the same way as every other modal. */
 
 .align {
   display: grid;

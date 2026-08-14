@@ -224,7 +224,7 @@ export function AlignPanel(props: AlignPanelProps): JSX.Element {
   const confident = disputed.filter((r) => (r.peg?.confidence ?? 0) >= 0.9);
 
   return (
-    <div className="align__scrim" role="dialog" aria-modal="true" aria-label="Align parts">
+    <div className="modal-scrim align__scrim" role="dialog" aria-modal="true" aria-label="Align parts">
       <div className="align" ref={panelRef} tabIndex={-1} onKeyDown={onKeyDown}>
         <header className="align__head">
           <div>

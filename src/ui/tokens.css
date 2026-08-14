@@ -226,6 +226,25 @@
   --canvas-ghost-invalid:      var(--danger-fg);
   --canvas-ghost-invalid-fill: rgb(var(--danger-rgb) / 0.22);
 
+  /* --- Plan tools ---------------------------------------------------------
+     A blocked zone is a WARNING, not an error: it is a deliberate instruction
+     about the room, not a mistake, so it takes the amber rung rather than the
+     red one the invalid ghost uses. The clearance ring is the same hue at half
+     the strength, because it says "and a bit more" rather than a second thing.
+
+     A measurement is deliberately NOT the accent: the accent means selection,
+     and a tape laid across a selected part must not read as more selection.
+     Derived from --text-primary so it is legible on plate, cell and bare wall
+     alike — it crosses all three. */
+  --canvas-zone:           var(--warning-fg);
+  --canvas-zone-fill:      rgb(var(--warning-rgb) / 0.20);
+  --canvas-zone-clearance: rgb(var(--warning-rgb) / 0.45);
+  --canvas-measure:        var(--text-primary);
+  --canvas-measure-halo:   var(--surface-1);
+  /* The frame edge is material you will print, so it reads as plate, not as
+     annotation — the seam rung, which is the heaviest structural line. */
+  --canvas-frame:          var(--canvas-seam);
+
   /* --- Focus --------------------------------------------------------------
      One ring, everywhere, accent-coloured, drawn as an outline so it never
      changes layout and never gets clipped by overflow on a sibling. */

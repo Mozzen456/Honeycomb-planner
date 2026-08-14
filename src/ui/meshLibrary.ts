@@ -21,8 +21,10 @@
 import * as THREE from 'three';
 
 import { AXES, detect, type Detection } from '../core/detect';
+import { measureInsertSeat, type InsertSeat } from '../core/insertSeat';
+import { parseModelFile } from '../core/modelFile';
 import { mountingOf } from '../core/overrides';
-import { parseStl, type MeshData } from '../core/stl';
+import type { MeshData } from '../core/stl';
 import type { CatalogPart } from '../core/types';
 import { getModelBytes, isImported } from '../core/userCatalog';
 import { mountingMatrix } from './mountingTransform';
@@ -31,6 +33,15 @@ export interface PartMesh {
   geometry: THREE.BufferGeometry;
   /** Extent along the wall normal, after orientation. */
   depthMm: number;
+  /**
+   * How this part seats IN a cell rather than on the wall face, if it is an
+   * insert — its body length and how far its flange stands proud.
+   *
+   * Null for everything else, and for an insert whose geometry does not read as
+   * one (`measureInsertSeat` refuses rather than guesses). A caller with null
+   * has no choice but the old convention: mating face on the wall.
+   */
+  seat: InsertSeat | null;
 }
 
 const cache = new Map<string, Promise<PartMesh | null>>();
@@ -60,7 +71,10 @@ async function build(part: CatalogPart): Promise<PartMesh | null> {
   const bytes = await bytesFor(part);
   if (bytes === null) return null;
 
-  const mesh = parseStl(bytes);
+  // Whichever format the part arrived as. An imported 3MF is STORED as the
+  // original 3MF — converting it to STL on the way in would throw away the
+  // file the person actually chose — so it has to be read back as one here.
+  const { mesh } = await parseModelFile(part.file, bytes);
   // Re-detecting is what keeps the mesh and the footprint in step: the same
   // function that decided which cells this part covers decides which way up it
   // is drawn. The alternative — a second orientation rule here — is a second
@@ -102,6 +116,23 @@ async function build(part: CatalogPart): Promise<PartMesh | null> {
   }
 
   /*
+   * How an insert sits in its hole, measured BEFORE the correction below.
+   *
+   * An insert is the one part that does not seat on the wall face: its body
+   * goes into the throat and its flange rests on the front (HSW-SPEC §5). The
+   * split is measured off this very geometry, so a view can draw it where it
+   * actually goes instead of standing it 10 mm out in the room.
+   *
+   * Before, because the six seating numbers are a person's nudge ON TOP of
+   * where the part belongs. Measured after, a nudge would be folded into
+   * `bodyMm` and then cancelled by the same view that positions with it —
+   * moving the part would do nothing at all.
+   */
+  const seat = part.type === 'insert' || part.type === 'fastener'
+    ? measureInsertSeat(geometry.getAttribute('position').array as Float32Array)
+    : null;
+
+  /*
    * The seating correction, which is the one part that is not a detection: six
    * numbers a person set by eye in the inspector to put the part exactly where
    * it goes. Applied as ONE matrix from `mountingTransform`, which is also what
@@ -113,11 +144,11 @@ async function build(part: CatalogPart): Promise<PartMesh | null> {
    * chosen face, not of how far someone nudged it afterwards.
    */
   if (mounting) geometry.applyMatrix4(mountingMatrix(mounting));
-  return { geometry, depthMm: detection.projectionMm };
+  return { geometry, depthMm: detection.projectionMm, seat };
 }
 
 /**
- * The part's mesh in the STL's OWN coordinates, unoriented.
+ * The part's mesh in the FILE's own coordinates, unoriented.
  *
  * The inspector needs this rather than the oriented geometry: picking a
  * mounting face means naming an axis of the FILE, and mapping a click on an
@@ -132,7 +163,7 @@ export function loadRawMesh(part: CatalogPart): Promise<MeshData | null> {
   const existing = rawCache.get(part.id);
   if (existing !== undefined) return existing;
   const pending = bytesFor(part)
-    .then((bytes) => (bytes === null ? null : parseStl(bytes)))
+    .then(async (bytes) => (bytes === null ? null : (await parseModelFile(part.file, bytes)).mesh))
     .catch(() => null);
   rawCache.set(part.id, pending);
   return pending;
@@ -154,8 +185,12 @@ async function bytesFor(part: CatalogPart): Promise<ArrayBuffer | null> {
  * same convention the box placeholder used, so a part does not jump when its
  * real mesh finishes loading, and it is the only convention that behaves for a
  * tier-3 part, whose cells are a bound rather than a measurement.
+ *
+ * Exported for the tests, which measure the insert family in exactly the frame
+ * the app draws it in. Fetching is what a test cannot do here; the transform is
+ * not, and it is the transform that decides where a flange ends up.
  */
-function orient(mesh: MeshData, detection: Detection): THREE.BufferGeometry {
+export function orient(mesh: MeshData, detection: Detection): THREE.BufferGeometry {
   const axis = detection.wallFaceAxis === 'n/a' ? 'z' : detection.wallFaceAxis;
   const [ui, vi, wi] = AXES[axis];
   const spin = detection.drawnOrientation === 'flat';

@@ -26,14 +26,47 @@ export const OBSTACLE_PRESETS: readonly { label: string; widthMm: number; height
 
 export const DEFAULT_CLEARANCE_MM = 5;
 
-/** The obstacle's rectangle, grown by its clearance. */
+/**
+ * The rectangles a zone actually blocks, each grown by its clearance.
+ *
+ * ONE reader of `shape`, so a zone made of several rectangles cannot be cut one
+ * way by the honeycomb and clipped another way by the border. Every consumer —
+ * the cell cutter, the border's `keepClear`, the plan's drawing — goes through
+ * here, and a zone with no `shape` yields exactly the one rectangle it always
+ * did.
+ */
+export function obstacleRects(o: Obstacle): {
+  minX: number; minY: number; maxX: number; maxY: number;
+}[] {
+  const c = Number.isFinite(o.clearanceMm) ? Math.max(0, o.clearanceMm) : 0;
+  const parts = o.shape && o.shape.length > 0
+    ? o.shape
+    : [{ xMm: o.xMm, yMm: o.yMm, widthMm: o.widthMm, heightMm: o.heightMm }];
+  return parts.map((r) => {
+    const w = Math.max(0, r.widthMm);
+    const h = Math.max(0, r.heightMm);
+    return { minX: r.xMm - c, minY: r.yMm - c, maxX: r.xMm + w + c, maxY: r.yMm + h + c };
+  });
+}
+
+/**
+ * The zone's overall extent, grown by its clearance.
+ *
+ * The BOUNDING box of the whole shape. Right for "is this anywhere near", wrong
+ * for "is this blocked" once a zone is an L — the inside of the L is within the
+ * bounds and is not blocked — so anything deciding what to cut or clip must use
+ * `obstacleRects` instead.
+ */
 export function obstacleBounds(o: Obstacle): {
   minX: number; minY: number; maxX: number; maxY: number;
 } {
-  const c = Number.isFinite(o.clearanceMm) ? Math.max(0, o.clearanceMm) : 0;
-  const w = Math.max(0, o.widthMm);
-  const h = Math.max(0, o.heightMm);
-  return { minX: o.xMm - c, minY: o.yMm - c, maxX: o.xMm + w + c, maxY: o.yMm + h + c };
+  const rects = obstacleRects(o);
+  return {
+    minX: Math.min(...rects.map((r) => r.minX)),
+    minY: Math.min(...rects.map((r) => r.minY)),
+    maxX: Math.max(...rects.map((r) => r.maxX)),
+    maxY: Math.max(...rects.map((r) => r.maxY)),
+  };
 }
 
 /**
@@ -45,11 +78,13 @@ export function obstacleBounds(o: Obstacle): {
  * this is the real envelope rather than a circle around the middle.
  */
 export function cellClashes(cell: Hex, o: Obstacle): boolean {
-  const { minX, minY, maxX, maxY } = obstacleBounds(o);
   const p = hexToMm(cell);
-  return (
-    p.x + MARGIN_X > minX && p.x - MARGIN_X < maxX &&
-    p.y + MARGIN_Y > minY && p.y - MARGIN_Y < maxY
+  // ANY of the zone's rectangles, not its bounding box: the inside of an L is
+  // not blocked, and cutting it would take cells the user did not ask for.
+  return obstacleRects(o).some(
+    ({ minX, minY, maxX, maxY }) =>
+      p.x + MARGIN_X > minX && p.x - MARGIN_X < maxX &&
+      p.y + MARGIN_Y > minY && p.y - MARGIN_Y < maxY,
   );
 }
 
