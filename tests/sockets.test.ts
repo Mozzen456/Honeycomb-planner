@@ -192,7 +192,13 @@ describe('the parts list agrees with the drop', () => {
 describe('an accessory hung on a socket', () => {
   const socket = { q: 5, r: 3 };   // (1,-1) of the junction placed at (4,4)
 
-  /** A one-cell part that wants exactly one plain insert. */
+  /**
+   * A one-cell accessory that wants a plain insert — whichever one the corrected
+   * catalogue happens to offer. Every assertion below reads its count off the
+   * part rather than assuming one, because which part this is depends on the
+   * corrections: it was `countersunk-to-holee` (1 insert) until the catalogue
+   * was aligned and `box-without-screw` (3) came first.
+   */
   const hook = catalog.parts.find(
     (p) => p.type === 'accessory'
       && p.footprint.length === 1
@@ -292,8 +298,24 @@ describe('an accessory hung on a socket', () => {
    * the same size is not proof they do the same job.
    */
   it('deducts nothing where the equivalence has not been stated', () => {
+    /*
+     * The shipped corrections are spread in, and only the JUNCTION's entry is
+     * REPLACED — dropping its `socketProvides` while keeping its sockets, which
+     * is the whole subject of this test.
+     *
+     * Spreading them is not tidiness. `hook` is resolved against the fully
+     * corrected `catalog`, so a catalogue built from the junction alone gives
+     * that same part a different footprint, and the test then places a part it
+     * did not choose. It went unnoticed while no correction touched the hook:
+     * the first one-cell accessory wanting an `insert-empty` used to be
+     * `countersunk-to-holee`, which had no override at all. Aligning the
+     * catalogue made `box-without-screw` one cell, so it became the hook — and
+     * in the bare catalogue it is still the 3 cells the scanner measured, so it
+     * no longer fits where the test puts it.
+     */
     const quiet = applyOverrides(catalogJson as unknown as Catalog, {
       parts: {
+        ...(overridesJson as { parts: Record<string, unknown> }).parts,
         [JUNCTION]: { socketCells: [{ q: 0, r: 0 }, { q: 1, r: -1 }, { q: 2, r: -1 }] },
       },
     });

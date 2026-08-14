@@ -5,9 +5,51 @@
  "_applied_by": "src/core/overrides.ts (the app) and tools/scan.py (a rescan). Never written into catalog.json.",
  "_regenerate": "npx vitest run tests/mountpoints.test.ts",
  "parts": {
+  "20-micro-sd-card-holder": {
+   "mounting": {
+    "wallFaceAxis": "z",
+    "matingEnd": "high",
+    "spinSteps": 2,
+    "offsetMm": -9
+   },
+   "_note": "mounting face picked by hand"
+  },
+  "5-micro-sd-card-holder": {
+   "mounting": {
+    "wallFaceAxis": "z",
+    "matingEnd": "high",
+    "offsetMm": -7
+   },
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    }
+   ],
+   "requires": [],
+   "_note": "mounting picked by hand"
+  },
   "box": {
    "fastenersNeedReview": true,
-   "_note": "the mounting pegs could not be counted reliably; the catalogue orders 1 and that number is a guess, not a measurement"
+   "_note": "mounting picked by hand",
+   "mounting": {
+    "wallFaceAxis": "y",
+    "matingEnd": "high",
+    "spinSteps": 3,
+    "seat": "insert"
+   },
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    }
+   ],
+   "requires": [
+    {
+     "partId": "insert-m4",
+     "count": 1
+    }
+   ]
   },
   "box-and-usb-holder-cover": {
    "fastenersNeedReview": true,
@@ -17,28 +59,202 @@
      "count": 1
     }
    ],
-   "_note": "the mounting pegs could not be counted, and the catalogue ordered NONE - which cannot be right: a second-tier part hangs on the wall through an insert. Floored at one, and flagged: count the pegs on the model"
+   "_note": "mounting picked by hand",
+   "mounting": {
+    "wallFaceAxis": "z",
+    "matingEnd": "high",
+    "offsetMm": 26
+   },
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    }
+   ]
   },
   "box-without-screw": {
    "fastenersNeedReview": true,
-   "_note": "the mounting pegs could not be counted reliably; the catalogue orders 3 and that number is a guess, not a measurement"
+   "_note": "mounting picked by hand",
+   "mounting": {
+    "wallFaceAxis": "y",
+    "matingEnd": "high",
+    "spinSteps": 3,
+    "offsetMm": -7.5,
+    "offsetYMm": 13.5,
+    "seat": "insert"
+   },
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    }
+   ],
+   "socketCells": [
+    {
+     "q": 0,
+     "r": 0
+    }
+   ],
+   "requires": [
+    {
+     "partId": "insert-empty",
+     "count": 3
+    }
+   ]
   },
   "caliper-mount": {
+   "requires": [
+    {
+     "partId": "insert-with-m3",
+     "count": 1
+    }
+   ],
+   "_note": "mounting picked by hand",
+   "mounting": {
+    "wallFaceAxis": "z",
+    "matingEnd": "low",
+    "offsetMm": 0.5,
+    "offsetXMm": -4,
+    "offsetYMm": -3,
+    "seat": "insert"
+   },
+   "footprint": [
+    {
+     "q": 0,
+     "r": 1
+    }
+   ]
+  },
+  "countersunk-to-holee": {
+   "mounting": {
+    "wallFaceAxis": "z",
+    "matingEnd": "high",
+    "offsetMm": -10,
+    "seat": "insert"
+   },
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    }
+   ],
+   "socketCells": [
+    {
+     "q": 0,
+     "r": 0
+    }
+   ],
    "requires": [
     {
      "partId": "insert-empty",
      "count": 1
     }
    ],
-   "_note": "1 mounting boss(es) measured on the wall face (20 mm across corners); the catalogue ordered 0"
+   "_note": "mounting picked by hand"
   },
   "cover-contersunk": {
    "fastenersNeedReview": true,
    "_note": "the mounting pegs could not be counted reliably; the catalogue orders 1 and that number is a guess, not a measurement"
   },
+  "double-m4": {
+   "mounting": {
+    "wallFaceAxis": "z",
+    "matingEnd": "high",
+    "spinSteps": 10
+   },
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 1,
+     "r": -1
+    }
+   ],
+   "requires": [],
+   "_note": "mounting picked by hand"
+  },
+  "double-m5": {
+   "mounting": {
+    "wallFaceAxis": "z",
+    "matingEnd": "high",
+    "spinSteps": 10
+   },
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 1,
+     "r": -1
+    }
+   ],
+   "requires": [],
+   "_note": "mounting picked by hand"
+  },
+  "hexagon-countersung-and-hole": {
+   "mounting": {
+    "wallFaceAxis": "z",
+    "matingEnd": "high"
+   },
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 0,
+     "r": 1
+    }
+   ],
+   "requires": [],
+   "_note": "mounting picked by hand"
+  },
+  "hook-12mm-for-m3": {
+   "mounting": {
+    "wallFaceAxis": "y",
+    "matingEnd": "high",
+    "spinSteps": 3,
+    "offsetYMm": 2.5
+   },
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    }
+   ],
+   "requires": [
+    {
+     "partId": "insert-with-m3",
+     "count": 1
+    }
+   ],
+   "_note": "mounting picked by hand"
+  },
   "hook-25mm-for-m3": {
    "fastenersNeedReview": true,
-   "_note": "the mounting pegs could not be counted reliably; the catalogue orders 1 and that number is a guess, not a measurement"
+   "_note": "mounting picked by hand",
+   "mounting": {
+    "wallFaceAxis": "y",
+    "matingEnd": "high",
+    "spinSteps": 3,
+    "offsetYMm": 2.5,
+    "seat": "insert"
+   },
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    }
+   ],
+   "requires": [
+    {
+     "partId": "insert-with-m3",
+     "count": 1
+    }
+   ]
   },
   "hook-bottom": {
    "requires": [
@@ -47,7 +263,31 @@
      "count": 1
     }
    ],
-   "_note": "1 mounting boss(es) measured on the wall face (13.2 mm across corners); the catalogue ordered 0"
+   "_note": "mounting picked by hand",
+   "mounting": {
+    "wallFaceAxis": "x",
+    "matingEnd": "low",
+    "spinSteps": 10,
+    "spinDeg": 3,
+    "tiltXDeg": -25,
+    "tiltYDeg": -15,
+    "offsetMm": -6.5,
+    "offsetXMm": 4.5,
+    "offsetYMm": -7,
+    "seat": "insert"
+   },
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    }
+   ],
+   "socketCells": [
+    {
+     "q": 0,
+     "r": 0
+    }
+   ]
   },
   "hook-keyboard-bottom": {
    "requires": [
@@ -56,7 +296,29 @@
      "count": 1
     }
    ],
-   "_note": "1 mounting boss(es) measured on the wall face (22.5 mm across corners); the catalogue ordered 0"
+   "_note": "mounting picked by hand",
+   "mounting": {
+    "wallFaceAxis": "z",
+    "matingEnd": "high",
+    "spinSteps": 1,
+    "tiltXDeg": 30,
+    "tiltYDeg": -90,
+    "offsetXMm": 6,
+    "offsetYMm": 3.5,
+    "seat": "insert"
+   },
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    }
+   ],
+   "socketCells": [
+    {
+     "q": 0,
+     "r": 0
+    }
+   ]
   },
   "hook-keyboard-side": {
    "requires": [
@@ -65,7 +327,20 @@
      "count": 1
     }
    ],
-   "_note": "1 mounting boss(es) measured on the wall face (13.5 mm across corners); the catalogue ordered 0"
+   "_note": "mounting picked by hand",
+   "mounting": {
+    "wallFaceAxis": "x",
+    "matingEnd": "low",
+    "tiltYDeg": -60,
+    "offsetMm": 2,
+    "offsetXMm": 10
+   },
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    }
+   ]
   },
   "hook-side": {
    "requires": [
@@ -74,15 +349,89 @@
      "count": 2
     }
    ],
-   "_note": "2 mounting boss(es) measured on the wall face (16.7/16.2 mm across corners); the catalogue ordered 0"
+   "_note": "mounting picked by hand",
+   "mounting": {
+    "wallFaceAxis": "y",
+    "matingEnd": "low",
+    "spinSteps": 3,
+    "tiltYDeg": -30,
+    "offsetMm": -9.5,
+    "offsetXMm": 8.3,
+    "offsetYMm": 0.3,
+    "seat": "insert"
+   },
+   "footprint": [
+    {
+     "q": 0,
+     "r": 1
+    }
+   ],
+   "socketCells": [
+    {
+     "q": 0,
+     "r": 1
+    }
+   ]
   },
   "hook-to-empty": {
    "fastenersNeedReview": true,
-   "_note": "the mounting pegs could not be counted reliably; the catalogue orders 2 and that number is a guess, not a measurement"
+   "_note": "mounting picked by hand",
+   "mounting": {
+    "wallFaceAxis": "y",
+    "matingEnd": "low",
+    "spinSteps": 3,
+    "offsetMm": -10.5,
+    "offsetYMm": 4,
+    "seat": "insert"
+   },
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    }
+   ],
+   "socketCells": [
+    {
+     "q": 0,
+     "r": 0
+    }
+   ],
+   "requires": [
+    {
+     "partId": "insert-empty",
+     "count": 2
+    }
+   ]
   },
   "hook-to-empty-long": {
    "fastenersNeedReview": true,
-   "_note": "the mounting pegs could not be counted reliably; the catalogue orders 5 and that number is a guess, not a measurement"
+   "_note": "mounting picked by hand",
+   "mounting": {
+    "wallFaceAxis": "y",
+    "matingEnd": "low",
+    "spinSteps": 3,
+    "offsetMm": -10.5,
+    "offsetYMm": 4.5,
+    "seat": "insert"
+   },
+   "footprint": [
+    {
+     "q": 0,
+     "r": 1
+    }
+   ],
+   "socketCells": [
+    {
+     "q": 0,
+     "r": 1
+    }
+   ],
+   "requires": [
+    {
+     "partId": "insert-empty",
+     "count": 1
+    }
+   ]
   },
   "insert-cable-holder": {
    "requires": [
@@ -91,111 +440,58 @@
      "count": 1
     }
    ],
-   "_note": "1 mounting boss(es) measured on the wall face (25.2 mm across corners); the catalogue ordered 0"
-  },
-  "screw-holder": {
-   "fastenersNeedReview": true,
-   "_note": "the mounting pegs could not be counted reliably; the catalogue orders 1 and that number is a guess, not a measurement"
-  },
-  "sd-card-holder": {
-   "fastenersNeedReview": true,
-   "_note": "the mounting pegs could not be counted reliably; the catalogue orders 1 and that number is a guess, not a measurement"
-  },
-  "sd-card-holder-cover": {
-   "fastenersNeedReview": true,
-   "requires": [
+   "_note": "mounting picked by hand",
+   "mounting": {
+    "wallFaceAxis": "y",
+    "matingEnd": "high",
+    "spinSteps": 5,
+    "offsetMm": -10,
+    "seat": "insert"
+   },
+   "footprint": [
     {
-     "partId": "insert-empty",
-     "count": 1
+     "q": 0,
+     "r": 0
     }
    ],
-   "_note": "the mounting pegs could not be counted, and the catalogue ordered NONE - which cannot be right: a second-tier part hangs on the wall through an insert. Floored at one, and flagged: count the pegs on the model"
-  },
-  "sd-card-holder-without-screw": {
-   "fastenersNeedReview": true,
-   "_note": "the mounting pegs could not be counted reliably; the catalogue orders 3 and that number is a guess, not a measurement"
-  },
-  "shelf-1": {
-   "requires": [
-    {
-     "partId": "insert-empty",
-     "count": 2
-    }
-   ],
-   "_note": "2 mounting boss(es) measured on the wall face (15.6/15.8 mm across corners); the catalogue ordered 3"
-  },
-  "shelf-2": {
-   "requires": [
-    {
-     "partId": "insert-empty",
-     "count": 2
-    }
-   ],
-   "_note": "2 mounting boss(es) measured on the wall face (15.6/15.6 mm across corners); the catalogue ordered 5"
-  },
-  "shelf-3": {
-   "requires": [
-    {
-     "partId": "insert-empty",
-     "count": 2
-    }
-   ],
-   "_note": "2 mounting boss(es) measured on the wall face (15.6/15.8 mm across corners); the catalogue ordered 7"
-  },
-  "shelf-4": {
-   "requires": [
-    {
-     "partId": "insert-empty",
-     "count": 3
-    }
-   ],
-   "_note": "3 mounting boss(es) measured on the wall face (15.6/15.6/15.6 mm across corners); the catalogue ordered 9"
-  },
-  "usb-holder": {
-   "fastenersNeedReview": true,
-   "_note": "the mounting pegs could not be counted reliably; the catalogue orders 1 and that number is a guess, not a measurement"
-  },
-  "usb-holder-without-screw": {
-   "fastenersNeedReview": true,
-   "_note": "the mounting pegs could not be counted reliably; the catalogue orders 3 and that number is a guess, not a measurement"
-  },
-  "wranch-hoks-1": {
-   "fastenersNeedReview": true,
-   "requires": [
-    {
-     "partId": "insert-empty",
-     "count": 1
-    }
-   ],
-   "_note": "the mounting pegs could not be counted, and the catalogue ordered NONE - which cannot be right: a second-tier part hangs on the wall through an insert. Floored at one, and flagged: count the pegs on the model"
-  },
-  "wranch-hoks-2": {
-   "fastenersNeedReview": true,
-   "requires": [
-    {
-     "partId": "insert-empty",
-     "count": 1
-    }
-   ],
-   "_note": "the mounting pegs could not be counted, and the catalogue ordered NONE - which cannot be right: a second-tier part hangs on the wall through an insert. Floored at one, and flagged: count the pegs on the model"
-  },
-  "insert-for-countersunk-hole-3": {
    "socketCells": [
+    {
+     "q": 0,
+     "r": 0
+    }
+   ]
+  },
+  "insert-countersung-m3": {
+   "mounting": {
+    "wallFaceAxis": "z",
+    "matingEnd": "high"
+   },
+   "footprint": [
     {
      "q": 0,
      "r": 0
     },
     {
-     "q": 1,
-     "r": -1
-    },
-    {
-     "q": 2,
-     "r": -1
+     "q": 0,
+     "r": 1
     }
    ],
-   "_note": "three of its four cells are open hexagonal sockets, 13.2 mm across flats and 15.2 across corners - the standard 13.4 mm insert socket an accessory peg plugs into. The fourth cell (1,0) carries the 3.2 mm wall-screw bore. Measured on the mesh AS THE WALL DRAWS IT - oriented through the mating flip, positioned at the mean of its cells - and each hole's centroid put through mmToHex. Measuring the raw file instead swaps the middle two cells, because a 'high' mating end mirrors the mesh and toAxial does not mirror the footprint with it (PARKED P10); its three sockets are the same 13.2 mm hexagonal socket insert-empty provides, so a part hung on one does not need an insert-empty printed for it as well",
-   "socketProvides": "insert-empty"
+   "requires": [],
+   "_note": "mounting picked by hand"
+  },
+  "insert-countersunk": {
+   "mounting": {
+    "wallFaceAxis": "z",
+    "matingEnd": "high"
+   },
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    }
+   ],
+   "requires": [],
+   "_note": "mounting picked by hand"
   },
   "insert-countersunk-with-m3x3": {
    "socketCells": [
@@ -212,8 +508,86 @@
      "r": -1
     }
    ],
-   "_note": "three of its four cells carry a 3.0 mm M3 bore to bolt an accessory to; the fourth (1,0) carries the 3.2 mm wall-screw bore. Same measurement as insert-for-countersunk-hole-3, in the same frame, and the same three cells; its three cells carry M3 bores, which is what insert-with-m3 provides - and its own hardware already orders the three bolts and nuts",
-   "socketProvides": "insert-with-m3"
+   "_note": "mounting picked by hand",
+   "socketProvides": "insert-with-m3",
+   "mounting": {
+    "wallFaceAxis": "z",
+    "matingEnd": "high"
+   },
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 1,
+     "r": -1
+    },
+    {
+     "q": 1,
+     "r": 0
+    },
+    {
+     "q": 2,
+     "r": -1
+    }
+   ],
+   "requires": []
+  },
+  "insert-empty": {
+   "mounting": {
+    "wallFaceAxis": "z",
+    "matingEnd": "high"
+   },
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    }
+   ],
+   "requires": [],
+   "_note": "mounting picked by hand"
+  },
+  "insert-for-countersunk-hole-3": {
+   "socketCells": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 1,
+     "r": -1
+    },
+    {
+     "q": 2,
+     "r": -1
+    }
+   ],
+   "_note": "mounting picked by hand",
+   "socketProvides": "insert-empty",
+   "mounting": {
+    "wallFaceAxis": "z",
+    "matingEnd": "high"
+   },
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 1,
+     "r": -1
+    },
+    {
+     "q": 1,
+     "r": 0
+    },
+    {
+     "q": 2,
+     "r": -1
+    }
+   ],
+   "requires": []
   },
   "insert-hollow-dual": {
    "socketCells": [
@@ -226,26 +600,24 @@
      "r": -1
     }
    ],
-   "_note": "both cells are 13.2 mm across-flats hexagonal sockets, measured from the enclosed holes on the mating face; its sockets are the same hexagonal socket insert-empty provides",
-   "socketProvides": "insert-empty"
-  },
-  "insert-hollow-tre": {
-   "socketCells": [
+   "_note": "mounting picked by hand",
+   "socketProvides": "insert-empty",
+   "mounting": {
+    "wallFaceAxis": "z",
+    "matingEnd": "high",
+    "spinSteps": 10
+   },
+   "footprint": [
     {
      "q": 0,
      "r": 0
-    },
-    {
-     "q": 0,
-     "r": 1
     },
     {
      "q": 1,
-     "r": 0
+     "r": -1
     }
    ],
-   "_note": "all three cells are 13.2 mm across-flats hexagonal sockets, measured from the enclosed holes on the mating face; its sockets are the same hexagonal socket insert-empty provides",
-   "socketProvides": "insert-empty"
+   "requires": []
   },
   "insert-hollow-for": {
    "socketCells": [
@@ -266,8 +638,458 @@
      "r": 0
     }
    ],
-   "_note": "all four cells are 13.2 mm across-flats hexagonal sockets, measured from the enclosed holes on the mating face; its sockets are the same hexagonal socket insert-empty provides",
-   "socketProvides": "insert-empty"
+   "_note": "mounting picked by hand",
+   "socketProvides": "insert-empty",
+   "mounting": {
+    "wallFaceAxis": "z",
+    "matingEnd": "high",
+    "spinSteps": 2
+   },
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 0,
+     "r": 1
+    },
+    {
+     "q": 1,
+     "r": -1
+    },
+    {
+     "q": 1,
+     "r": 0
+    }
+   ],
+   "requires": []
+  },
+  "insert-hollow-tre": {
+   "socketCells": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 0,
+     "r": 1
+    },
+    {
+     "q": 1,
+     "r": 0
+    }
+   ],
+   "_note": "mounting picked by hand",
+   "socketProvides": "insert-empty",
+   "mounting": {
+    "wallFaceAxis": "z",
+    "matingEnd": "high"
+   },
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 0,
+     "r": 1
+    },
+    {
+     "q": 1,
+     "r": 0
+    }
+   ],
+   "requires": []
+  },
+  "insert-m4": {
+   "mounting": {
+    "wallFaceAxis": "z",
+    "matingEnd": "high"
+   },
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    }
+   ],
+   "requires": [],
+   "_note": "mounting picked by hand"
+  },
+  "insert-m5": {
+   "mounting": {
+    "wallFaceAxis": "z",
+    "matingEnd": "high"
+   },
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    }
+   ],
+   "requires": [],
+   "_note": "mounting picked by hand"
+  },
+  "insert-with-m3": {
+   "mounting": {
+    "wallFaceAxis": "z",
+    "matingEnd": "high",
+    "spinSteps": 2
+   },
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    }
+   ],
+   "requires": [],
+   "_note": "mounting picked by hand"
+  },
+  "insert-with-m3-dual": {
+   "mounting": {
+    "wallFaceAxis": "z",
+    "matingEnd": "high",
+    "spinSteps": 10
+   },
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 1,
+     "r": -1
+    }
+   ],
+   "requires": [],
+   "_note": "mounting picked by hand"
+  },
+  "screw-holder": {
+   "fastenersNeedReview": true,
+   "_note": "mounting picked by hand",
+   "mounting": {
+    "wallFaceAxis": "x",
+    "matingEnd": "low",
+    "tiltYDeg": 90,
+    "offsetMm": 16.5,
+    "offsetXMm": -14
+   },
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    }
+   ],
+   "requires": [
+    {
+     "partId": "insert-with-m3",
+     "count": 1
+    }
+   ]
+  },
+  "sd-card-holder": {
+   "fastenersNeedReview": true,
+   "_note": "mounting picked by hand",
+   "mounting": {
+    "wallFaceAxis": "y",
+    "matingEnd": "high",
+    "spinSteps": 3,
+    "offsetMm": -2.5,
+    "seat": "insert"
+   },
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    }
+   ],
+   "requires": [
+    {
+     "partId": "insert-with-m3",
+     "count": 1
+    }
+   ]
+  },
+  "sd-card-holder-cover": {
+   "fastenersNeedReview": true,
+   "requires": [
+    {
+     "partId": "insert-empty",
+     "count": 1
+    }
+   ],
+   "_note": "the mounting pegs could not be counted, and the catalogue ordered NONE - which cannot be right: a second-tier part hangs on the wall through an insert. Floored at one, and flagged: count the pegs on the model"
+  },
+  "sd-card-holder-without-screw": {
+   "fastenersNeedReview": true,
+   "_note": "mounting picked by hand",
+   "mounting": {
+    "wallFaceAxis": "y",
+    "matingEnd": "high",
+    "spinSteps": 3,
+    "offsetMm": -5.5,
+    "offsetYMm": 8.5
+   },
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    }
+   ],
+   "socketCells": [
+    {
+     "q": 0,
+     "r": 0
+    }
+   ],
+   "requires": [
+    {
+     "partId": "insert-empty",
+     "count": 3
+    }
+   ]
+  },
+  "shelf-1": {
+   "requires": [
+    {
+     "partId": "insert-empty",
+     "count": 2
+    }
+   ],
+   "_note": "mounting picked by hand",
+   "mounting": {
+    "wallFaceAxis": "y",
+    "matingEnd": "high",
+    "spinSteps": 3,
+    "offsetMm": -7.5,
+    "seat": "insert"
+   },
+   "footprint": [
+    {
+     "q": 1,
+     "r": -1
+    },
+    {
+     "q": -1,
+     "r": 0
+    }
+   ]
+  },
+  "shelf-2": {
+   "requires": [
+    {
+     "partId": "insert-empty",
+     "count": 2
+    }
+   ],
+   "_note": "mounting picked by hand",
+   "mounting": {
+    "wallFaceAxis": "y",
+    "matingEnd": "high",
+    "spinSteps": 3,
+    "offsetMm": -7,
+    "seat": "insert"
+   },
+   "footprint": [
+    {
+     "q": 3,
+     "r": -1
+    },
+    {
+     "q": -1,
+     "r": 1
+    }
+   ]
+  },
+  "shelf-3": {
+   "requires": [
+    {
+     "partId": "insert-empty",
+     "count": 2
+    }
+   ],
+   "_note": "mounting picked by hand",
+   "mounting": {
+    "wallFaceAxis": "y",
+    "matingEnd": "high",
+    "spinSteps": 3,
+    "offsetMm": -5,
+    "seat": "insert"
+   },
+   "footprint": [
+    {
+     "q": -2,
+     "r": 1
+    },
+    {
+     "q": 4,
+     "r": -2
+    }
+   ]
+  },
+  "shelf-4": {
+   "requires": [
+    {
+     "partId": "insert-empty",
+     "count": 3
+    }
+   ],
+   "_note": "mounting picked by hand",
+   "mounting": {
+    "wallFaceAxis": "y",
+    "matingEnd": "high",
+    "spinSteps": 3,
+    "offsetMm": -7,
+    "seat": "insert"
+   },
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    },
+    {
+     "q": 8,
+     "r": -4
+    },
+    {
+     "q": 4,
+     "r": -2
+    }
+   ],
+   "socketCells": [
+    {
+     "q": 8,
+     "r": -4
+    },
+    {
+     "q": 4,
+     "r": -2
+    },
+    {
+     "q": 0,
+     "r": 0
+    }
+   ]
+  },
+  "usb-holder": {
+   "fastenersNeedReview": true,
+   "_note": "mounting picked by hand",
+   "mounting": {
+    "wallFaceAxis": "y",
+    "matingEnd": "high",
+    "spinSteps": 3,
+    "seat": "insert"
+   },
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    }
+   ],
+   "socketCells": [
+    {
+     "q": 0,
+     "r": 0
+    }
+   ],
+   "requires": [
+    {
+     "partId": "insert-m4",
+     "count": 1
+    }
+   ]
+  },
+  "usb-holder-without-screw": {
+   "fastenersNeedReview": true,
+   "_note": "mounting picked by hand",
+   "mounting": {
+    "wallFaceAxis": "y",
+    "matingEnd": "high",
+    "spinSteps": 3,
+    "offsetMm": -7.5,
+    "offsetYMm": 13.5,
+    "seat": "insert"
+   },
+   "footprint": [
+    {
+     "q": 0,
+     "r": 0
+    }
+   ],
+   "socketCells": [
+    {
+     "q": 0,
+     "r": 0
+    }
+   ],
+   "requires": [
+    {
+     "partId": "insert-empty",
+     "count": 3
+    }
+   ]
+  },
+  "wranch-hoks-1": {
+   "fastenersNeedReview": true,
+   "requires": [
+    {
+     "partId": "insert-empty",
+     "count": 2
+    }
+   ],
+   "_note": "mounting picked by hand",
+   "mounting": {
+    "wallFaceAxis": "y",
+    "matingEnd": "high",
+    "spinSteps": 3,
+    "offsetMm": -7.5
+   },
+   "footprint": [
+    {
+     "q": 3,
+     "r": -1
+    },
+    {
+     "q": -5,
+     "r": 3
+    }
+   ]
+  },
+  "wranch-hoks-2": {
+   "fastenersNeedReview": true,
+   "requires": [
+    {
+     "partId": "insert-empty",
+     "count": 2
+    }
+   ],
+   "_note": "mounting picked by hand",
+   "mounting": {
+    "wallFaceAxis": "y",
+    "matingEnd": "high",
+    "spinSteps": 3,
+    "offsetMm": -7.5
+   },
+   "footprint": [
+    {
+     "q": 4,
+     "r": -2
+    },
+    {
+     "q": -4,
+     "r": 2
+    }
+   ],
+   "socketCells": [
+    {
+     "q": 4,
+     "r": -2
+    },
+    {
+     "q": -4,
+     "r": 2
+    }
+   ]
   }
  }
 }
