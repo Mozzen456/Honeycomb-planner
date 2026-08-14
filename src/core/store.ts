@@ -14,7 +14,7 @@
 import { computeBom, itemCells, itemSocketCells, validate } from './bom';
 import { hexKey, hexRotate, panelCells, placedPanelCells, placeFootprint } from './hex';
 import { obstructedCells } from './obstacles';
-import { frameIsOn } from './panelModel';
+import { borderCutCells, frameIsOn } from './panelModel';
 import { placementsOf, withPartAdded, withPartRemoved, withPartsAdded } from './projectParts';
 import { crossesSeam } from './tiling';
 import type {
@@ -426,7 +426,7 @@ export class Store {
   setPanels(panels: LayoutDoc['panels'], label = 'Lay out panels'): void {
     const doc = this.current.doc;
     this.commit(label, {
-      doc: { ...doc, panels: cutAroundObstacles(panels, doc.obstacles) },
+      doc: { ...doc, panels: cutAroundObstacles(panels, doc.obstacles, doc.frame) },
       selection: this.current.selection,
     });
   }
@@ -443,7 +443,7 @@ export class Store {
       doc: {
         ...doc,
         obstacles,
-        panels: cutAroundObstacles(doc.panels, obstacles),
+        panels: cutAroundObstacles(doc.panels, obstacles, doc.frame),
       },
       selection: this.current.selection,
     });
@@ -465,7 +465,12 @@ export class Store {
           const { frame: _drop, ...rest } = doc;
           return rest as LayoutDoc;
         })();
-    this.commit(label, { doc: next, selection: this.current.selection });
+    // The edge CUTS (D86), so changing it changes which cells the wall has.
+    // Re-cut here or the plates on screen keep a ring the plate no longer prints.
+    this.commit(label, {
+      doc: { ...next, panels: cutAroundObstacles(next.panels, next.obstacles, next.frame) },
+      selection: this.current.selection,
+    });
   }
 
   // --- the project's parts --------------------------------------------------
@@ -853,12 +858,21 @@ export function isExclusive(part: CatalogPart): boolean {
 export function cutAroundObstacles(
   panels: readonly LayoutDoc['panels'][number][],
   obstacles: LayoutDoc['obstacles'],
+  /**
+   * The wall's border, because it CUTS now (D86).
+   *
+   * It used to add material outside the honeycomb and take nothing, so it never
+   * touched `omit`. The edge is a straight cut through the outermost cells now —
+   * what the printed reference does — and a half cell is not somewhere to mount
+   * anything, so the ring has to leave the planner exactly the way a switch's
+   * cells do. Omitted, it re-cuts whenever the border is switched on, off or
+   * resized.
+   */
+  frame?: WallFrame,
 ): LayoutDoc['panels'] {
-  // Obstacles only. The BORDER cuts nothing — it adds material outside the
-  // honeycomb rather than slicing cells in half — so unlike the cut-based frame
-  // this replaced, it never touches `omit` and every cell stays mountable.
+  const edge = borderCutCells(panels, frame);
   const noObstacles = !obstacles || obstacles.length === 0;
-  if (noObstacles) {
+  if (noObstacles && edge.size === 0) {
     return panels.map((p) => {
       if (p.omit === undefined) return p;
       const { omit: _drop, ...rest } = p;
@@ -869,7 +883,7 @@ export function cutAroundObstacles(
   for (const panel of panels) {
     const block = panelCells(panel.origin, panel.columns, panel.rows);
     const blocked = obstructedCells(obstacles, block);
-    const cut = block.filter((c) => blocked.has(hexKey(c)));
+    const cut = block.filter((c) => blocked.has(hexKey(c)) || edge.has(hexKey(c)));
     if (cut.length === 0) {
       const { omit: _drop, ...rest } = panel;
       out.push(rest);

@@ -22,7 +22,7 @@ import { cellsBoundsMm, hexKey, hexToMm, panelCells } from '../src/core/hex';
 import { borderPolygons, buildHoneycombMesh, meshIsClosed, NO_FRAME } from '../src/core/honeycomb';
 import { cellClashes, obstacleBounds, obstacleRects, obstructedCells } from '../src/core/obstacles';
 import { moveZone, withZonePart, zoneHit, zoneParts } from '../src/core/measure';
-import { borderSpecFor } from '../src/core/panelModel';
+import { panelModelSpec } from '../src/core/panelModel';
 import { deserialize, serialize } from '../src/core/persist';
 import { emptyDoc } from '../src/core/store';
 import type { Hex, LayoutDoc, Obstacle } from '../src/core/types';
@@ -138,27 +138,61 @@ describe('the border keeps out of the shape', () => {
     return hits * step * step;
   }
 
-  /** A wall of one plate with the zone cut out of it, bordered all round. */
+  /**
+   * A wall of one plate with the zone cut out of it, bordered all round —
+   * through `panelModelSpec`, which is the way the app builds one.
+   *
+   * It matters that this is the real path and not a hand-assembled spec: the
+   * cells a zone eats are PRINTED, cut (D81), so the material nearest the
+   * aperture belongs to those cells and not to any border piece. Assembled by
+   * hand with the eaten cells simply dropped, the arm of an L is empty for the
+   * wrong reason and the test has no teeth.
+   */
   function walled(zone: Obstacle) {
     const all = panelCells({ q: 0, r: 0 }, 14, 12);
     const cut = obstructedCells([zone], all);
-    const cells = all.filter((c) => !cut.has(hexKey(c)));
-    const panel = { id: 'p0', partId: 'x', origin: { q: 0, r: 0 }, columns: 14, rows: 12 };
-    const border = borderSpecFor(
+    const panel = {
+      id: 'p0', partId: 'x', origin: { q: 0, r: 0 }, columns: 14, rows: 12,
+      omit: all.filter((c) => cut.has(hexKey(c))),
+    };
+    const spec = panelModelSpec(
+      panel,
       [panel],
       { left: true, right: true, bottom: true, top: true, holes: true, thicknessMm: 3.6 },
-      undefined,
       [zone],
-    )!;
-    return { cells, border, cut };
+    );
+    return { spec, cells: spec.cells, border: spec.border!, cut };
   }
 
   it('puts nothing inside either arm of an L', () => {
+    /*
+     * Measured on the MESH, because that is where the plate's material is. It
+     * used to be measured on the border polygons, which was right while a hole's
+     * edge was the border's job; it is the CUT CELL's now (D83), and the outside
+     * of the plate is a cut too (D86), so on a plate like this there are no
+     * border polygons left to measure and the old check passed by measuring
+     * nothing.
+     *
+     * The arm of an L is the case the bounding box gets wrong: block by the box
+     * and the hollow goes as well, clip by the box and material lands in the
+     * arm. Only `obstacleRects` gives the right answer, and this is where it
+     * shows.
+     */
     const zone = ell();
-    const { cells, border } = walled(zone);
-    const polys = borderPolygons(cells, border);
-    expect(polys.length).toBeGreaterThan(0);
-    for (const r of obstacleRects(zone)) expect(areaInside(polys, r)).toBe(0);
+    const { spec } = walled(zone);
+    const mesh = buildHoneycombMesh({ ...spec, originAtZero: false });
+    expect(spec.clipped.length).toBeGreaterThan(0);
+    const p = mesh.positions;
+    for (const r of obstacleRects(zone)) {
+      let inside = 0;
+      for (let i = 0; i < p.length; i += 3) {
+        if (
+          p[i]! > r.minX + 1e-6 && p[i]! < r.maxX - 1e-6 &&
+          p[i + 1]! > r.minY + 1e-6 && p[i + 1]! < r.maxY - 1e-6
+        ) inside++;
+      }
+      expect(inside).toBe(0);
+    }
   });
 
   it('still fills the hollow side of the L, which is honeycomb and not a hole', () => {
@@ -173,14 +207,14 @@ describe('the border keeps out of the shape', () => {
   });
 
   it('a plate cut round an L is still a closed mesh', () => {
-    const { cells, border } = walled(ell());
-    const mesh = buildHoneycombMesh({ cells, border, originAtZero: false });
+    const { spec } = walled(ell());
+    const mesh = buildHoneycombMesh({ ...spec, originAtZero: false });
     expect(meshIsClosed(mesh).unmatchedEdges).toBe(0);
   });
 
   it('and so is one cut round a plain rectangle', () => {
-    const { cells, border } = walled(plain({ xMm: 140, yMm: 140 }));
-    const mesh = buildHoneycombMesh({ cells, border, originAtZero: false });
+    const { spec } = walled(plain({ xMm: 140, yMm: 140 }));
+    const mesh = buildHoneycombMesh({ ...spec, originAtZero: false });
     expect(meshIsClosed(mesh).unmatchedEdges).toBe(0);
   });
 

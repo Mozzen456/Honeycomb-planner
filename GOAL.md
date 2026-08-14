@@ -579,3 +579,40 @@ must both come out that way, judged by looking at the running app.
   deleted rather than retuned — the border is bounded to the band in both arms of it now, so neither
   paves and the baseline had quietly become the subject. **964/964, typecheck and build clean**,
   mesh closed, corners square, verified on a square zone and an L in the 3D view.
+- 2026-08-14 — "why not just use the drawing of the blocked box as the model… and have the hexagon go
+  up to the squares". That is exactly it, and applied to the OUTSIDE of the plate it is the whole
+  fix (D87). **964/964, typecheck and build clean.**
+  **The measurement first, because there had never been one.** Every border test measured the
+  bounding BOX, which cannot tell a `t` rim from a `t` rim with a cell of solid behind it — so four
+  passes of wrong shapes had all been green. Sliced the plate and ran scanlines across the section:
+  the band between the plate's edge and the first opening measured **26.7 mm against a `MARGIN_X + t`
+  of 17.2**, on every plate size. That is a whole extra cell of plastic and it is what "the border
+  looks chunky" meant every time. `tests/plate-edge.test.ts` is that probe as an assertion; it was
+  checked against the old geometry first and fails it at 26.7.
+  Two things about the scanline, both of which cost a wrong answer first: anchor the lines ON CELL
+  CENTRES (a line on a hexagon's flat or through a corner registers no crossing, two runs merge, and
+  the band reads as most of the plate — 274 mm on a 12 × 11 when stepped blind from the bounding
+  box), and leave the CORNER cells out, where a scanline crosses both bands at once.
+  **The edge is a CUT now, on the outermost cell CENTRES**, with every bore clipped `t` inside it —
+  the same two-line rule that walls a blocked zone (D83), which is what the user asked for. The whole
+  phantom apparatus goes with it: no rail to attach, no scallop to fill, no corner class at all.
+  **The line has to be `bounds` and not `bounds ± t`, and that was the last thing to learn.** Both
+  give a `t` rim and both look right along a straight run. The honeycomb's silhouette only reaches
+  `bounds`, so at `bounds + t` the top came out scalloped `t` deep between columns and the sides
+  stepped in **12.1 mm at every corner**. On the line there is nothing left to invent: the plate's box
+  is now the cell-centre rectangle to 1e-9 on all four sides at every thickness from 0.4 to 6.8 mm,
+  and the rim is exactly `t` at its thinnest.
+  It costs the outer RING — open half hexagons, nothing mounts in one — which is D59's trade taken
+  the other way and is stated on the Frame panel rather than discovered at the printer.
+  **Three faults fell out, none in the new geometry.** The ring left the planner through `omit` and
+  never arrived at the printer: the generator only cut `clipped` cells against a ZONE, so with a
+  border and no zones every plate came out a whole ring short — watertight, and green, because every
+  geometry case builds its spec by hand and none goes through the store. The edge then WALKED inward,
+  because `assemblyIndex` read its bounds off the cells that survive `omit`, so each edit cut a ring
+  that had already gone. And the plan drew no edge at all, because `borderPolygons` has nothing to
+  say about a cut — `plateEdgeShapes` gives it the cut cells off the same planes the mesh uses.
+  Also: "cut round an obstacle" was being said about every bordered plate, since that reason fired on
+  `omit` being non-empty.
+  Verified in the running app on a 420 × 380 wall with a double socket through it: straight rim on
+  all four sides, straight aperture, honeycomb cut flush to both, and the plan and the 3D view
+  showing the same plate.

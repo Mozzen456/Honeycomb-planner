@@ -75,16 +75,32 @@ export function assemblyBlockCells(panels: readonly PlacedPanel[]): Hex[] {
 function assemblyIndex(panels: readonly PlacedPanel[]) {
   const occupied = new Set<string>();
   const ownerOf = new Map<string, string>();
-  const cells: Hex[] = [];
   for (const p of panels) {
     for (const c of placedPanelCells(p)) {
       const k = hexKey(c);
       occupied.add(k);
       ownerOf.set(k, p.id);
-      cells.push(c);
     }
   }
-  return { occupied, ownerOf, bounds: cellCentreBounds(cells) };
+  /*
+   * The BOUNDS come from the whole BLOCK, `omit` and all, while `occupied` comes
+   * from what survives it. The two answer different questions and conflating
+   * them is a runaway.
+   *
+   * `occupied` is "is this position filled", which is what decides a seam and
+   * where a hole's edge may grow — an omitted cell is empty for that purpose.
+   * `bounds` is "how far does the plate REACH", and since D86 it is the line the
+   * plate is cut ON. Taken from the surviving cells it moves inward the moment
+   * anything is omitted: switching a border on cuts the outer ring, the bounds
+   * follow that ring inward, and the next edit cuts a ring that has already
+   * gone. Measured, the plate came back one whole lattice step short on every
+   * bordered side, and would have lost another on every subsequent edit.
+   *
+   * A cell in `omit` still PRINTS — cut round a switch, or halved by the edge —
+   * so the plate genuinely reaches that far. The planner-versus-printer split
+   * (D56), landing inside one function.
+   */
+  return { occupied, ownerOf, bounds: cellCentreBounds(assemblyBlockCells(panels)) };
 }
 
 /**
@@ -198,6 +214,50 @@ function ownedBorder(
     }
   }
   return { sides: [...sides], holes };
+}
+
+/**
+ * The cells the plate's own EDGE cuts through (D86).
+ *
+ * The border is not added beyond the honeycomb any more — the honeycomb is cut
+ * off flat and the cut cells are left open, which is what `inner box.jpeg`
+ * shows. So the outermost column and row of the assembly come out as HALF
+ * CELLS, and nothing mounts in a half cell.
+ *
+ * They go into `omit` for the same reason a switch's cells do: the planner has
+ * to stop offering them while the plate goes on printing them, cut. That is the
+ * planner-versus-printer split this module owns (D56), and it is why this is
+ * here and not in the generator — the generator can cut a cell, but only the
+ * document can stop the app hanging a shelf on it.
+ *
+ * A cell is cut when its own centre lies ON the assembly's outer line, which is
+ * where the bores are cut. Nothing else comes close: the next column is
+ * `ROW_STEP` away and the next row half a `PITCH`, both further out than a
+ * mouth's own radius, so exactly one ring is affected however the block falls.
+ */
+export function borderCutCells(
+  panels: readonly PlacedPanel[],
+  frame: WallFrame | undefined,
+): Set<string> {
+  const out = new Set<string>();
+  if (!frameIsOn(frame) || frame === undefined) return out;
+  const index = assemblyIndex(panels);
+  const eps = 1e-6;
+  for (const p of panels) {
+    // The whole block, not `placedPanelCells`. `cutAroundObstacles` rebuilds
+    // `omit` from the block every time, so an answer read off the surviving
+    // cells is empty on the second call and the ring comes back.
+    for (const c of panelCells(p.origin, p.columns, p.rows)) {
+      const m = hexToMm(c);
+      if (
+        (frame.left && m.x <= index.bounds.minX + eps) ||
+        (frame.right && m.x >= index.bounds.maxX - eps) ||
+        (frame.bottom && m.y <= index.bounds.minY + eps) ||
+        (frame.top && m.y >= index.bounds.maxY - eps)
+      ) out.add(hexKey(c));
+    }
+  }
+  return out;
 }
 
 /**

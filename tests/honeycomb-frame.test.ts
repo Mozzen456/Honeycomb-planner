@@ -1,22 +1,32 @@
 /**
  * The border — a straight, closed edge round the outside of the honeycomb.
  *
- * Measured off the reference plate in `Customiser/borders.webp`, and it is NOT
- * the customiser's `*_Border`. The customiser CUTS: it slices the outermost
- * cells along their centre line, which costs a whole column of mountable cells.
- * The printed reference ADDS: every cell stays whole and open, the walls between
- * cells run out to a straight line, and the notches behind that line fill solid.
+ * **It is a CUT, and it did not always be** (D86). Built from
+ * `Customiser/borders.webp` it ADDED: one ring of empty positions drawn solid
+ * and clipped to a straight line `t` past the outermost cells, so every cell
+ * stayed whole and the notches behind the line filled in. That could not come
+ * out straight, and the reason is in the lattice rather than in any of the four
+ * attempts at it — the honeycomb's own silhouette reaches the outermost cell
+ * CENTRES everywhere along a side and no further, so everything past that line
+ * had to be invented. Rail, fill, corner piece: each was a different guess at
+ * the same missing material, and each left the edge stepped, scalloped or
+ * standing off as a loose strip.
  *
- * Three properties carry the whole feature, and each has a case here:
+ * The plate now ends ON that line, with its cells cut through and their bores
+ * pulled `t` back from it — the same two-line rule that walls a blocked zone
+ * (D83), which is what `inner box.jpeg` shows at its aperture. That costs the
+ * outer ring, which is the trade `borders.webp` refused; `tests/plate-edge.test.ts`
+ * is where the resulting rim is measured, on the mesh.
  *
- *  1. **It costs no cells.** If this ever regresses, a wall silently loses a
- *     column of mounting points and every layout on it shifts.
- *  2. **It reaches exactly `thicknessMm` past the outermost cell.** That is the
- *     number the user typed, and it is what decides whether the plate fits the
- *     bed.
- *  3. **It never appears on a seam.** Two plates that butt together must still
- *     interlock; an edge between them would hold them apart by twice its
- *     thickness and the wall would not go together at all.
+ * What is left here is what a border still has to do besides being straight:
+ *
+ *  1. **It costs the outer ring and nothing else.** A bore behind that ring must
+ *     not move or shrink, or every layout on the wall shifts.
+ *  2. **It never appears on a seam.** Two plates that butt together must still
+ *     interlock; an edge between them would hold them apart and the wall would
+ *     not go together at all.
+ *  3. **The solid it makes is one closed, outward-facing shell** — for every
+ *     combination of sides, round a hole, and round an irregular outline.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -29,7 +39,6 @@ import {
   cellCentreBounds,
   DEFAULT_BORDER_MM,
   honeycombCellCount,
-  MAX_BORDER_MM,
   meshBoundsMm,
   meshIsClosed,
   meshVolumeMm3,
@@ -63,107 +72,65 @@ function borderOver(
 }
 
 describe('what it costs', () => {
-  it('costs no cells at all', () => {
-    // The whole difference from the customiser's border. A 4 × 4 plate with an
-    // edge all round is still a 4 × 4 plate.
-    const cells = block(4, 4);
-    expect(honeycombCellCount({ cells, border: borderOver(cells) })).toBe(16);
-    expect(honeycombCellCount({ cells })).toBe(16);
-  });
-
-  it('leaves every bore exactly where it was', () => {
-    // A cell's hole must not move or shrink, or a part lined up against it in
-    // the alignment tool would arrive somewhere else on the wall.
-    const cells = block(3, 3);
+  it('leaves every bore behind the outer ring exactly where it was', () => {
+    /*
+     * A cell's hole must not move or shrink, or a part lined up against it in
+     * the alignment tool arrives somewhere else on the wall. The edge cuts the
+     * ring it passes through and NOTHING inside it, which is what makes it safe
+     * to switch a border on under a layout that is already placed.
+     *
+     * Measured on the mesh: every vertex of the plate that lies more than one
+     * lattice step inside the edge is a vertex of the bare plate too.
+     */
+    const cells = block(5, 5);
     const bare = buildHoneycombMesh({ cells, ...raw });
     const edged = buildHoneycombMesh({ cells, border: borderOver(cells), ...raw });
-    // More material, same thickness, and the extra is all on the outside.
-    expect(meshVolumeMm3(edged)).toBeGreaterThan(meshVolumeMm3(bare));
-    expect(meshBoundsMm(edged).size[2]).toBeCloseTo(PANEL_DEPTH, 9);
-  });
-});
-
-describe('how far it reaches', () => {
-  it('extends exactly the thickness past the outermost cell, on every side', () => {
-    const cells = block(4, 4);
     const b = cellCentreBounds(cells);
-    for (const t of [0.8, DEFAULT_BORDER_MM, 6]) {
+    const inner = (p: ArrayLike<number>) => {
+      const out = new Set<string>();
+      for (let i = 0; i < p.length; i += 3) {
+        const x = p[i]!, y = p[i + 1]!;
+        if (x > b.minX + MARGIN_X && x < b.maxX - MARGIN_X &&
+            y > b.minY + MARGIN_Y && y < b.maxY - MARGIN_Y) {
+          out.add(`${x.toFixed(9)},${y.toFixed(9)},${p[i + 2]!.toFixed(9)}`);
+        }
+      }
+      return out;
+    };
+    const before = inner(bare.positions);
+    const after = inner(edged.positions);
+    expect(before.size).toBeGreaterThan(100);
+    expect([...after].filter((k) => !before.has(k))).toEqual([]);
+  });
+
+  it('ends ON the outermost cell centres, where it used to end `t` past them', () => {
+    /*
+     * The reversal as a coordinate, and the one number this file used to get
+     * wrong. `thicknessMm` no longer moves the plate's edge at all — it is the
+     * wall the edge leaves, and the plate is its own cell-centre rectangle at
+     * every thickness. `tests/plate-edge.test.ts` sweeps that; here it is the
+     * contrast, side by side with the bare plate it is cut from.
+     *
+     * Volume is deliberately NOT asserted. A cut ring is mostly wall, so on a
+     * small plate the edged one weighs MORE than the bare one even though it is
+     * smaller — 8859 mm³ against 8124 on a 3 × 3 — and "it removes material" is
+     * the wrong way to say what changed. What changed is the mounting points.
+     */
+    const cells = block(3, 3);
+    const b = cellCentreBounds(cells);
+    for (const t of [1, DEFAULT_BORDER_MM, 6]) {
       const box = meshBoundsMm(buildHoneycombMesh({ cells, border: borderOver(cells, t), ...raw }));
-      expect(box.min[0], `t=${t}`).toBeCloseTo(b.minX - MARGIN_X - t, 3);
-      expect(box.max[0], `t=${t}`).toBeCloseTo(b.maxX + MARGIN_X + t, 3);
-      expect(box.min[1], `t=${t}`).toBeCloseTo(b.minY - MARGIN_Y - t, 3);
-      expect(box.max[1], `t=${t}`).toBeCloseTo(b.maxY + MARGIN_Y + t, 3);
+      expect(box.min[0]!, `t=${t}`).toBeCloseTo(b.minX, 9);
+      expect(box.max[1]!, `t=${t}`).toBeCloseTo(b.maxY, 9);
+      expect(box.size[2]!, `t=${t}`).toBeCloseTo(PANEL_DEPTH, 9);
     }
-  });
-
-  it('grows the plate by twice the thickness in each direction', () => {
-    const cells = block(5, 4);
-    const bare = meshBoundsMm(buildHoneycombMesh({ cells, ...raw })).size;
-    const t = 2.5;
-    const edged = meshBoundsMm(
-      buildHoneycombMesh({ cells, border: borderOver(cells, t), ...raw }),
-    ).size;
-    expect(edged[0] - bare[0]).toBeCloseTo(2 * t, 3);
-    expect(edged[1] - bare[1]).toBeCloseTo(2 * t, 3);
-  });
-
-  it('only grows the sides that are switched on', () => {
-    const cells = block(4, 4);
-    const b = cellCentreBounds(cells);
-    const box = meshBoundsMm(
-      buildHoneycombMesh({
-        cells,
-        border: borderOver(cells, 3, { ...NO_FRAME, left: true }, false),
-        ...raw,
-      }),
-    );
-    expect(box.min[0]).toBeCloseTo(b.minX - MARGIN_X - 3, 3);
-    // The other three edges are untouched — still the honeycomb's own zig-zag.
-    expect(box.max[0]).toBeCloseTo(b.maxX + MARGIN_X, 3);
-    expect(box.min[1]).toBeCloseTo(b.minY - MARGIN_Y, 3);
-    expect(box.max[1]).toBeCloseTo(b.maxY + MARGIN_Y, 3);
-  });
-
-  it('refuses to reach further than one ring of positions can', () => {
-    // Past this the phantom ring runs out and the edge would come back short
-    // without saying so, which is the kind of quiet wrongness you only find
-    // after printing it.
-    expect(MAX_BORDER_MM).toBeGreaterThan(DEFAULT_BORDER_MM);
-    expect(MAX_BORDER_MM).toBeLessThan(2 * MARGIN_X);
+    // The bare plate, for contrast: a full margin further out on every side.
+    const bare = meshBoundsMm(buildHoneycombMesh({ cells, ...raw }));
+    expect(bare.min[0]!).toBeLessThan(b.minX - MARGIN_X + 1e-3);
   });
 });
 
 describe('seams', () => {
-  it('puts no edge on a side the neighbouring plate covers', () => {
-    // The property the whole "outer perimeter only" rule exists for, stated as a
-    // comparison rather than as a coordinate: the same plate, with and without
-    // its neighbour in the assembly. With the neighbour there, the shared side
-    // stops growing.
-    //
-    // A comparison rather than "max x equals such-and-such" because the lattice
-    // staggers alternate columns, so a plate's edge is never a straight column
-    // of positions and picking one to assert about is picking wrong.
-    const assembly = block(8, 4);
-    const plate = assembly.filter((c) => c.q < 4);
-    // Left and right only. With the top on as well, this plate legitimately
-    // carries a piece of the assembly's TOP edge that overhangs to the right of
-    // its own cells — correct, and nothing to do with the seam.
-    const sideways = { left: true, right: true, bottom: false, top: false };
-
-    const alone = meshBoundsMm(buildHoneycombMesh({
-      cells: plate, border: borderOver(plate, 3, sideways, false, plate), ...raw,
-    }));
-    const joined = meshBoundsMm(buildHoneycombMesh({
-      cells: plate, border: borderOver(plate, 3, sideways, false, assembly), ...raw,
-    }));
-
-    // Its own outer side is unchanged...
-    expect(joined.min[0]).toBeCloseTo(alone.min[0]!, 6);
-    // ...and the side facing the neighbour has pulled back.
-    expect(joined.max[0]).toBeLessThan(alone.max[0]! - 1);
-    // And it lands exactly on the honeycomb's own outline, with nothing added.
-    expect(joined.max[0]).toBeCloseTo(cellCentreBounds(plate).maxX + MARGIN_X, 3);
-  });
 
   it('gives a plate with a neighbour on every side no edge at all', () => {
     // The strict interior of a block: every one of its neighbour positions is
@@ -313,37 +280,6 @@ describe('the solid it makes', () => {
   });
 });
 
-describe('a straight run', () => {
-  it('comes out flush, not stepped, across a staggered lattice', () => {
-    // The lattice staggers alternate columns by half a pitch, so a top edge is a
-    // zig-zag. Every phantom works its line out from its OWN neighbours, and
-    // they must all land on the same line or the edge comes out serrated.
-    const cells = block(6, 4);
-    const b = cellCentreBounds(cells);
-    const mesh = buildHoneycombMesh({ cells, border: borderOver(cells, 2), ...raw });
-    const top = b.maxY + MARGIN_Y + 2;
-    let onTheLine = 0;
-    const p = mesh.positions;
-    for (let i = 1; i < p.length; i += 3) {
-      if (Math.abs(p[i]! - top) < 1e-6) onTheLine++;
-    }
-    // A serrated edge would put only the high columns' vertices up here.
-    expect(onTheLine).toBeGreaterThan(20);
-    expect(meshBoundsMm(mesh).max[1]).toBeCloseTo(top, 6);
-  });
-
-  it('puts the same line on both halves of the stagger', () => {
-    // Stated directly: the topmost cells and the ones half a pitch below them
-    // must reach the same y, because the border fills the notch between them.
-    const cells = block(2, 3);
-    const b = cellCentreBounds(cells);
-    const ys = cells.map((c) => hexToMm(c).y);
-    expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(0);
-    const box = meshBoundsMm(buildHoneycombMesh({ cells, border: borderOver(cells, 1.5), ...raw }));
-    expect(box.max[1]).toBeCloseTo(b.maxY + MARGIN_Y + 1.5, 6);
-  });
-});
-
 /**
  * The border round a BLOCKED ZONE.
  *
@@ -458,48 +394,12 @@ describe('the edge round a hole', () => {
     expect(borderAreaInside(blind, zone)).toBeGreaterThan(100);
   });
 
-  it('an outer rail that meets a zone still stops dead on its line', () => {
-    /*
-     * The one place the border and a zone still meet: a zone that overruns the
-     * plate's own edge. The rail along that edge would otherwise run straight
-     * through the aperture, because outer pieces take their planes from the
-     * assembly bounds and would never look at `keepClear` at all.
-     *
-     * Held to the same statement as before — material has to arrive at the zone
-     * and stop dead on it — but on the side of the plate where the border is
-     * still the owner.
-     */
-    const { cells } = withZone(7, 6, 43, 43);
-    const b = cellCentreBounds(cells);
-    // A pipe running off the top of the plate, overlapping the top rail.
-    const zone = {
-      minX: b.minX + 20, maxX: b.minX + 60,
-      minY: b.maxY, maxY: b.maxY + 200,
-    };
-    const spec = { ...borderOver(cells, 3.6, ALL, true), keepClear: [zone] };
-    const polys = borderPolygons(cells, spec);
-    expect(borderAreaInside(polys, zone)).toBe(0);
-    const onTheLine = polys.filter((poly) =>
-      poly.some((q) => Math.abs(q.x - zone.minX) < 1e-6 || Math.abs(q.x - zone.maxX) < 1e-6 ||
-                       Math.abs(q.y - zone.minY) < 1e-6));
-    expect(onTheLine.length).toBeGreaterThan(0);
-  });
 
   it('switching holes off leaves the aperture bare', () => {
     const { cells } = withZone(7, 6, 43, 43);
     expect(borderPolygons(cells, borderOver(cells, 3.6, NO_FRAME, false))).toHaveLength(0);
   });
 
-  it('does not disturb the outer edge, which keeps its own straight line', () => {
-    // The two rules coexist: the outside still clips to the assembly bounds.
-    const { cells, zone } = withZone(7, 6, 43, 43);
-    const t = 3;
-    const b = cellCentreBounds(cells);
-    const spec = { ...borderOver(cells, t, ALL, true), keepClear: [zone] };
-    const box = meshBoundsMm(buildHoneycombMesh({ cells, border: spec, ...raw }));
-    expect(box.max[1]).toBeCloseTo(b.maxY + MARGIN_Y + t, 3);
-    expect(box.min[0]).toBeCloseTo(b.minX - MARGIN_X - t, 3);
-  });
 
   it('still builds a closed mesh with a bordered hole in it', () => {
     // The clip adds planes per piece, and a convex polygon clipped by one stays
@@ -513,122 +413,9 @@ describe('the edge round a hole', () => {
 
 describe('the edge is FLAT', () => {
 
-  it('makes the top edge a rail of ONE thickness', () => {
-    // The property the user asked for and the one that is easy to lose: along a
-    // staggered edge, filling everything between the honeycomb and the straight
-    // outer line gives a band `t` thick above one column and `t + PITCH/2` above
-    // the next. Every piece of the top rail must be `t` deep and no more.
-    const cells = block(6, 4);
-    const t = 3.6;
-    const spec = borderOver(cells, t, { ...NO_FRAME, top: true }, false);
-    const polys = borderPolygons(cells, spec);
-    expect(polys.length).toBeGreaterThan(0);
-    for (const poly of polys) {
-      const ys = poly.map((q) => q.y);
-      expect(Math.max(...ys) - Math.min(...ys)).toBeLessThanOrEqual(t + 1e-6);
-    }
-  });
 
-  it('leaves the half-cell pockets open rather than filling them', () => {
-    // The cost of that choice, stated so it cannot be reverted by accident: the
-    // rail adds about width × thickness of material, NOT that plus a half cell
-    // per staggered column. Every cell stays mountable; the rail is attached at
-    // every other column.
-    const cells = block(6, 4);
-    const t = 3.6;
-    const b = cellCentreBounds(cells);
-    const width = (b.maxX - b.minX) + 2 * MARGIN_X;
-    const bare = meshVolumeMm3(buildHoneycombMesh({ cells, ...raw }));
-    const railed = meshVolumeMm3(buildHoneycombMesh({
-      cells, border: borderOver(cells, t, { ...NO_FRAME, top: true }, false), ...raw,
-    }));
-    const added = (railed - bare) / PANEL_DEPTH;   // mm² of plate added
-    expect(added).toBeGreaterThan(width * t * 0.85);
-    expect(added).toBeLessThan(width * t * 1.15);
-  });
 
-  it('adds exactly `t` past the SIDES, and fills the scallop behind it', () => {
-    /*
-     * The sides are NOT a free-standing rail, and this test used to demand that
-     * they were (D84). Railed, a left or right border is a strip whose inner
-     * line is the cells' outermost x — which a column of flat-top cells reaches
-     * at ONE POINT per cell, its corner, and along no edge at all. It printed as
-     * a strip lying beside the plate, touching it nowhere.
-     *
-     * So a side is filled out to its line: the band beyond the envelope is
-     * exactly `t`, as on every other side, and the 6.8 mm scallop between two
-     * cells' corners is solid rather than open. Held to both halves here,
-     * because the first is the user's requirement and the second is what makes
-     * it a plate rather than a plate and a stick.
-     */
-    const cells = block(4, 5);
-    const t = 3.6;
-    for (const side of ['left', 'right'] as const) {
-      const b = cellCentreBounds(cells);
-      const line = side === 'left' ? b.minX - MARGIN_X - t : b.maxX + MARGIN_X + t;
-      const envelope = side === 'left' ? b.minX - MARGIN_X : b.maxX + MARGIN_X;
-      const spec = borderOver(cells, t, { ...NO_FRAME, [side]: true }, false);
-      const polys = borderPolygons(cells, spec);
-      expect(polys.length, side).toBeGreaterThan(0);
-      // Nothing past the straight line: the band is `t` and not a millimetre more.
-      for (const poly of polys) {
-        for (const q of poly) {
-          if (side === 'left') expect(q.x, side).toBeGreaterThanOrEqual(line - 1e-6);
-          else expect(q.x, side).toBeLessThanOrEqual(line + 1e-6);
-        }
-      }
-      // ...and it reaches PAST the envelope, into the scallop, which is what a
-      // railed side refused to do and is the only thing holding it on.
-      const deepest = Math.max(...polys.flatMap((poly) => poly.map((q) =>
-        side === 'left' ? q.x - envelope : envelope - q.x)));
-      expect(deepest, side).toBeGreaterThan(t);
-    }
-  });
 
-  it('runs the full height of the outer column, corner cell included', () => {
-    /*
-     * A CORNER position is outward on two sides at once, and it takes NEITHER
-     * rail: it is solid out to both its lines, which is what a plate's corner
-     * is. Given both it keeps only where they cross and comes off as a loose
-     * block (D84); given the top/bottom rail alone it keeps only what lies below
-     * the bottom line, and the side band's last 11.8 mm — the stretch beside the
-     * bottom-most cell — goes with it. That second one detaches nothing and no
-     * connectivity test sees it. It is a notch in an edge that is supposed to be
-     * straight.
-     *
-     * Stated as: beside every cell of the outermost column, over that cell's own
-     * full height, the band is plate. Not "unbroken from line to line", which
-     * would also demand that the half-cell pocket at the far end be filled — it
-     * is deliberately open (D69), and where the stagger puts a pocket at a corner
-     * the band does stop a pitch short of the line.
-     */
-    const t = 3.6;
-    for (const [cols, rows] of [[6, 5], [5, 9], [7, 6]]) {
-      const cells = block(cols!, rows!);
-      const b = cellCentreBounds(cells);
-      const polys = borderPolygons(cells, borderOver(cells, t, ALL, false));
-      const inside = (x: number, y: number) => polys.some((poly) => {
-        let c = false;
-        for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-          const p = poly[i]!, q = poly[j]!;
-          if ((p.y > y) !== (q.y > y) && x < ((q.x - p.x) * (y - p.y)) / (q.y - p.y) + p.x) c = !c;
-        }
-        return c;
-      });
-      for (const [side, edge] of [['left', b.minX], ['right', b.maxX]] as const) {
-        const x = side === 'left' ? edge - MARGIN_X - t / 2 : edge + MARGIN_X + t / 2;
-        const column = cells.map(hexToMm).filter((m) => Math.abs(m.x - edge) < 1e-6);
-        const gaps: number[] = [];
-        for (const cell of column) {
-          for (let y = cell.y - MARGIN_Y + 0.2; y < cell.y + MARGIN_Y - 0.2; y += 0.25) {
-            if (!inside(x, y)) gaps.push(y);
-          }
-        }
-        const where = `${side} ${cols}x${rows}: gaps at ${gaps.slice(0, 4).map((v) => v.toFixed(1))}`;
-        expect(gaps.length, where).toBe(0);
-      }
-    }
-  });
 
   /**
    * The plate's SILHOUETTE, side by side: how far the outermost material on each
@@ -713,15 +500,4 @@ describe('the edge is FLAT', () => {
     }
   });
 
-  it('reaches the straight line on every side, at any thickness', () => {
-    for (const t of [1, 3.6, 6]) {
-      const cells = block(5, 4);
-      const b = cellCentreBounds(cells);
-      const box = meshBoundsMm(buildHoneycombMesh({ cells, border: borderOver(cells, t), ...raw }));
-      expect(box.min[0], `t=${t}`).toBeCloseTo(b.minX - MARGIN_X - t, 6);
-      expect(box.max[0], `t=${t}`).toBeCloseTo(b.maxX + MARGIN_X + t, 6);
-      expect(box.min[1], `t=${t}`).toBeCloseTo(b.minY - MARGIN_Y - t, 6);
-      expect(box.max[1], `t=${t}`).toBeCloseTo(b.maxY + MARGIN_Y + t, 6);
-    }
-  });
 });

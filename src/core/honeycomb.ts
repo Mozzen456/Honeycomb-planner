@@ -382,6 +382,19 @@ function borderPieces(cells: readonly Hex[], border: BorderSpec): BorderPiece[] 
 
     const outward = outwardOf(p);
     /*
+     * The OUTSIDE of the plate is cut, not grown (D86), so nothing is raised
+     * beyond it. A position past the assembly's bounds would stand outside the
+     * plate's own straight edge — which is now `bounds ± t`, inside where these
+     * phantoms live.
+     *
+     * What is left for this walk is the case the cut cannot reach: a hole the
+     * plate goes round that belongs to no zone. A step, or the gap where a plate
+     * does not cover. Those have no straight line to be cut against, and the
+     * rail below is still how they get an edge.
+     */
+    if (outward.length > 0) continue;
+
+    /*
      * ALONG its own run, a band ends where the PLATE does, not where its own
      * neighbours do (D85).
      *
@@ -590,6 +603,79 @@ function borderPieces(cells: readonly Hex[], border: BorderSpec): BorderPiece[] 
 }
 
 /**
+ * The lines the plate's own EDGE is cut on, pulled `insetMm` further in (D86).
+ *
+ * The single definition of where a bordered plate stops. `buildHoneycombMesh`
+ * cuts the outlines at `insetMm = 0` and every bore at `insetMm = t`; the plan
+ * draws the same two sets through `plateEdgeShapes`. One rule, because the plan
+ * showing an edge the plate does not have is this repo's most repeated bug
+ * (D65, D66, D68).
+ *
+ * A side is skipped where the assembly is one cell wide across it: both cuts
+ * would land on the same line and take the whole plate. Better the un-cut
+ * outline than an empty file.
+ */
+function plateEdgePlanes(border: BorderSpec | undefined, insetMm: number): HalfPlane[] {
+  if (border === undefined) return [];
+  const out: HalfPlane[] = [];
+  const { bounds, sides } = border;
+  const wideX = bounds.maxX - bounds.minX > 1e-6;
+  const wideY = bounds.maxY - bounds.minY > 1e-6;
+  if (sides.left && (wideX || !sides.right)) {
+    out.push({ nx: -1, ny: 0, d: -(bounds.minX + insetMm) });
+  }
+  if (sides.right && (wideX || !sides.left)) {
+    out.push({ nx: 1, ny: 0, d: bounds.maxX - insetMm });
+  }
+  if (sides.bottom && (wideY || !sides.top)) {
+    out.push({ nx: 0, ny: -1, d: -(bounds.minY + insetMm) });
+  }
+  if (sides.top && (wideY || !sides.bottom)) {
+    out.push({ nx: 0, ny: 1, d: bounds.maxY - insetMm });
+  }
+  return out;
+}
+
+/**
+ * The cells the plate's edge cuts through, as the shapes they really print.
+ *
+ * `borderPolygons`' replacement for the outside of the plate, and it exists for
+ * the same reason: the plan has to draw what the plate will be, from the
+ * generator's own rule rather than from a second reading of it.
+ *
+ * Since D86 there is nothing added beyond the honeycomb to draw — the edge is a
+ * CUT, so the material at the rim belongs to the outermost cells themselves.
+ * Those cells are in `omit`, which is how they leave the PLANNER (nothing mounts
+ * in half a cell), so the plan cannot find them among the cells it draws and
+ * would show a plate a whole ring smaller than the one you download.
+ *
+ * `outline` is the cut hexagon and `bore` is what is left of its mouth, so a
+ * caller can fill one and punch the other and get the plate.
+ */
+export function plateEdgeShapes(
+  cells: readonly Hex[],
+  border: BorderSpec | undefined,
+): { outline: Point[]; bore: Point[] }[] {
+  const outlinePlanes = plateEdgePlanes(border, 0);
+  if (outlinePlanes.length === 0 || border === undefined) return [];
+  const borePlanes = plateEdgePlanes(border, Math.max(0, border.thicknessMm));
+  const corners = cornerPositions();
+  const out: { outline: Point[]; bore: Point[] }[] = [];
+  for (const c of dedupe(cells)) {
+    const full = corners.ringOf(c);
+    // Only the cells the lines actually pass through: everything inside is an
+    // ordinary cell and the plan already draws it.
+    const touched = full.some((p) =>
+      outlinePlanes.some((pl) => pl.nx * p.x + pl.ny * p.y - pl.d > SAME));
+    if (!touched) continue;
+    const outline = clipConvex(full, outlinePlanes);
+    if (outline.length < 3) continue;
+    out.push({ outline, bore: clipConvex(hexCorners(c, CELL.mouthAcrossFlats), borePlanes) });
+  }
+  return out;
+}
+
+/**
  * The border as flat shapes, in wall millimetres.
  *
  * For anything that has to DRAW the border rather than print it. It comes out of
@@ -729,7 +815,74 @@ export function buildHoneycombMesh(spec: HoneycombSpec): SolidMesh {
     minX: z.minX - railMm, maxX: z.maxX + railMm,
     minY: z.minY - railMm, maxY: z.maxY + railMm,
   }));
-  const clipCells = zoneRects.length > 0 ? (spec.clipped ?? []) : [];
+
+  /*
+   * The plate's EDGE, cut the way `inner box.jpeg` shows it (D86).
+   *
+   * The photograph is a plate round a light switch, and the same thing happens
+   * at its outside as at its aperture: the honeycomb is cut off flat, the cells
+   * it cuts are left OPEN as half-hexagons, and a thin even band closes them.
+   * There is no ring of whole cells at the edge and no scalloped fill behind the
+   * band — the border and the honeycomb are one piece of plastic with a straight
+   * line through it.
+   *
+   * So the outside is built exactly as the aperture is (D83), with the zone's
+   * complement replaced by the plate's own rectangle:
+   *
+   *   - the cells' OUTLINES are cut at `bounds`, the outermost cells' own centre
+   *     lines, which IS the plate's edge;
+   *   - every BORE is cut `t` inside that, so between the edge and the nearest
+   *     opening there is `t` of plate — the same rail the aperture gets.
+   *
+   * **The line has to be `bounds` and not `bounds ± t`, and that is the whole
+   * lesson of this pass.** Cut further out, the edge is not straight: the
+   * honeycomb's own silhouette reaches `bounds` everywhere along a side and no
+   * further, because the outermost COLUMN is half a pitch shorter than its
+   * neighbour and a column's cells meet at a flat that is `MARGIN_X − PITCH/2`
+   * short of their corners. Measured at `bounds + t`, the top came out scalloped
+   * `t` deep between columns and the sides stepped in 12.1 mm at every corner,
+   * where the side's own column has no cell that high. At `bounds` the union of
+   * the cells covers the line at every point on all four sides, so the cut is a
+   * straight edge with square corners and there is nothing left to fill.
+   *
+   * Cutting the bores `t` INSIDE rather than the outline `t` outside also fixes
+   * what neither rail could reach: the second column's top cell is half a pitch
+   * lower, so its bore came within 1.56 mm of the plate's line and no rail was
+   * involved. Every bore is cut against the same planes, so any hole that comes
+   * within `t` of the edge is trimmed by exactly the amount it overreached.
+   *
+   * `bounds` is cell CENTRES, so only the outermost column or row is touched at
+   * all; everything inside is untouched. This is what the whole phantom
+   * apparatus was for, and it replaces it: no rail to attach, no scallop to
+   * fill, no corner to square off, because there is nothing to attach — the band
+   * is the cut cell's own material, continuous with the plate by construction.
+   *
+   * It costs the outer ring, which is the trade D59 refused and the photograph
+   * makes: those cells are half-cells and nothing mounts in one.
+   */
+  const edgeT = Math.max(0, spec.border?.thicknessMm ?? 0);
+  const edgeOutline = plateEdgePlanes(spec.border, 0);
+  const edgeBore = plateEdgePlanes(spec.border, edgeT);
+
+  /*
+   * A cell handed over CUT is cut by everything that cuts it — the zones it
+   * meets and the plate's own lines, in the same clip.
+   *
+   * The two arrive by different routes and land in the same list. A zone puts a
+   * cell in `clipped` because a switch passes through it; the border puts the
+   * outermost ring there because the plate's edge halves it (D86). A cell can be
+   * both — a socket at the edge of the wall — and taking only one of the two cuts
+   * is a defect either way round: only the zone's, and the plate runs past its
+   * own straight edge; only the edge's, and there is plate inside the switch.
+   *
+   * With NEITHER there is nothing to cut against, and an eaten cell must stay
+   * out of the plate rather than be drawn whole — which is what a plate with no
+   * border and no zones has always been, and what stops the aperture filling
+   * solid.
+   */
+  const clipCells = zoneRects.length > 0 || edgeOutline.length > 0
+    ? (spec.clipped ?? [])
+    : [];
   /**
    * How a cell is cut back from the zones it meets.
    *
@@ -833,7 +986,9 @@ export function buildHoneycombMesh(spec: HoneycombSpec): SolidMesh {
     clippedKeys.add(key);
     const clip = clipPlanesFor(c);
     if (clip === null) continue;
-    const { planes } = clip;
+    // Both cuts, or this piece is wrong in one direction or the other.
+    const planes = [...clip.planes, ...edgeOutline];
+    if (planes.length === 0) continue;
     /*
      * The arm the corner case gives up, as a solid offcut under its own key.
      *
@@ -856,7 +1011,8 @@ export function buildHoneycombMesh(spec: HoneycombSpec): SolidMesh {
     if (outer.length < 3) continue;
     // The bore stops a rail short of where the outline reaches, which IS the
     // wall round the aperture. Never `planes`: that opens the bore onto it.
-    const bores = levels.map((lv) => clipConvex(hexCorners(c, lv.acrossFlats), clip.bore));
+    const boreCut = [...clip.bore, ...edgeBore];
+    const bores = levels.map((lv) => clipConvex(hexCorners(c, lv.acrossFlats), boreCut));
     /*
      * A cut bore is still a HOLE, however little of it is left (D86).
      *
@@ -881,10 +1037,10 @@ export function buildHoneycombMesh(spec: HoneycombSpec): SolidMesh {
     clippedInner.set(key, open ? bores : levels.map(() => [] as Point[]));
   }
 
-  // The border's phantom cells, drawn SOLID. They are pieces of the plate like
-  // any other, which is what keeps the mesh watertight across the join: a
-  // phantom's hexagon tiles with its neighbours' and shares their snapped
-  // corners, so the internal edges cancel exactly as they do between two cells.
+
+  // Border phantoms are only for a HOLE the plate goes round that no zone owns —
+  // a step, or a gap where a plate does not reach. The outside is cut, not
+  // grown, so a piece beyond the plate would stand outside its own edge.
   const border = (spec.border !== undefined && spec.border.thicknessMm >= 0
     ? borderPieces(cells, spec.border)
     : []
@@ -894,7 +1050,12 @@ export function buildHoneycombMesh(spec: HoneycombSpec): SolidMesh {
 
   /** Outer ring per piece. Constant in z — a border never tapers the outline. */
   const outerRings = new Map<string, Point[]>();
-  for (const c of cells) outerRings.set(hexKey(c), corners.ringOf(c));
+  for (const c of cells) {
+    const ring = edgeOutline.length > 0
+      ? clipConvex(corners.ringOf(c), edgeOutline)
+      : corners.ringOf(c);
+    if (ring.length >= 3) outerRings.set(hexKey(c), ring);
+  }
   for (const [key, ring] of clippedOuter) outerRings.set(key, ring);
   // Keyed per PIECE, not per position: a corner phantom is two halves of an L at
   // one position (D84), and keying on the cell alone silently kept the second.
@@ -909,7 +1070,16 @@ export function buildHoneycombMesh(spec: HoneycombSpec): SolidMesh {
    */
   const innerRings = new Map<string, Point[][]>();
   for (const c of cells) {
-    innerRings.set(hexKey(c), levels.map((lv) => hexCorners(c, lv.acrossFlats)));
+    if (!outerRings.has(hexKey(c))) continue;
+    const bores = levels.map((lv) => {
+      const ring = hexCorners(c, lv.acrossFlats);
+      return edgeBore.length > 0 ? clipConvex(ring, edgeBore) : ring;
+    });
+    // A bore the edge has cut to nothing is not a hole: that cell is entirely
+    // in the band and prints solid.
+    innerRings.set(hexKey(c), bores.every((r) => r.length >= 3)
+      ? bores
+      : levels.map(() => [] as Point[]));
   }
   for (const [key, rings] of clippedInner) innerRings.set(key, rings);
 

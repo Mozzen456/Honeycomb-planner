@@ -40,9 +40,9 @@ import {
   ZONE_HANDLES,
   type Snap,
 } from '../core/measure';
-import { borderSpecFor, frameIsOn, NO_WALL_FRAME } from '../core/panelModel';
+import { assemblyBlockCells, borderSpecFor, frameIsOn, NO_WALL_FRAME } from '../core/panelModel';
 import {
-  borderPolygons, DEFAULT_BORDER_MM, MAX_BORDER_MM, MIN_BORDER_MM,
+  borderPolygons, DEFAULT_BORDER_MM, MAX_BORDER_MM, MIN_BORDER_MM, plateEdgeShapes,
 } from '../core/honeycomb';
 import { MAX_WALL_MM } from '../core/store';
 import { NumberField } from './NumberField';
@@ -306,18 +306,29 @@ export function WallCanvas(props: WallCanvasProps) {
   }, [panelIndex]);
 
   /**
-   * The plate edges the border adds, as segments to draw.
+   * Where the plate's edge really is, as shapes to draw.
    *
-   * Derived the same way the generator derives them — an edge exists where the
-   * next lattice position is EMPTY — so the plan cannot show an edge the plate
-   * will not have. In particular a seam between two plates has no edge, because
-   * the position is taken.
+   * Both halves of it, from the generator's own rules so the plan cannot show an
+   * edge the plate will not have:
+   *
+   *  - `edges` — the outermost cells, CUT on the plate's own lines (D86). They
+   *    live in `omit` because nothing mounts in half a cell, so the plan draws
+   *    none of them and would show a plate a whole ring smaller than the file.
+   *    Fed the whole BLOCK for that reason, not the surviving cells.
+   *  - `border` — the pieces raised round a HOLE the plate goes round that no
+   *    zone owns: a step, or a gap where no plate reaches. All that is left of
+   *    the phantom walk now that the outside is cut rather than grown.
+   *
+   * A seam between two plates has neither, because the position is taken.
    */
-  const borderShapes = useMemo(() => {
+  const plateEdge = useMemo(() => {
     const spec = borderSpecFor(doc.panels, doc.frame, undefined, doc.obstacles);
-    if (!spec) return [];
-    return borderPolygons([...spec.occupied].map(keyToHex), spec);
-  }, [doc.panels, doc.frame]);
+    if (!spec) return { edges: [], border: [] };
+    return {
+      edges: plateEdgeShapes(assemblyBlockCells(doc.panels), spec),
+      border: borderPolygons([...spec.occupied].map(keyToHex), spec),
+    };
+  }, [doc.panels, doc.frame, doc.obstacles]);
 
   /**
    * A pointer position as a snapped wall point.
@@ -646,7 +657,7 @@ export function WallCanvas(props: WallCanvasProps) {
     // the two together is the whole point — a zone whose rectangle does not
     // line up with the missing hexagons is a zone in the wrong place.
     drawZones(ctx, doc, toScreen, C, zoneSel, tool);
-    drawBorder(ctx, borderShapes, toScreen, C);
+    drawBorder(ctx, plateEdge, toScreen, C);
 
     // 6. Marquee.
     if (marquee) {
@@ -713,7 +724,7 @@ export function WallCanvas(props: WallCanvasProps) {
   }, [
     doc, catalog, selection, drag, hover, marquee, invalidCells, placementValid,
     size, view, toScreen, toWall, panelIndex, partOf, seamEdges, themeTick,
-    tool, tape, sketch, zoneSel, cursor, borderShapes,
+    tool, tape, sketch, zoneSel, cursor, plateEdge,
   ]);
 
   // --- interaction --------------------------------------------------------
@@ -1759,22 +1770,33 @@ function drawZones(
  */
 function drawBorder(
   ctx: CanvasRenderingContext2D,
-  shapes: readonly (readonly Point[])[],
+  shapes: {
+    edges: readonly { outline: readonly Point[]; bore: readonly Point[] }[];
+    border: readonly (readonly Point[])[];
+  },
   toScreen: (p: Point) => Point,
   C: Palette,
 ): void {
-  if (shapes.length === 0) return;
+  if (shapes.edges.length === 0 && shapes.border.length === 0) return;
   const path = new Path2D();
-  for (const poly of shapes) {
+  const add = (poly: readonly Point[]): void => {
     for (let i = 0; i < poly.length; i++) {
       const q = toScreen(poly[i]!);
       if (i === 0) path.moveTo(q.x, q.y);
       else path.lineTo(q.x, q.y);
     }
     path.closePath();
+  };
+  for (const poly of shapes.border) add(poly);
+  // The cut cells: their outline, then what is left of their mouth punched out
+  // of it. Even-odd rather than a second fill, so a half hexagon reads as the
+  // open hole it is rather than as solid plate with a lid.
+  for (const e of shapes.edges) {
+    add(e.outline);
+    if (e.bore.length >= 3) add(e.bore);
   }
   ctx.fillStyle = C.panel;
-  ctx.fill(path);
+  ctx.fill(path, 'evenodd');
   // A hairline on the outside only, so the plate's edge stays findable against
   // the wall behind it at low zoom. The stroke follows the same shapes, so it
   // cannot describe a different edge from the fill.

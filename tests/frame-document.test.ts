@@ -15,11 +15,16 @@
 
 import { describe, expect, it } from 'vitest';
 
+import { MARGIN_X, MARGIN_Y } from '../src/core/constants';
+import { panelCells } from '../src/core/hex';
+
 import {
-  buildHoneycombMesh, DEFAULT_BORDER_MM, meshBoundsMm, meshIsClosed, meshVolumeMm3,
+  buildHoneycombMesh, cellCentreBounds, DEFAULT_BORDER_MM, meshBoundsMm, meshIsClosed,
+  meshVolumeMm3,
 } from '../src/core/honeycomb';
 import {
   frameIsOn, isGeneratedPanel, panelFrameKey, panelFrameSides, panelIsBordered, panelModelSpec,
+  panelModelSpecFor,
 } from '../src/core/panelModel';
 import { deserialize, serialize } from '../src/core/persist';
 import { cutAroundObstacles, emptyDoc, Store } from '../src/core/store';
@@ -42,15 +47,30 @@ const docWith = (panels: PlacedPanel[], frame?: WallFrame): LayoutDoc => ({
 });
 
 describe('what a border does to the cells', () => {
-  it('takes none of them', () => {
-    // The headline difference from the customiser's border, and the reason this
-    // replaced it: a bordered edge used to eat the whole first column.
-    const cut = cutAroundObstacles([panel()], []);
+  it('takes the outer ring, and nothing behind it', () => {
+    /*
+     * D59's headline claim, REVERSED by D86, which is why it is worth stating
+     * as the reversal. The border used to add material outside the honeycomb
+     * and cost no cells; the plate's edge is a straight cut through the
+     * outermost cells now — what the printed reference shows at its aperture,
+     * applied to the outside — so that one ring goes.
+     *
+     * The half cells still PRINT: they are the rim. They just stop being
+     * somewhere to mount anything, which is the split this module owns (D56).
+     */
+    const cut = cutAroundObstacles([panel()], [], LEFT);
     expect(cut.length).toBe(1);
-    expect(cut[0]!.omit).toBeUndefined();
+    expect(cut[0]!.omit).toHaveLength(4);        // the left column, and only it
     const spec = panelModelSpec(cut[0]!, [cut[0]!], LEFT);
-    expect(spec.cells.length).toBe(16);
+    expect(spec.cells.length).toBe(12);          // what the planner sees...
+    expect(spec.clipped.length).toBe(4);         // ...and what the plate prints
     expect(spec.border).toBeDefined();
+  });
+
+  it('takes none of them with no border switched on', () => {
+    const cut = cutAroundObstacles([panel()], [], undefined);
+    expect(cut[0]!.omit).toBeUndefined();
+    expect(panelModelSpec(cut[0]!, [cut[0]!], undefined).cells.length).toBe(16);
   });
 
   it('leaves a plate alone when nothing is switched on', () => {
@@ -74,16 +94,76 @@ describe('what a border does to the cells', () => {
 });
 
 describe('the store', () => {
-  it('never re-cuts the panels, because the border costs no cells', () => {
-    // Switching a border on must not move anything already mounted on the wall.
+  it('re-cuts the panels, because switching an edge on changes which cells exist', () => {
+    /*
+     * The plumbing D86 needed and the reason it goes through the same call a
+     * blocked zone does. An edge CUTS now, so the ring it halves has to leave
+     * the planner the moment it is switched on — and come back the moment it is
+     * switched off, or a plate keeps a hole in its parts list for a cell it no
+     * longer has.
+     */
     const store = new Store(docWith([panel()]), catalog);
     expect(store.getState().doc.panels[0]!.omit).toBeUndefined();
     store.setFrame(LEFT);
     expect(store.getState().doc.frame).toEqual(LEFT);
-    expect(store.getState().doc.panels[0]!.omit).toBeUndefined();
+    expect(store.getState().doc.panels[0]!.omit).toHaveLength(4);
     store.setFrame(undefined);
     expect(store.getState().doc.frame).toBeUndefined();
     expect(store.getState().doc.panels[0]!.omit).toBeUndefined();
+  });
+
+  it('PRINTS the ring it took from the planner', () => {
+    /*
+     * The one that was missed, and the shape of it is worth keeping.
+     *
+     * `omit` is how a cut cell leaves the planner, and `panelModelSpec` hands
+     * the omitted cells to the generator as `clipped` — which the generator only
+     * ever cut against a ZONE. So with a border and no zones there was nothing
+     * to clip them against and they were dropped: every plate came out with its
+     * outermost ring simply MISSING, a whole cell short on each bordered side.
+     * Still watertight, still passing every geometry case in the suite, because
+     * every one of those builds a spec by hand and none of them goes through
+     * the store.
+     *
+     * A cut cell is now cut by everything that cuts it — the zones it meets and
+     * the plate's own lines — so the two routes into `clipped` compose instead
+     * of one silently cancelling the other.
+     */
+    const store = new Store(docWith([panel({ columns: 5, rows: 5 })]), catalog);
+    store.setFrame(ALL);
+    const doc = store.getState().doc;
+    const placed = doc.panels[0]!;
+    const spec = panelModelSpecFor(placed, doc);
+    expect(spec.clipped.length).toBeGreaterThan(0);
+
+    const mesh = buildHoneycombMesh({ ...spec, originAtZero: false });
+    expect(meshIsClosed(mesh).unmatchedEdges).toBe(0);
+    // The plate reaches its own outermost cell centres on all four sides. Drop
+    // the ring and it stops a whole lattice step short of every one of them.
+    const b = cellCentreBounds(panelCells(placed.origin, placed.columns, placed.rows));
+    const box = meshBoundsMm(mesh);
+    expect(box.min[0]!).toBeCloseTo(b.minX, 9);
+    expect(box.max[0]!).toBeCloseTo(b.maxX, 9);
+    expect(box.min[1]!).toBeCloseTo(b.minY, 9);
+    expect(box.max[1]!).toBeCloseTo(b.maxY, 9);
+  });
+
+  it('does not eat another ring every time anything else changes', () => {
+    /*
+     * The runaway underneath the same fault. `omit` is rebuilt from the whole
+     * block on every edit and the ring is chosen against the assembly's bounds
+     * — so bounds read off the cells that SURVIVE `omit` walk inward one lattice
+     * step per edit. Three edits and a plate is three rings short, with nothing
+     * on screen to say why.
+     */
+    const store = new Store(docWith([panel({ columns: 6, rows: 6 })]), catalog);
+    store.setFrame(ALL);
+    const ring = store.getState().doc.panels[0]!.omit!.length;
+    expect(ring).toBeGreaterThan(0);
+    store.setObstacles([]);
+    store.setFrame(ALL);
+    store.setObstacles([]);
+    expect(store.getState().doc.panels[0]!.omit!.length).toBe(ring);
   });
 
   it('is undoable like every other command', () => {
@@ -205,13 +285,25 @@ describe('a bordered plate is never the shipped file', () => {
     expect(panelIsBordered(p, [p], undefined)).toBe(false);
   });
 
-  it('is a bigger plate than the stock one, which is how you would notice', () => {
+  it('is a SMALLER plate than the stock one, which is how you would notice', () => {
+    /*
+     * It used to be bigger: the border added `t` past the honeycomb on every
+     * side. The edge is a cut now (D86), so a bordered plate ends on its
+     * outermost cell CENTRES — it loses a margin each side and gains nothing,
+     * whatever `t` is. Stated as the margin rather than as "smaller", because
+     * "smaller" alone would also be true of a plate that had simply lost cells.
+     *
+     * To three decimals: a bare plate's outermost corners are SNAPPED, so its
+     * box is 0.0003 mm inside the ideal (D4). The edged plate's is exact — its
+     * edge is a clip plane, not a corner — and `plate-edge.test.ts` holds it to
+     * 1e-9 there.
+     */
     const p = panel();
     const bare = panelModelSpec(p, [p], undefined);
     const edged = panelModelSpec(p, [p], ALL);
     const a = meshBoundsMm(buildHoneycombMesh({ cells: bare.cells, border: bare.border }));
     const b = meshBoundsMm(buildHoneycombMesh({ cells: edged.cells, border: edged.border }));
-    expect(b.size[0]!).toBeGreaterThan(a.size[0]!);
-    expect(b.size[1]!).toBeGreaterThan(a.size[1]!);
+    expect(b.size[0]!).toBeCloseTo(a.size[0]! - 2 * MARGIN_X, 3);
+    expect(b.size[1]!).toBeCloseTo(a.size[1]! - 2 * MARGIN_Y, 3);
   });
 });

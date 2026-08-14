@@ -176,43 +176,53 @@ cell, that face never cancels, and a wall is drawn between two solids that are t
 of an endpoint onto it. Every plane here is axis-aligned with a unit normal, so that tolerance is a
 real distance in millimetres.
 
-**The border ADDS material and costs NO cells** (D59, superseding D55). The customiser cuts the
-outermost cells in half; the user's printed reference plate (`Customiser/borders.webp`) does the
-opposite — every hexagon stays whole and open, the walls between cells run out to a straight line,
-and the notches behind it fill solid. Built from ONE ring of empty positions drawn solid and clipped
-to that line, so a straight run comes out flush and an L-shape follows its steps without anyone
-segmenting the outline. Thickness is a millimetre field bounded by `MAX_BORDER_MM` — one ring can
-only reach so far, and past that the edge comes back short without saying so.
+**The plate's edge is a CUT on the outermost cell CENTRES; it does NOT add material past them**
+(D87, superseding D59, D69, D84 and D85 — read those for the shape of the mistake, not for the rule).
+The outlines are clipped at `bounds` and every BORE `t` inside that, so the plate ends on its own
+cell-centre rectangle with a `t` rim closing the half cells. Exactly the aperture rule (D83) with the
+zone's complement replaced by the plate's rectangle, which is what `inner box.jpeg` shows.
 
-**The top and bottom border is a RAIL of one thickness; left and right are FILLED** (D69, D84). The
-wall is flat-top, so along a top/bottom edge adjacent columns stagger half a pitch: filling to the
-straight outer line makes the band `t` thick above one column and `t + 11.8` above the next. Those two
-sides are therefore clipped on the inside as well, and the half-cell pockets are left OPEN — every
-cell stays mountable, at the cost of a rail attached at every other column, which is fine because a
-cell's top FLAT is 13.6 mm of shared edge.
+**The line has to be `bounds`, and this is the trap.** `bounds ± t` also gives a `t` rim and looks
+right along a straight run, and it is wrong: **the honeycomb's silhouette reaches `bounds` everywhere
+along a side and no further.** Two cells in a column meet at a flat 6.81 mm short of their corners,
+and adjacent columns stagger half a pitch, so past that line there is no continuous material to clip.
+Measured at `bounds + t`: the top comes out scalloped `t` deep between columns and the side steps in
+**12.1 mm** at every corner. Four earlier passes each invented that missing material a different way
+(rail, fill, corner piece, band ends) and each printed as a different wrong shape.
 
-**Do not "fix" the sides to match by railing them too — that has been tried and it prints as a
-comb.** A column of flat-top cells reaches its straight outer line at ONE POINT per cell, the
-hexagon's corner, and along no edge at all, so a uniform strip there hangs off the plate at a chain
-of points; measured, the left and right rails were separate solids from the honeycomb on every plate
-that had them. A straight outer edge, whole cells and a constant visible width are three things a
-hexagon lattice will give you two of. The band past the envelope is `t` on all four sides and that IS
-the specification; on the left and right the 6.8 mm scallop behind it is solid too.
+**It costs the outer RING, and that is the trade `borders.webp` refused.** Those cells are open half
+hexagons and nothing mounts in one, so they leave the planner through `omit` exactly as a switch's
+cells do (D56) — `borderCutCells` names them, `cutAroundObstacles` applies them, and switching the
+border off gives them back. The old edge instead ran **26.7 mm** of solid plate between two cells of
+the outermost column, against a `MARGIN_X + t` of 17.2: a whole extra cell of plastic, which is what
+"the border looks chunky" meant every time.
 
-**A band ends where the PLATE does, not where its own neighbours do** (D85). The reach is right
-ACROSS a band — it sets the thickness and makes an L step in where its cells do — and wrong ALONG it,
-because the outermost column sits half a pitch short of its neighbour: the side band stopped `t` past
-its own column's last cell while the plate carried on above it, stepping the silhouette in by up to
-**30.8 mm** at two corners (chirally, so one block size hides it). A band running in Y takes its Y
-limits from the plate's lines and its X limits from its reach, and vice versa. It cannot run away —
-a piece is bounded by its own hexagon and the growth guard is untouched, so no new positions appear
-and the inside of an L stays empty.
+**`omit` is not one thing, and both readers must ask which.** A cell can be there because a zone ate
+it or because the edge halved it, and a cell at the wall's rim can be BOTH. `panelModelSpec` hands
+them all over as `clipped` and the generator cuts each by everything that cuts it — the zones it
+meets AND the plate's lines — because taking only one is a defect either way round: only the zone's
+and the plate runs past its own edge, only the edge's and there is plate inside the switch. With
+NEITHER a clipped cell is dropped, which is what stops a frame-less plate filling its own aperture.
+The parts list asks the same question to avoid saying "cut round an obstacle" about every bordered
+plate.
 
-**A CORNER position takes NEITHER rail** (D84). It is outward on two sides at once, and given both it
-keeps only where they cross: a `t × t` square touching neither run, which is how two of the four
-corners of every bordered plate came off as loose blocks. Given the top/bottom rail alone it loses the
-side band's last 11.8 mm instead — a notch rather than a loose piece, which no connectivity test sees.
-It is solid out to both its lines, because that is what a plate's corner is.
+**`assemblyIndex` takes BOUNDS from the whole block and `occupied` from what survives `omit`.** They
+answer different questions — "how far does the plate reach" against "is this position filled" — and
+conflating them is a runaway: the edge cuts the ring, bounds follow the ring inward, and the next
+edit cuts a ring that has already gone. Measured, one whole lattice step short per edit.
+
+**Measure the RIM with scanlines on the mesh, never with the bounding box.** A box cannot tell a `t`
+rim from a `t` rim with a cell of solid behind it, which is why every border test passed through four
+wrong shapes. `tests/plate-edge.test.ts` slices the plate and scans: never deeper than `MARGIN + t`,
+never thinner than `t`, exactly `t` at its thinnest, and the box equal to the cell-centre rectangle
+to 1e-9. Anchor the scanlines ON CELL CENTRES and sweep one cell's span — a line landing on a flat or
+through a corner vertex registers no crossing, two runs merge, and the band reads as most of the
+plate (274 mm on a 12 × 11 when stepped blind from the bounding box). Leave the CORNER cells out: a
+scanline there crosses the perpendicular band and measures both at once.
+
+**A border piece is now only for a HOLE the plate goes round that no zone owns** — a step, or a gap
+where no plate reaches. `borderPieces` drops every outward position, because the outside is cut and a
+piece beyond the plate would stand outside its own edge.
 
 **`meshIsClosed` does not mean one solid, and for a long time it was not.** A closed mesh can be
 several closed shells; every detachment above kept it at zero unmatched edges. `honeycomb-frame.test.ts`
@@ -220,20 +230,20 @@ asserts ONE connected component of the top face, joined by shared EDGES and neve
 a by-vertex test calls a point-contact comb attached — swept over block sizes, because every one of
 these failures was parity-dependent and a single size passes by luck.
 
-**The border is drawn in the PLATE's colour, because it is the plate** (D68). Given a tone of its
-own it reads as a separate band, and a separate band has an inner edge — which is the honeycomb's
-outline, stepping half a pitch between staggered columns, and looks like a jagged border. There is no
-edge there: a bordered plate is one piece of plastic whose only boundary near the rim is where the
-holes begin. Related and NOT a defect: a left/right edge scallops 6.8 mm (every cell in a column
-shares an x) while a top/bottom edge steps 11.8 mm (adjacent columns stagger half a pitch), so the
-top always looks chunkier than the sides.
+**The edge is drawn in the PLATE's colour, because it is the plate** (D68). Given a tone of its own
+it reads as a separate band, and a separate band has an inner edge — which is the honeycomb's
+outline, and looks jagged. There is no such edge: a bordered plate is one piece of plastic whose only
+boundary near the rim is where the holes begin, which since D87 is literally true — the rim is the
+outermost cells' own material.
 
-**The plan DRAWS the border from `borderPolygons`, the generator's own walk** (D65). It once traced
-one line per exposed cell edge — the honeycomb's zig-zag — so the picture showed a scalloped edge
-while the downloaded plate had a straight one. Both have the same bounding box, so no bounds
-assertion could tell them apart; what separates them is that a zig-zag border's shortfall against a
-true rectangle grows with the perimeter while a flat one's is a CONSTANT (the four corner chamfers).
-That is what `honeycomb-frame.test.ts` measures.
+**The plan DRAWS the edge from the generator's own rules — `plateEdgeShapes` and `borderPolygons`**
+(D65, D87). It once traced one line per exposed cell edge — the honeycomb's zig-zag — so the picture
+showed a scalloped edge while the downloaded plate had a straight one. Since the edge became a cut
+there is nothing for the border walk to describe on the outside, and `borderPolygons` alone drew a
+wall a RING smaller than the file: the cut cells are in `omit`, so the plan never sees them among the
+cells it draws. `plateEdgeShapes` returns them and what is left of their mouths, off the same
+`plateEdgePlanes` the mesh is built from. Feed it the whole BLOCK (`assemblyBlockCells`), not the
+surviving cells.
 
 **A blocked zone is a UNION OF RECTANGLES** (`Obstacle.shape`, D80), and the reason is convexity:
 the border clips convex pieces with half-planes and there is no polygon boolean here by design. A

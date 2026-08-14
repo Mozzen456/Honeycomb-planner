@@ -210,12 +210,15 @@ export function ObstaclePanel({ doc, onChange, onFrameChange, onCopy, onDownload
         )}
       </h3>
       <p className="obstacles__hint">
-        A straight, closed edge instead of open hexagons — the walls between cells
-        run out to a line and the notches behind it fill in solid.{' '}
-        <strong>It costs you no cells:</strong> every hexagon stays whole and
-        mountable. It goes on the outside of the wall only, never on a seam where
-        two plates meet, so they still interlock. Any plate carrying an edge is
-        generated here rather than printed from a stock file.
+        A straight, closed edge: the honeycomb is cut off flat on the outermost
+        cells&rsquo; own centre line and the thickness below is the wall left
+        closing them — the same even rim a plate gets round a light switch.{' '}
+        <strong>It costs the outer ring:</strong> those cells come out as open
+        half hexagons and nothing mounts in one, so they leave the parts list
+        when you switch an edge on and come back when you switch it off. It goes
+        on the outside of the wall only, never on a seam where two plates meet,
+        so they still interlock. Any plate carrying an edge is generated here
+        rather than printed from a stock file.
       </p>
       <div className="frame__sides" role="group" aria-label="Framed edges">
         {FRAME_SIDE_LABELS.map((s) => (

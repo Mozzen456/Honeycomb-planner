@@ -38,7 +38,7 @@ import { customPanelGroups, isCustomPanel } from './customiser';
 import { fastenerCells, fixingsFor, JUNCTION_FIXING_ID, type FixingPlan } from './fixings';
 import { fastenersNeedReview, socketProvidesOf, socketsOf } from './overrides';
 import { hexKey, hexSub, keyToHex, placedPanelCells, placeFootprint } from './hex';
-import { isGeneratedSize, panelFrameKey, panelFrameSides } from './panelModel';
+import { borderCutCells, isGeneratedSize, panelFrameKey, panelFrameSides } from './panelModel';
 import { crossesSeam } from './tiling';
 import type {
   Bom,
@@ -971,16 +971,21 @@ export function computeBom(doc: LayoutDoc, catalog: Catalog): Bom {
     totalGrams += est.grams * share * quantity;
     totalMetres += est.metres * share * quantity;
 
-    // Say WHY it is custom. "Cut round an obstacle" on a plate that has no
-    // obstacle near it — it carries an edge — sends someone hunting the wall for
-    // a switch that is not there. The border cuts nothing, so the two reasons
-    // are independent and a plate can have both.
+    /*
+     * Say WHY it is custom. "Cut round an obstacle" on a plate that has no
+     * obstacle near it sends someone hunting the wall for a switch that is not
+     * there — which is what `omit` alone now says, because the EDGE cuts too
+     * (D86) and every bordered plate has a ring in `omit`. The two reasons share
+     * one field and have to be told apart by asking which cells the edge took.
+     */
     const sides = panelFrameSides(first, panels, frame);
     const edged = (['top', 'bottom', 'left', 'right'] as const).filter((s) => sides[s]);
     if (sides.holes) edged.push('holes' as never);
+    const byEdge = borderCutCells(panels, frame);
+    const byZone = (first.omit ?? []).filter((c) => !byEdge.has(hexKey(c)));
     const reasons: string[] = [];
     if (edged.length > 0) reasons.push(`edged ${edged.join(' + ')}`);
-    if ((first.omit ?? []).length > 0) reasons.push('cut round an obstacle');
+    if (byZone.length > 0) reasons.push('cut round an obstacle');
     if (isGeneratedSize(first.partId)) reasons.push('sized for your printer');
     const why = reasons.length > 0 ? reasons.join(', ') : 'generated';
 

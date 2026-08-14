@@ -2803,7 +2803,94 @@ back the right-hand side measures ZERO scanlines that thin, against 0.4 required
 
 ---
 
-## OPEN — the corner of the band balloons, and none of the three rules tried is right
+## D87 — The plate's edge is a CUT on the cell centres, not a band added past them
+
+**Superseded:** D59's "the border ADDS material and costs NO cells", and with it the whole phantom
+apparatus — D69's top/bottom rail, D84's filled sides and cornerless corner, D85's band ends. The
+CLOSED section below is the report this answers.
+
+Four passes tried to make a straight edge out of material added beyond the honeycomb, and each one
+produced a different wrong shape: a comb on the sides, a scallop on the top, loose blocks at two
+corners, a notch at the other two, a ballooned corner. Every one of them was a different guess at the
+same missing material, and the reason there was a guess to make is in the lattice rather than in any
+of the rules:
+
+**The honeycomb's own silhouette reaches the outermost cell CENTRES everywhere along a side, and no
+further.** Two cells in a column meet at a flat that is `MARGIN_X − PITCH/2` = 6.81 mm short of their
+corners; adjacent columns stagger half a pitch, so along a top edge one column reaches `maxY + 11.8`
+and the next only `maxY`. Past the line `bounds` there is no continuous material to clip — so
+everything out there had to be invented, and no local rule can invent it consistently at a corner.
+
+On the line there is nothing to invent. The plate is now cut exactly the way an aperture is (D83),
+with the zone's complement replaced by the plate's own rectangle:
+
+- the cells' OUTLINES are clipped at `bounds` — the plate's edge;
+- EVERY bore is clipped `t` inside that, so between the edge and the nearest opening there is `t` of
+  plate.
+
+Measured on the mesh, the plate's box then equals the cell-centre rectangle to 1e-9 on all four
+sides at every thickness from 0.4 to 6.8 mm, and the rim is exactly `t` at its thinnest on every
+side. The corner is square because two clips are two half-planes and their intersection is a corner;
+there is no third rule.
+
+**What it cost, and why the number 26.7 is the whole argument.** The old edge was a ring of solid
+hexagons clipped to a straight line, so between two cells of the outermost column — where their flats
+meet and there is no hole — the plate ran **26.7 mm** deep before the first opening, against a
+`MARGIN_X + t` of 17.2. That is a whole extra cell of plastic, and it is what "the border looks
+chunky" meant every time. The cut costs the outer RING instead: those cells come out as open half
+hexagons, nothing mounts in one, and they leave the planner through `omit` exactly as a switch's
+cells do (D56). `borders.webp` refused that trade; `inner box.jpeg` makes it at its aperture, and the
+outside of a plate is the same edge.
+
+**The measurement that was missing, which is the CLOSED report's own conclusion.** There was no test
+of the band's WIDTH anywhere — every border test measured the bounding BOX, which cannot tell a `t`
+rim from a `t` rim with a cell of solid behind it. `tests/plate-edge.test.ts` slices the plate and
+runs scanlines: never deeper than `MARGIN + t`, never thinner than `t`, and exactly `t` at its
+thinnest. It reads 26.7 on the old geometry and 9.5 on this one.
+
+**Two things about the scanline, both of which cost a wrong answer first.** The lines are ANCHORED ON
+CELL CENTRES and swept across one cell's span, because a line landing on a hexagon's flat or through
+a corner vertex registers no crossing there — `(a − at)(b − at) < 0` is false when an endpoint is on
+the line — so two runs merge and the band reads as most of the plate. Stepped blind from the bounding
+box that happens somewhere on every plate: it reported 274 mm on a 12 × 11. And the CORNER cells are
+left out, because a scanline there crosses the perpendicular band and measures both at once.
+
+**Three faults fell out of the change, none of them in the new geometry.**
+
+*The first line was wrong.* Cutting outlines at `bounds + t` and bores at `bounds` also gives a `t`
+rim and reads correctly on a straight run, and it is what the patch this started from did. It leaves
+the top scalloped `t` deep between columns and steps the side in **12.1 mm** at every corner, where
+that side's own column has no cell high enough to reach the line. Same shape as every earlier
+failure: a line the honeycomb does not reach.
+
+*The ring left the planner and never arrived at the printer.* `omit` is how a cut cell leaves the
+planner and `panelModelSpec` hands the omitted cells to the generator as `clipped` — which the
+generator only ever cut against a ZONE. With a border and no zones there was nothing to clip them
+against and they were dropped: every plate came out one whole ring short on each bordered side, still
+watertight, still passing every geometry case in the suite, because each of those builds a spec by
+hand and none goes through the store. A cut cell is now cut by everything that cuts it, so the two
+routes into `clipped` compose instead of one cancelling the other.
+
+*And the edge walked inward.* `assemblyIndex` took its BOUNDS from the cells that survive `omit`, so
+switching a border on cut the ring, the bounds followed the ring inward, and the next edit cut a ring
+that had already gone. Bounds now come from the whole BLOCK while `occupied` still comes from what
+survives it: they answer different questions — "how far does the plate reach" against "is this
+position filled" — and an omitted cell still PRINTS.
+
+**The plan had to be taught, because the edge is no longer something the border walk can describe.**
+`borderPolygons` returns nothing for the outside now, so the plan drew a wall a ring smaller than the
+file. `plateEdgeShapes` gives it the cut cells and what is left of their mouths, off the same
+`plateEdgePlanes` the mesh is built from — one rule, because the plan showing an edge the plate does
+not have is this repo's most repeated bug (D65, D66, D68).
+
+**And two pieces of prose became false.** The Frame panel still said "It costs you no cells", and the
+parts list said "cut round an obstacle" for every bordered plate, because that reason fired on `omit`
+being non-empty and the edge now fills it. The two reasons share one field and are told apart by
+asking which cells the edge took.
+
+---
+
+## CLOSED by D87 — the corner of the band balloons, and none of the three rules tried is right
 
 Visible on any bordered plate: along its runs the band is `t`, and at each corner it swells into a
 lump about a cell across, with the neighbouring cells cut into wedges around it.
