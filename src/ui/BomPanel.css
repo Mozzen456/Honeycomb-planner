@@ -667,6 +667,21 @@
   font-size: var(--font-size-2xs);
 }
 
+/* The design credit. Tertiary and 2xs like the slicer note beside it — it is
+   provenance, not a control, and the one thing here that must WRAP rather than
+   ellipsis away: a truncated attribution is not an attribution. */
+.bom-totals__credit {
+  margin-block-start: var(--space-2);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-2xs);
+  line-height: var(--line-height-snug);
+  text-wrap: pretty;
+}
+
+.bom-totals__credit a {
+  color: var(--text-secondary);
+}
+
 .bom-totals__reset {
   flex: none;
   padding: var(--space-0-5) var(--space-1);

@@ -806,6 +806,32 @@ export function BomPanel(props: BomPanelProps): JSX.Element {
             </button>
           ) : null}
         </div>
+
+        {/*
+          * Who designed the wall this app plans.
+          *
+          * The planner is ours; the HONEYCOMB is not. Every number in
+          * `constants.ts` was measured off RostaP's meshes and every plate the
+          * generator writes is that lattice, so the credit belongs where a
+          * person is about to go and print one — at the bottom of the list of
+          * what to print, not buried in an About box nobody opens.
+          *
+          * `target="_blank"` for the same reason the logo and the coffee link
+          * carry it: an unsaved layout lives in memory and nothing here may
+          * navigate the tab away.
+          */}
+        <p className="bom-totals__credit">
+          Honeycomb Storage Wall designed by{' '}
+          <a
+            href="https://www.printables.com/model/152592"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="The original model on Printables — opens in a new tab"
+          >
+            RostaP
+          </a>
+          . This planner is an independent tool.
+        </p>
       </footer>
     </aside>
   );

@@ -10,7 +10,9 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "deploy": "npm run build && wrangler pages deploy",
+    "deploy:preview": "npm run build && wrangler pages deploy --branch preview"
   },
   "dependencies": {
     "react": "^18.3.1",
@@ -29,6 +31,7 @@
     "jsdom": "^25.0.1",
     "typescript": "^5.7.2",
     "vite": "^6.0.7",
-    "vitest": "^2.1.8"
+    "vitest": "^2.1.8",
+    "wrangler": "^4.123.0"
   }
 }

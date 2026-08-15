@@ -9,6 +9,35 @@
       name="description"
       content="Lay out a Honeycomb Storage Wall on a real hex grid and get an exact print list."
     />
+
+    <!--
+      The tab icon. An SVG rather than an .ico because it is three hexagons of
+      real lattice (see the note in the file) and stays exact at every size a
+      browser asks for.
+    -->
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+
+    <!--
+      The social card.
+
+      `og:image` MUST be absolute — the spec requires it and every consumer
+      enforces it, so the `./` that works for everything else here would give a
+      grey box in every chat client. That makes this the one place in the app
+      that hard-codes the domain; `tools/social.py` draws the picture.
+    -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Honeycomb Planner" />
+    <meta property="og:title" content="Honeycomb Planner" />
+    <meta
+      property="og:description"
+      content="Lay out a Honeycomb Storage Wall on a real hex grid and get an exact print list."
+    />
+    <meta property="og:url" content="https://honeycombplanner.com/" />
+    <meta property="og:image" content="https://honeycombplanner.com/social-card.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="A honeycomb wall with several parts placed on it, under the Honeycomb Planner wordmark." />
+    <meta name="twitter:card" content="summary_large_image" />
   </head>
   <body>
     <div id="root"></div>

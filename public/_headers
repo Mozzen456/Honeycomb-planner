@@ -1,0 +1,39 @@
+# Cloudflare Pages response headers. Vite copies `public/` to the root of
+# `dist/`, which is where Pages looks for this file.
+#
+# Cache-Control is set per-path and NEVER on `/*`: Pages applies every matching
+# rule, so a blanket value here would collide with the specific ones below.
+
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: SAMEORIGIN
+
+# Vite hashes these filenames, so a changed file is a changed URL and the old
+# one can be kept forever. This is the whole reason the hash is in the name.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# The meshes are NOT hashed — `catalog.json` names them literally, and the
+# scanner, the docs and the repo all use the same paths (see the copyModels
+# note in vite.config.ts). So they get a week rather than a year: long enough
+# that placing parts costs nothing on a second visit, short enough that a
+# re-scanned model reaches people without a cache-buster.
+/models/*
+  Cache-Control: public, max-age=604800
+
+# The entry point must revalidate every time, or a deploy never reaches anyone
+# already carrying it: index.html is what names the hashed bundle.
+/index.html
+  Cache-Control: public, max-age=0, must-revalidate
+
+# The two pictures OF the app rather than in it. Not hashed — `index.html` and
+# every scraper name them literally — so they take the meshes' week rather than
+# the bundle's year. Measured on the first deploy: without a rule of their own
+# they fell through to Pages' platform default of max-age=0, which re-fetches a
+# 64 kB card on every visit to serve a file that changes when the logo does.
+/favicon.svg
+  Cache-Control: public, max-age=604800
+
+/social-card.png
+  Cache-Control: public, max-age=604800

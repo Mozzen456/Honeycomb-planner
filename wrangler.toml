@@ -1,0 +1,14 @@
+# Cloudflare Pages, direct upload.
+#
+# The planner is a static SPA — no router, no server, no API — so the whole
+# deploy is "put dist/ on a CDN". `pages_build_output_dir` is the ONLY thing
+# wrangler needs from this file; `npm run deploy` builds first, so the directory
+# it names is always fresh.
+#
+# `name` is the Pages PROJECT, not the domain. The custom domain is attached to
+# the project in the dashboard and outlives any individual deploy — renaming
+# this would create a second project and leave the domain pointing at the first.
+
+name = "honeycomb-planner"
+pages_build_output_dir = "dist"
+compatibility_date = "2026-08-15"

@@ -284,3 +284,38 @@ returns to Select.
 - **`375x389-fixed.stl` needs a 400 × 400 bed.** It fits none of the common printers.
 - Print estimates are for one specific recorded profile (`PLA-0.20mm-15pct-2perim-0.4nozzle`).
   They are real slices, not volume guesses, but they are not *your* profile.
+
+---
+
+## Credits
+
+The **Honeycomb Storage Wall** itself — the lattice, the plates, the inserts and every accessory in
+`models/` — is designed by **RostaP** and published as
+[Printables model 152592](https://www.printables.com/model/152592), with the OpenSCAD customiser in
+[model 530149](https://www.printables.com/model/530149). Check that listing's licence before
+redistributing the meshes.
+
+This planner is an independent tool, not affiliated with or endorsed by the designer. What is ours
+is the software: the solver, the parametric generator, the detector and the catalogue measurements.
+Every geometric constant in `src/core/constants.ts` was **measured from RostaP's meshes** rather
+than copied from any published description — see [HSW-SPEC.md](HSW-SPEC.md) for the provenance of
+each number.
+
+---
+
+## Deploying
+
+The app is a static bundle — no server, no API, no database — hosted on Cloudflare Pages.
+
+```bash
+npm run deploy           # build, then upload dist/ to the live site
+npm run deploy:preview    # same, onto a preview URL that does not touch production
+```
+
+The first deploy on a new machine needs `npx wrangler login` once. `wrangler.toml` names the Pages
+project; `public/_headers` sets the cache policy, and the split there is load-bearing — Vite hashes
+`assets/`, so those are immutable forever, while `models/` is named literally by `catalog.json` and
+`index.html` must revalidate or a deploy never reaches anyone already carrying it.
+
+`public/social-card.png` is build output from `tools/social.py`, like the logos are from
+`tools/logo.py` (D102). Re-run it if the wordmark changes.
