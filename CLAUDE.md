@@ -20,7 +20,7 @@ better guide to where the work actually got to.
 
 ```bash
 npm run dev          # Vite dev server
-npm test             # vitest run — 51 files, 1157 tests
+npm test             # vitest run — 52 files, 1161 tests
 npm run typecheck    # tsc --noEmit
 npm run build        # typecheck + vite build (also copies models/ into dist/)
 
@@ -1235,6 +1235,17 @@ In 3D, a panel is **one** extruded shape (union outline + one hole per cell), no
 Per-cell rings put two coincident 8 mm side walls inside solid material at every boundary, which is
 what made the plate look thick. Part depth comes from the measured `projectionMm`, never from
 `max(bbox)`.
+
+**The hover highlight must ask for the border ring BY NAME, and light the plate from the plate.**
+Both halves of it read `placedPanelCells`, and D87 puts the outer ring in `omit` — so on a bordered
+wall the rim belonged to no panel at all: point at the edge of the wall, which is the part you are
+most likely to point at, and nothing lit up. The hit test now takes the block cells that are in
+`borderCutCells` as well; a cell a ZONE ate stays nobody's, because that one really is a hole. And
+the overlay is the generator's own plate rather than an `ExtrudeGeometry` over `unionOutline`, which
+drew a wall a ring smaller than the file for the same reason (D65 again, in the other view). Cached
+by the instancing group's own key — that key already means "the same plate" — and kept apart from
+the panel effect's geometries, which are disposed on every rebuild. `tests/hover-owner.test.ts`
+states the ownership rule, since a renderer cannot be tested without a browser.
 
 **The hover highlight lights the WHOLE part, and it BORROWS the mesh to do it.** `EdgesGeometry` at
 a 25° threshold draws only a shape's hard creases: right for a box, and on anything organic a few

@@ -27,6 +27,7 @@ import {
 } from '../core/hex';
 import { buildHoneycombMesh } from '../core/honeycomb';
 import {
+  borderCutCells,
   isGeneratedSize, panelFrameKey, panelIsBordered, panelModelSpecFor,
 } from '../core/panelModel';
 import { partCells } from '../core/store';
@@ -371,6 +372,37 @@ function generatedPanelGeometry(
   } catch {
     return null;
   }
+}
+
+/**
+ * The plate a hover highlight is drawn from, cached by SHAPE.
+ *
+ * Keyed exactly as the instancing groups are — part, block, cut and frame —
+ * because that key already means "these plates are the same plate", which is
+ * what makes one geometry serve all of them. Never disposed and never large: a
+ * wall has a handful of distinct plates, and a changed plate takes a new key.
+ *
+ * Separate from the panel effect's own geometries on purpose. Those are disposed
+ * on every rebuild, and a highlight holding one would be drawing from freed
+ * buffers the moment the wall was re-solved.
+ */
+const hoverPlates = new Map<string, THREE.BufferGeometry | null>();
+
+function plateShapeKey(p: PlacedPanel, doc: LayoutDoc): string {
+  const cut = (p.omit ?? [])
+    .map((c) => hexKey({ q: c.q - p.origin.q, r: c.r - p.origin.r }))
+    .sort()
+    .join(' ');
+  return `${p.partId}|${p.columns}x${p.rows}|${cut}|${panelFrameKey(p, doc.panels, doc.frame)}`;
+}
+
+function hoverPlateGeometry(p: PlacedPanel, doc: LayoutDoc): THREE.BufferGeometry | null {
+  const key = plateShapeKey(p, doc);
+  const had = hoverPlates.get(key);
+  if (had !== undefined) return had;
+  const geo = generatedPanelGeometry(p, doc);
+  hoverPlates.set(key, geo);
+  return geo;
 }
 
 /**
@@ -1458,6 +1490,15 @@ export function WallView3D(props: WallView3DProps) {
    * Suppressed while dragging: the ghost already answers the same question, more
    * precisely, and two overlapping highlights on one cell just muddle it.
    */
+  /**
+   * The ring a border cuts, which is printed but is not in any panel's cells.
+   * Memoised because a hover moves cell to cell and this walks every block.
+   */
+  const borderCut = useMemo(
+    () => borderCutCells(doc.panels, doc.frame),
+    [doc.panels, doc.frame],
+  );
+
   useEffect(() => {
     const s = stateRef.current;
     if (!s || !ready) return;
@@ -1473,10 +1514,22 @@ export function WallView3D(props: WallView3DProps) {
       (m.material as THREE.Material)?.dispose?.();
     }
     if (!hover || drag) return;
-    // Only over the wall itself — lighting a cell in empty space would invite a
-    // drop that `checkPlacement` then refuses.
+    /*
+     * Only over the wall itself — lighting a cell in empty space would invite a
+     * drop that `checkPlacement` then refuses.
+     *
+     * ...but the outermost RING of a bordered plate is printed, and it leaves
+     * `placedPanelCells` through `omit` exactly as a switch's cells do (D87). So
+     * on a bordered wall the whole rim belonged to no panel: point at the edge
+     * of the wall — the part of it you are most likely to point at — and nothing
+     * lit up at all. The cut ring is asked for by name; a cell a ZONE ate is
+     * still nobody's, which is right, because that one really is a hole.
+     */
+    const onBorder = borderCut.has(hexKey(hover));
     const panel = doc.panels.find((p) =>
-      placedPanelCells(p).some((c) => c.q === hover.q && c.r === hover.r));
+      placedPanelCells(p).some((c) => c.q === hover.q && c.r === hover.r)
+      || (onBorder && panelCells(p.origin, p.columns, p.rows)
+        .some((c) => c.q === hover.q && c.r === hover.r)));
     if (!panel) return;
 
     const theme = readTheme();
@@ -1504,15 +1557,31 @@ export function WallView3D(props: WallView3DProps) {
      * the plate — so it follows the castellated edge exactly rather than
      * approximating it with a rectangle.
      */
-    const outline = unionOutline(placedPanelCells(panel));
-    if (outline.length >= 3) {
-      const shape = new THREE.Shape(outline);
-      const plate = new THREE.Mesh(
-        new THREE.ExtrudeGeometry([shape], { depth: 0.4, bevelEnabled: false }),
-        light(0.16),
-      );
-      plate.position.set(0, 0, PANEL_DEPTH + 0.2);
+    const plateGeo = hoverPlateGeometry(panel, doc);
+    if (plateGeo) {
+      const plate = new THREE.Mesh(plateGeo, light(0.16));
+      // Borrowed from the shape cache, like the part body below.
+      plate.userData.borrowed = true;
+      const o = hexToMm(panel.origin);
+      // A whisker proud of the real plate, or the two z-fight — the geometry is
+      // the same triangles, drawn twice.
+      plate.position.set(o.x, o.y, 0.15);
       s.hoverGroup.add(plate);
+    } else {
+      // The generator refused this shape, so fall back to the drawn outline. It
+      // ends a ring short on a bordered plate, which is the whole reason the
+      // real geometry is preferred — but a highlight that is slightly small
+      // beats no highlight.
+      const outline = unionOutline(placedPanelCells(panel));
+      if (outline.length >= 3) {
+        const shape = new THREE.Shape(outline);
+        const plate = new THREE.Mesh(
+          new THREE.ExtrudeGeometry([shape], { depth: 0.4, bevelEnabled: false }),
+          light(0.16),
+        );
+        plate.position.set(0, 0, PANEL_DEPTH + 0.2);
+        s.hoverGroup.add(plate);
+      }
     }
 
     /*
@@ -1616,8 +1685,10 @@ export function WallView3D(props: WallView3DProps) {
     // rather than as an object standing on the wall.
     cell.position.set(p.x, p.y, PANEL_DEPTH + 0.6);
     s.hoverGroup.add(cell);
-  }, [hover, drag, doc.panels, doc.items, itemIndex, catalog, partOf, meshTick,
-      ready, readTheme, themeTick]);
+  // `doc.frame` and `doc.obstacles` are read through `hoverPlateGeometry`, and
+  // half a feature is what leaving one out looks like (D92, D94).
+  }, [hover, drag, doc, doc.panels, doc.frame, doc.obstacles, doc.items, borderCut,
+      itemIndex, catalog, partOf, meshTick, ready, readTheme, themeTick]);
 
   // --- render loop --------------------------------------------------------
 
