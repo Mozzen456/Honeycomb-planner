@@ -332,7 +332,7 @@ doing deliberately rather than as a side effect of a socket correction.
 oriented mesh — the frame the wall draws in — not on the file. `overrides.json` records that for the
 socket cells, with the measurement in the note.
 
-## P11. Zero-thickness membranes across the bore at a zone corner
+## P11. RESOLVED — zero-thickness membranes across the bore at a zone corner
 
 **Measured, not suspected**, and visible in the running app: two thin stripes running down through
 the hexagons from each corner of a blocked zone. Reported as "the 2 stripes going down in both
@@ -372,6 +372,20 @@ it:
   it stopped: an unwatertight plate is a worse defect than a stripe, so the change was reverted
   rather than landed. `zone-sliver.test.ts` and `zone-aperture.test.ts` catch it — trust them.
 
-The remaining asymmetry is between the two paths' idea of which level decides. A band spans levels
-`j` and `j+1`; the index-matched path can see one edge on the boundary and the other not, and the
-skirt path answers per level. Making the two agree is the open question.
+### RESOLVED (D106)
+
+The diagnosis above held; the missing piece was the last line of it. The two paths cannot be made to
+agree, because `addSkirt` merges two rings by BEARING — where the levels differ in vertex count it
+cuts the shared stretch into different triangles on each side, so removing the same geometric area
+from both leaves a crack along the seam. That was the 4 unmatched edges: one missing skirt triangle.
+
+So the cancellation is confined to level pairs where every piece holding the edge is index-matched,
+which is the only case in which both sides remove exactly the same triangles. A skirt piece keeps its
+wall, membrane and all — a stripe is a blemish and an open plate is not printable. In practice that
+costs nothing measurable: all 706 are gone on the reported wall, every corner of every zone reads 0,
+and the suite is green.
+
+Two things stopped it being enough on their own, both recorded in D105/D106 rather than here: the
+cancellation has to run through `boundaryEdges` (multiplicity matters — a clipped bore can hold an
+edge and its reverse and cancel against itself), and a large share of the splits were spurious in the
+first place, from a plane that removed nothing.

@@ -993,6 +993,35 @@ export function buildHoneycombMesh(spec: HoneycombSpec): SolidMesh {
         : sy > 0 ? { nx: 0, ny: -1, d: -g.maxY } : null;
 
       /*
+       * A plane that removes NOTHING means the zone removes nothing.
+       *
+       * What the cell keeps is `ring ∩ (px ∪ py)`, so if either plane holds
+       * over the whole hexagon the union is the whole hexagon and there is
+       * nothing to cut — the zone does not reach this cell at all. Skipping the
+       * zone here is not a shortcut, it is the difference between one piece and
+       * three: taken through the corner path anyway, the cell comes out as an
+       * L split on two lines whose union is the hexagon it started as, and the
+       * pieces then draw their bore walls against each other along both split
+       * lines — a membrane of zero thickness standing across an open bore,
+       * which reads as a stripe running down through the cell.
+       *
+       * It bit at a zone's far corners as soon as `sx`/`sy` started answering
+       * about the cell's REACH (D105): a cell wholly past a zone's edge has
+       * material outside on that axis — all of it — so it now gets a plane
+       * where the centre test gave it none, and a second plane it does not
+       * need turns one whole cell into three pieces.
+       *
+       * Every plane here is axis-aligned with a unit normal, so the hexagon's
+       * far point along it is the centre plus the reach on that axis: the
+       * corner radius across x, the flat across y.
+       */
+      const removesNothing = (p: { nx: number; ny: number; d: number } | null) =>
+        p !== null &&
+        p.nx * m.x + p.ny * m.y +
+          Math.abs(p.nx) * MARGIN_X + Math.abs(p.ny) * MARGIN_Y <= p.d + SAME;
+      if (removesNothing(px) || removesNothing(py)) continue;
+
+      /*
        * Neither axis reaches out of the zone by a wall's worth: wholly inside
        * it, or poking out by less than plate. Nothing of this cell survives
        * that is worth printing.
@@ -1209,6 +1238,86 @@ export function buildHoneycombMesh(spec: HoneycombSpec): SolidMesh {
     for (const [key, welded] of at) innerRings.get(key)![lv] = welded;
   }
 
+  /*
+   * A bore face shared by two PIECES of one cell is internal and must not be
+   * drawn.
+   *
+   * The outer skin has always cancelled these — `boundaryEdges` drops any
+   * directed edge whose opposite turns up — but the inner skin is emitted per
+   * piece, unconditionally, so at a zone corner the pieces each draw their own
+   * bore wall along the split lines. Solid on NEITHER side, both sides being
+   * open bore, what stands there is a membrane of ZERO thickness: reported as a
+   * one-pixel stripe running down through the hexagons, which is what a surface
+   * with no thickness looks like at any zoom.
+   *
+   * Through `boundaryEdges` rather than a plain set of opposites, because
+   * multiplicity matters: a clipped bore can double back so one ring holds an
+   * edge AND its reverse, and matched naively that cancels against ITSELF —
+   * both sides drop their band and the hole in the plate becomes a hole in the
+   * mesh, measured as 8 unmatched edges on a closed loop along the rail line.
+   *
+   * After the weld above, never before it: two pieces meeting along PART of an
+   * edge share no exact endpoints until the T-junctions are split. Per level
+   * for the same reason the weld is.
+   */
+  const edgeId = (p: Point) => `${p.x},${p.y}`;
+  const boreBoundary = levels.map(() => new Set<string>());
+  const boreHolders = levels.map(() => new Map<string, string[]>());
+  for (let lv = 0; lv < levels.length; lv++) {
+    const at = new Map<string, Point[]>();
+    for (const [key, rings] of innerRings) {
+      const r = rings[lv];
+      if (r !== undefined && r.length >= 3) at.set(key, r);
+    }
+    for (const [a, b] of boundaryEdges(at)) {
+      boreBoundary[lv]!.add(`${edgeId(a)}>${edgeId(b)}`);
+    }
+    for (const [key, r] of at) {
+      for (let k = 0; k < r.length; k++) {
+        const e = `${edgeId(r[k]!)}>${edgeId(r[(k + 1) % r.length]!)}`;
+        const held = boreHolders[lv]!.get(e);
+        if (held) held.push(key); else boreHolders[lv]!.set(e, [key]);
+      }
+    }
+  }
+
+  /*
+   * A band may only be dropped where BOTH pieces tessellate it the same way.
+   *
+   * `addSkirt` merges two rings by bearing, so where the levels have different
+   * vertex counts the two pieces of a shared stretch are cut into triangles
+   * differently. Dropping the same geometric area from each then leaves a crack
+   * along the seam between kept and dropped triangles — measured as a single
+   * missing skirt triangle, four unmatched edges, at one placement in the
+   * sweep. So the cancellation is confined to level pairs where every piece
+   * holding the edge is index-matched, which is the only case in which the two
+   * sides are guaranteed to remove exactly the same triangles. A skirt piece
+   * keeps its wall, membrane and all: a stripe is a blemish, an open plate is
+   * not printable.
+   */
+  const indexMatched: Set<string>[] = [];
+  for (let j = 0; j + 1 < levels.length; j++) {
+    const ok = new Set<string>();
+    for (const [key, rings] of innerRings) {
+      const a = rings[j];
+      const b = rings[j + 1];
+      if (a !== undefined && b !== undefined &&
+          a.length >= 3 && a.length === b.length) ok.add(key);
+    }
+    indexMatched.push(ok);
+  }
+
+  /** Hole on both sides here, and both sides will cut it away identically. */
+  const internalBore = (pair: number, lv: number, e: string): boolean => {
+    if (boreBoundary[lv]!.has(e)) return false;
+    const cut = e.indexOf('>');
+    const mine = boreHolders[lv]!.get(e) ?? [];
+    const theirs = boreHolders[lv]!.get(`${e.slice(cut + 1)}>${e.slice(0, cut)}`) ?? [];
+    if (mine.length === 0 || theirs.length === 0) return false;
+    const ok = indexMatched[pair]!;
+    return mine.every((k) => ok.has(k)) && theirs.every((k) => ok.has(k));
+  };
+
   const first = 0;
   const last = levels.length - 1;
 
@@ -1234,6 +1343,11 @@ export function buildHoneycombMesh(spec: HoneycombSpec): SolidMesh {
       if (a.length === b.length) {
         for (let k = 0; k < a.length; k++) {
           const k2 = (k + 1) % a.length;
+          // On the boundary of no bore at either level: hole on both sides, so
+          // this band is not a surface. Both pieces drop it, which is what
+          // leaves the bore closed instead of opening the mesh.
+          if (internalBore(j, j, `${edgeId(a[k]!)}>${edgeId(a[k2]!)}`) &&
+              internalBore(j, j + 1, `${edgeId(b[k]!)}>${edgeId(b[k2]!)}`)) continue;
           // Wound so the normal points at the cell centre: the hole's surface
           // is the outside of the solid.
           tris.quad(

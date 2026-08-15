@@ -20,7 +20,7 @@ better guide to where the work actually got to.
 
 ```bash
 npm run dev          # Vite dev server
-npm test             # vitest run — 51 files, 1156 tests
+npm test             # vitest run — 51 files, 1157 tests
 npm run typecheck    # tsc --noEmit
 npm run build        # typecheck + vite build (also copies models/ into dist/)
 
@@ -365,6 +365,31 @@ tests a cell as its bounding BOX rather than its hexagon, which over-selects at 
 corners; it is real, it is not this, and it hands back zero cells on the reported wall. And the
 minimum-thickness floor is not this either: zeroing it moves none of the numbers, because these
 cells take the CORNER branch where the surviving arm is 13.66 mm.
+
+**A plane that removes NOTHING means the ZONE removes nothing — skip it** (D106). A cell keeps
+`ring ∩ (px ∪ py)`, so if either plane holds over the whole hexagon the union IS the hexagon and
+there is nothing to cut. Put through the corner path regardless, one cell comes out as three pieces
+whose union is the cell it started as, and those pieces then draw bore walls against each other
+along both split lines. It is not a shortcut, it is the difference between one piece and three, and
+D105 made it bite: asking about a cell's REACH gives a plane to every cell wholly past an edge,
+including ones that need only the other.
+
+**The inner skin must cancel a shared bore face, exactly as `boundaryEdges` does for the outer**
+(D106). Emitted per piece it drew both sides of every split line — open bore either side, so a
+surface with solid on NEITHER: a membrane of zero thickness, reported as a stripe "1 pixel wide",
+which is the correct description of something with no width. Three traps in fixing it. Cancel
+through `boundaryEdges`, never a set of opposites — a clipped bore can hold an edge AND its reverse
+and cancel against itself, both sides drop the band, and the hole in the plate becomes a hole in the
+MESH. `addSkirt` cannot be taught the test at all: it merges by BEARING, so where two levels differ
+in vertex count the two pieces tessellate the shared stretch differently and dropping the same area
+from each leaves a crack. So cancel ONLY where every piece holding the edge is index-matched; a
+skirt piece keeps its wall, membrane and all. **A stripe is a blemish and an open plate is not
+printable** — if a change here trades watertightness for appearance, it is the wrong change, and
+`zone-sliver.test.ts` and `zone-aperture.test.ts` will say so.
+
+**Measure a membrane as a run of ZERO length in a section.** Two crossings at one x is a surface
+with no thickness, which no real plate can produce. Same slice the aperture is measured on, and it
+responds: 476 before D105, 706 after, 402 with the no-op skip, 0 with the cancellation.
 
 **Measure the apron as a run of CONSECUTIVE gapped scanlines, not as a maximum.** Even-odd counting
 on this lattice is degenerate where a line meets a flat or a vertex, and one such line reported

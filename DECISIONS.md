@@ -3923,3 +3923,58 @@ the moment the phase moved; and the whole measurement is repeated at a different
 scanline phase and slice height, because a result that holds at one phase is a
 coincidence and during this fix one genuinely was. Both tests were confirmed by
 reverting the fix and watching them go red.
+
+## D106 — The corner split drew the faces it claimed cancel
+
+Reported as stripes running down from a blocked zone's corners, and then, once
+D105 was in, "the same just at the top now as well" — which was exactly right,
+and is why this is a decision rather than a footnote to that one.
+
+The three-piece split (D83) divides a corner cell's outline on `bx` and `px`.
+Its own note says every internal face is then shared by exactly two pieces and
+cancels. It does not: the OUTER skin cancels a shared face through
+`boundaryEdges`, but the INNER skin is emitted per piece, unconditionally, so
+along both split lines two pieces each drew their own bore wall back to back.
+Open bore on either side, so what stands there is a surface with solid on
+neither — a membrane of ZERO thickness. "One pixel wide" was the report, and it
+is the correct description: it has no width to draw at any zoom.
+
+### Two causes, and the second was most of it
+
+**Spurious splits.** What a cell keeps is `ring ∩ (px ∪ py)`, so if either plane
+holds over the whole hexagon the union IS the hexagon and the zone reaches this
+cell not at all. Taken through the corner path anyway, one whole cell came out
+as three pieces whose union was the cell it started as — and the pieces then
+drew membranes along both split lines. This is what D105 made visible at corners
+that had been clean: asking about a cell's REACH means a cell wholly past an
+edge has material outside on that axis, so it now gets a plane the centre test
+never gave it, and a second plane it does not need turns one piece into three.
+Refusing a plane that removes nothing took the reported wall from 706 membranes
+to 402 — below the 476 that predated D105 — while leaving the aperture exact.
+
+**The rest were real corners**, where both planes genuinely cut, and those need
+the inner skin to cancel like the outer one. Three things that took measuring:
+
+- Cancel through `boundaryEdges`, never a plain set of opposites. A clipped bore
+  can double back so one ring holds an edge AND its reverse; matched naively it
+  cancels against itself, both sides drop their band, and the hole in the plate
+  becomes a hole in the MESH — 8 unmatched edges on a closed loop along the rail.
+- `addSkirt` cannot be taught the same test. It merges two rings by BEARING, so
+  where the levels differ in vertex count the two pieces cut the shared stretch
+  into different triangles; removing the same area from each leaves a crack at
+  the seam between kept and dropped. Measured: one missing skirt triangle, four
+  unmatched edges, at one placement of the sweep.
+- So the cancellation is confined to level pairs where every piece holding the
+  edge is index-matched — the only case where both sides drop exactly the same
+  triangles. A skirt piece keeps its wall, membrane and all. A stripe is a
+  blemish; an open plate is not printable, and the tests are right to refuse it.
+
+Every corner of every zone on the reported wall now reads 0, from 342 across the
+twelve corners.
+
+### The metric
+
+A section through the mouth band, counting runs of ZERO length: two crossings at
+one x is a surface with no thickness, which no real plate can produce. It is the
+same slice the aperture is measured on, and it responds — 476, 706, 402, 0 across
+the four states of the code — which is how it was checked rather than assumed.

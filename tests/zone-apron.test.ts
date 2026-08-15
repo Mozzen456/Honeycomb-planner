@@ -189,6 +189,31 @@ describe('the aperture round a zone, on the exported wall', () => {
     console.log('\n' + lines.join('\n'));
   });
 
+  it('stands no zero-thickness membrane across a bore at a zone corner', () => {
+    /*
+     * The three-piece corner split (D83) divides the outline on two lines, and
+     * the inner skin used to draw every piece's bore wall unconditionally — so
+     * along those lines two pieces each drew their own, back to back, with open
+     * bore on either side. A surface with solid on neither side is a membrane
+     * of ZERO thickness, which is why it was reported as a stripe "1 pixel
+     * wide": it has no width to render at any zoom.
+     *
+     * A section catches it exactly: two crossings at one x is a run of zero
+     * length, which no real plate can produce. Counted over the whole zone and
+     * a band around it, this was 476 before D105, 706 after it (D105 correctly
+     * sends more cells down the corner path), and is 0 now.
+     */
+    const secs = sections(1.0);
+    for (const zone of doc.obstacles ?? []) {
+      let degenerate = 0;
+      for (let y = zone.yMm - 40; y < zone.yMm + zone.heightMm + 40; y += 0.5) {
+        degenerate += assemblyRuns(secs, 'x', y).filter((r) => r[1] - r[0] < 1e-6).length;
+      }
+      expect({ zone: `${zone.xMm},${zone.yMm}`, degenerate })
+        .toEqual({ zone: `${zone.xMm},${zone.yMm}`, degenerate: 0 });
+    }
+  });
+
   it('is the same answer at another scanline phase and slice height', () => {
     /*
      * The guard on the guard. The measurement above is even-odd counting on a
