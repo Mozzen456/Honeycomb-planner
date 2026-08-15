@@ -3849,3 +3849,77 @@ made it obvious. Fixed the same way as every other squeezed group here: the GROU
 shrinks and wraps, its children never do — which needed an explicit `flex: 0 1
 auto` to override the toolbar's blanket `flex: 0 0 auto` on its children, or
 `flex-wrap` had nothing to do and the group sat at its max-content width.
+
+## D105 — A cell is cut by where its MATERIAL is, not by where its centre is
+
+Reported as "the honeycomb is cut straight along this zone and steps out along
+that one". Two rectangles cannot both be right, and the stepped one was not being
+cut at all: whole cells were leaving the plate, which is D81's apron arriving by a
+new route.
+
+`clipPlanesFor` chose a zone's cut planes from the cell CENTRE. `px` was non-null
+only when the centre sat on or outside an x edge of the zone, `py` likewise in y,
+and the three-piece corner split (D83) ran only when both were. A hexagon is
+27.25 mm across and a zone edge lands wherever it was drawn, so a centre falling a
+hair inside an edge says nothing about whether the cell reaches past it — and a
+cell whose centre was **0.04 mm** inside the zone's x range while sitting outside
+it in y got no x plane at all. Cut on y alone, the 13.6 mm of plate it still had
+beyond the zone's x edge was discarded: a whole quadrant, leaving a hexagonal hole
+in the aperture wall.
+
+### Measured, on the wall it was reported from
+
+The metric is the one D77 arrived at — the rim as an area inside the rectangle,
+never a distance to its edge — read off the MESH by slicing in the mouth band and
+scanning, per zone side. On the exported three-zone wall, before:
+
+| zone | side | mean | max |
+| --- | --- | --- | --- |
+| 752.3 × 728 | right | 0.17 | **13.41** |
+| 163.5 × 259.6 | left | 0.91 | **13.45** |
+| 265.7 × 59 | right | 1.98 | **13.38** |
+
+and 0.00 on every one of the other nine sides. 13.6255 is `MARGIN_X`, the cell's
+corner radius, so the loss is a half cell. After: 0.00 everywhere.
+
+The gap's boundary ran at a 1/√3 slope — a hexagon's own edge, which is what a
+dropped cell leaves and what a cut never does. That, and the failing cells sitting
+0.00–0.05 mm from a corner while every clean side's corners were 3.6–12.4 mm away,
+is what localised it.
+
+### Two causes ruled out first, and both by measurement
+
+`cellClashes` does test a cell as its bounding BOX rather than its hexagon, which
+over-selects at the box's four empty corners — a real defect in its own right, and
+**not this one**: it hands back zero cells on this wall. And zeroing the
+minimum-thickness floor added alongside the shard fix moves none of these numbers,
+because the cells in question take the corner branch, where the surviving arm is
+13.66 mm and clears the floor comfortably. Neither was worth the time it took, and
+both are recorded so the time is not spent again.
+
+### The rule
+
+The side a cell is cut on is the side it has material outside the zone on:
+`lo − (c − reach)` and `(c + reach) − hi`, deeper side wins, floored at
+`WALL_AT_MOUTH`. Wherever the centre test had an opinion the reach test agrees
+with it, so nothing that worked has moved; what changes is the corner, where the
+centre test had no opinion and silently threw a quadrant away.
+
+The floor stays and does the same job it did: below one wall's thickness there is
+no plate worth expressing, and a sliver thinner than that arrives as a detached
+shard. It now reads once, in one place, instead of being spelled out separately
+for the sliver case — the sliver branch is gone, because a cell that pokes out of
+nothing on any axis is exactly a cell with no plane, and that is now the same
+sentence.
+
+### The guard
+
+`tests/zone-apron.test.ts` measures the exported wall itself, which is why the
+fixture is committed beside it. Two things in it are worth keeping: the assertion
+is on the longest run of CONSECUTIVE gapped scanlines rather than on a maximum,
+because even-odd counting on this lattice is degenerate where a line meets a flat
+or a vertex and one such line reported 10.52 mm on a side that re-measured at 0.00
+the moment the phase moved; and the whole measurement is repeated at a different
+scanline phase and slice height, because a result that holds at one phase is a
+coincidence and during this fix one genuinely was. Both tests were confirmed by
+reverting the fix and watching them go red.

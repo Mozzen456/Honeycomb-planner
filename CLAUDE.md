@@ -11,7 +11,8 @@ copied from any published description. `HSW-SPEC.md` records every number with i
 `UNKNOWN.md` lists what the scanner would not guess at.
 
 `GOAL.md` holds an objective and its done-when checklist — **check whether it is still the live one
-before working to it.** Every box in it is currently ticked (the blocked-zone aperture, D80–D87), so
+before working to it.** Every box in it is currently ticked, and by work that is now many decisions
+old (the blocked-zone aperture, D80–D87, against a head that has since passed D100), so
 it is a record of finished work rather than a brief; the newest decisions in `DECISIONS.md` are the
 better guide to where the work actually got to.
 
@@ -19,7 +20,7 @@ better guide to where the work actually got to.
 
 ```bash
 npm run dev          # Vite dev server
-npm test             # vitest run — 48 files, 1111 tests
+npm test             # vitest run — 51 files, 1156 tests
 npm run typecheck    # tsc --noEmit
 npm run build        # typecheck + vite build (also copies models/ into dist/)
 
@@ -347,6 +348,31 @@ a border piece (D79) without splitting its bore, and two half-bores would grow a
 hole; taking both planes instead notches every corner of the aperture. **No zones means the eaten
 cells are not drawn at all** — otherwise a frame-less plate fills its own aperture.
 
+**Which side a cell is cut on is where its MATERIAL is, never where its CENTRE is** (D105). A
+hexagon is 27.25 mm across and a zone edge lands wherever it was drawn, so a centre falling a hair
+inside an edge says nothing about whether the cell reaches past it. `clipPlanesFor` used to pick
+`px`/`py` off the centre, so a cell whose centre sat **0.04 mm** inside a zone's x range while
+outside it in y got no x plane at all — cut on y alone, and the 13.6 mm of plate it still had beyond
+the zone's x edge was thrown away. A whole quadrant, so the aperture wall had a hexagonal hole in
+it: measured 13.41, 13.45 and 13.38 mm on ONE side of each of three zones, and 0.00 on the other
+nine, which is what "cut straight along this zone and stepped along that one" was. The tell is the
+1/√3 slope on the gap's boundary — that is a hexagon's own edge, which is what a dropped cell leaves
+and what a cut never does. The reach test agrees with the centre test wherever the centre test had
+an opinion; the corner is where it had none.
+
+**Two things it is NOT, both ruled out by measurement — do not re-spend the time.** `cellClashes`
+tests a cell as its bounding BOX rather than its hexagon, which over-selects at the box's four empty
+corners; it is real, it is not this, and it hands back zero cells on the reported wall. And the
+minimum-thickness floor is not this either: zeroing it moves none of the numbers, because these
+cells take the CORNER branch where the surviving arm is 13.66 mm.
+
+**Measure the apron as a run of CONSECUTIVE gapped scanlines, not as a maximum.** Even-odd counting
+on this lattice is degenerate where a line meets a flat or a vertex, and one such line reported
+10.52 mm on a side that re-measured at 0.00 the moment the phase or the slice height moved. A missing
+quadrant is ~11 mm of aperture — thirty-odd consecutive lines — and does not care where the scanlines
+fall. `tests/zone-apron.test.ts` therefore repeats the whole measurement at a second phase and
+height, because a result that holds at one phase is a coincidence and during this fix one was.
+
 **Measure this on the MESH, not on the polygons that were meant to produce it.** Slice the finished
 plate at its own face and run scanlines across the section: where the plate stops each side of the
 aperture, and how thick it is there. Every proxy — border polygons, cell centres, bounding boxes —
@@ -655,6 +681,17 @@ gesture. Which means the live position is local, which means it must live in a R
 is invisible to the release handler, and every quick flick moved nothing at all. That is D58 exactly,
 made again directly beneath the comment warning about it, and found by driving the app.
 
+**The photo can be TURNED, and the plan must never rotate its canvas to do it** (D104).
+`rotationDeg` is counter-clockwise as the wall is seen, about the photo's own CENTRE, and
+`photoCorners` is the ONE place it becomes geometry — both views and `photoHit` go through it, so the
+picture and the pointer cannot disagree about where the photo is. The plan is y-up and its pixels are
+not (D70), so turning the canvas by the angle needs a negation — which is the same hand-written sign
+that put every seam and every outline one edge out. Do not write it. Map the four corners through
+`toScreen` and build the matrix from two edges; there is then nothing to get backwards, and 3D needs
+no correction at all because it is y-up in world space exactly as the wall is. `xMm`/`yMm` stay the
+corner of the UNROTATED rectangle: that field and `mmPerPixel` describe the photo in its own frame.
+Zero is stored as ABSENT, so a layout nobody has turned serialises exactly as it always did.
+
 ### UI, state and rendering
 
 **`NumberField`'s schedule follows what its commit COSTS** (D67). `commitOn: 'type'` (default) is
@@ -791,6 +828,9 @@ The UI is a thin shell.
   session were the save, starting a blank one would overwrite what you had. Both hold
   `serialize(doc)`, so a wall on the shelf, in a file and in a share link are one format with one
   migration path. Pure above the storage functions, and it takes its clock as an argument (D103).
+  **`src/ui/WallsDialog.tsx`** is its one surface — Save / New / Open / Delete, reached from `Walls`
+  in the title bar. Delete asks in place: a saved wall is the only thing in this app a click can
+  destroy for good, because the shelf is deliberately outside the undo stack.
 - **`src/core/stl.ts`** — STL parsing, mesh measurement, the fitted print estimator.
 - **`src/core/threemf.ts`** — 3MF reading: units, transforms and winding, into the same
   `MeshData` an STL gives. **`src/core/zip.ts`** is the ZIP half, and **`src/core/modelFile.ts`**
@@ -1015,10 +1055,13 @@ The catalogue is a SHOP and the rail is what came home from it (D71). `PartLibra
 shows every part ON SALE as a card with a picture, shelves and a sort; `CatalogPanel` shows only the
 parts put in the project. Two surfaces because browsing and building are different jobs.
 
-**The wall PLATES are not on sale, and `isShoppable` is the only place that says so** (D98). The app
-sizes and generates every plate it draws (D97), so nobody picks one: the shelf, the search, the
-`Everything` count and the `Browse n parts` label are all `shoppableParts(catalog)` — 44 of the 51
-shipped, plus whatever was imported, and no Panels shelf. They stay IN the catalogue, because three things still read them: the solver
+**`isShoppable` is the only place that says a part is not on sale** (D98). Two rules live in it, and
+the shelf, the search, the `Everything` count and the `Browse n parts` label all read
+`shoppableParts(catalog)` — **42 of the 51** shipped, plus whatever was imported, and no Panels shelf.
+The app sizes and generates every PLATE it draws (D97), so nobody picks one; and the two COVERS
+(`box-and-usb-holder-cover`, `sd-card-holder-cover`) are lids for other accessories, which nothing
+mounts on the wall. Excluded by id and never by a `-cover` suffix — `cover-contersunk` is a genuine
+wall part a name rule would take with them. They stay IN the catalogue, because three things still read them: the solver
 takes their sizes with "Fit to printer" off, `bom.ts` costs a generated plate against the biggest per
 cell, and `PartInspector` sizes its wall patch from the smallest. A plate somebody IMPORTED is still
 theirs and stays on the shelves — `typeFromName` calls anything named `wall-honeycomb…` a panel, and
