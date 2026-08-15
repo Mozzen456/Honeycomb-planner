@@ -1236,6 +1236,15 @@ Per-cell rings put two coincident 8 mm side walls inside solid material at every
 what made the plate look thick. Part depth comes from the measured `projectionMm`, never from
 `max(bbox)`.
 
+**The hover highlight lights the WHOLE part, and it BORROWS the mesh to do it.** `EdgesGeometry` at
+a 25° threshold draws only a shape's hard creases: right for a box, and on anything organic a few
+strokes floating in space rather than the part you are pointing at. So the body is drawn too, in the
+same additive accent, with the creases still on top — additive light flattens the form and the edges
+put it back. The catch is disposal: `EdgesGeometry` COPIES what it needs, and this does not. The
+body holds `meshLibrary`'s cached geometry, which every placement of that part shares, so the hover
+group's cleanup must skip it — `userData.borrowed` says which, and it is a flag rather than an
+inference on purpose. Dispose it and every copy of that part on the wall goes blank.
+
 A placed part marks the cells it uses with a **ring, never a plug**. It was a solid prism in the
 mouth, which fills the hole — and a cell is a hole, so the marker meant to point at a cell hid
 whatever was in it: the socket of an insert, the bore for a bolt, the daylight through a hollow one.

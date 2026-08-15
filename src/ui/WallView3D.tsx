@@ -1464,10 +1464,12 @@ export function WallView3D(props: WallView3DProps) {
     for (const child of [...s.hoverGroup.children]) {
       s.hoverGroup.remove(child);
       const m = child as THREE.Mesh | THREE.LineSegments;
-      // Always ours: the plate overlay, the cell prism and the part outline are
-      // all built here. The part's own geometry is NOT disposed — `EdgesGeometry`
-      // copies what it needs, and the source is meshLibrary's shared cache.
-      m.geometry?.dispose();
+      // The plate overlay, the cell prism and the part outline are built here
+      // and are ours to dispose. The lit BODY is not: it borrows the part's own
+      // geometry from meshLibrary's cache, which every placement of that part
+      // shares, so disposing it would blank all of them. Flagged rather than
+      // inferred — `EdgesGeometry` copies what it needs and this one does not.
+      if (m.userData.borrowed !== true) m.geometry?.dispose();
       (m.material as THREE.Material)?.dispose?.();
     }
     if (!hover || drag) return;
@@ -1543,6 +1545,46 @@ export function WallView3D(props: WallView3DProps) {
       const geo = loaded
         ? loaded.geometry
         : new THREE.BoxGeometry(w, h, depth);
+      const z = loaded
+        ? seatedZ(loaded, part.type === 'insert' || part.type === 'fastener')
+        : PANEL_DEPTH + depth / 2;
+      const spin = (Math.PI / 3) * item.rotation;
+
+      /*
+       * The WHOLE part, lit — not just its creases.
+       *
+       * `EdgesGeometry` at a 25° threshold draws the shape's hard edges and
+       * nothing else, which on a box reads as the whole object and on anything
+       * organic reads as a few lines floating in space: a hook highlighted that
+       * way showed a couple of strokes rather than a hook. What you want to see
+       * when you point at a part is the part.
+       *
+       * So the body is drawn too, in the same additive accent the plate and the
+       * cell use — a light cast on the thing, not a repaint of it, which is the
+       * same rule that keeps a lit PLATE showing its own cells (D92). The edges
+       * stay on top of it: additive light flattens the form, and the creases are
+       * what put the shape back.
+       *
+       * `depthTest: false` on both, so a part behind the wall or behind another
+       * part still shows whole. That is the point — a fastener spanning a seam
+       * is exactly the case where you cannot otherwise tell where it ends.
+       */
+      const body = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
+        color: theme.hover,
+        transparent: true,
+        opacity: 0.28,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        depthTest: false,
+      }));
+      // Borrowed from meshLibrary whenever the real mesh has loaded; the
+      // placeholder box is ours. The cleanup above reads this.
+      body.userData.borrowed = loaded !== undefined;
+      body.position.set(cx, cy, z);
+      body.rotation.z = spin;
+      body.renderOrder = 998;
+      s.hoverGroup.add(body);
+
       const edges = new THREE.LineSegments(
         new THREE.EdgesGeometry(geo, 25),
         new THREE.LineBasicMaterial({
@@ -1552,20 +1594,17 @@ export function WallView3D(props: WallView3DProps) {
           depthTest: false,
         }),
       );
-      // The same seating the body got, or the outline floats off the part it is
-      // outlining — an insert now sits 7.5 mm into the wall.
-      edges.position.set(
-        cx, cy,
-        loaded
-          ? seatedZ(loaded, part.type === 'insert' || part.type === 'fastener')
-          : PANEL_DEPTH + depth / 2,
-      );
-      edges.rotation.z = (Math.PI / 3) * item.rotation;
+      // The same seating and spin the body got, from the same two values — an
+      // outline that sits differently from the thing it outlines is worse than
+      // no outline, and an insert sits 7.5 mm into the wall.
+      edges.position.set(cx, cy, z);
+      edges.rotation.z = spin;
       // Drawn last and over everything, so an outline round a part standing 40 mm
       // off the wall is not hidden by the part itself.
       edges.renderOrder = 999;
       s.hoverGroup.add(edges);
-      if (!loaded) geo.dispose();
+      // `geo` is NOT disposed here any more: the body above is still using it,
+      // and the cleanup at the top of this effect owns it now.
       return;
     }
 
