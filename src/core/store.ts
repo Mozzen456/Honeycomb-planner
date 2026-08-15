@@ -74,10 +74,36 @@ export function __resetIds(): void {
 /** The printer a new layout starts on, and the seed for a custom bed. */
 export const DEFAULT_BED_ID = 'bed256';
 
+/**
+ * A fresh document identity.
+ *
+ * `emptyDoc` returned the constant `'layout'` for as long as there was only ever
+ * one document in play, and that was fine right up until walls could be SAVED.
+ * The shelf is keyed on this id — saving the same wall twice has to replace it
+ * rather than grow a copy — so a constant meant: save the garage, press New
+ * wall, save the workshop, and the garage is gone.
+ *
+ * Time AND randomness, because uniqueness is needed across devices and not just
+ * within a session. A share link carries a document into somebody else's
+ * browser, where it meets a shelf this one has never seen; two walls minted from
+ * a counter would collide there and one person's save would quietly overwrite
+ * another's wall.
+ *
+ * Never sorted — the shelf orders by `savedAt`. A base-36 millisecond stamp
+ * sorts wrongly on the day it gains a digit, which is the trap `pruneWallPhotos`
+ * had to be taught about (D88); this is an identity, and nothing may read
+ * meaning into it.
+ */
+export function newDocId(): string {
+  const stamp = Date.now().toString(36);
+  const salt = Math.random().toString(36).slice(2, 8);
+  return `w${stamp}-${salt}`;
+}
+
 export function emptyDoc(): LayoutDoc {
   return {
     schemaVersion: 1,
-    id: 'layout',
+    id: newDocId(),
     name: 'Untitled wall',
     wall: { widthMm: 2400, heightMm: 1200 },
     bedId: DEFAULT_BED_ID,

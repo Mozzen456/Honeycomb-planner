@@ -613,6 +613,18 @@ in IMAGE PIXELS: `|b − a| = realMm` stated on the wall points is true by const
 with the factor inverted. A calibration that would breach `MIN/MAX_PHOTO_SPAN_MM` is REFUSED with a
 sentence, never clamped — clamping keeps the anchor and makes the scale a lie.
 
+**A document's `id` is a real identity and `emptyDoc()` mints a fresh one** (D103). It was the
+constant `'layout'` for as long as only one document existed at a time, which was invisible until
+walls could be SAVED: the shelf is keyed on that id — saving the same wall twice must replace it
+rather than grow a copy — so a constant meant saving the garage, pressing New wall, saving the
+workshop, and losing the garage. Minted from time AND randomness, never a counter: a share link
+carries a document into a browser whose shelf this one has never seen. Nothing may sort ids or read
+meaning into them.
+
+**A saved wall's photograph is protected from the cache bound** (D103). `pruneWallPhotos` keeps the
+newest few plus whatever it is told; every wall on the shelf carries its `photoId` so it can be told.
+Deleting a wall does NOT delete its picture — another wall may share it.
+
 **The alignment is on the document; the pixels are in IndexedDB.** Same split as an imported part,
 and it makes "this browser does not have the picture" a real state that has to be said out loud —
 a share link carries the alignment and cannot carry a photograph. Re-attaching mints a NEW id even
@@ -773,6 +785,12 @@ The UI is a thin shell.
 - **`src/core/bom.ts`** — parts-list aggregation and `validate()`.
 - **`src/core/store.ts`** — commands, placement rules, undo/redo.
 - **`src/core/persist.ts` / `exporters.ts`** — save/load/share, CSV/markdown/print.
+- **`src/core/wallStore.ts`** — the SESSION (the wall on screen, written back on every edit, so a
+  refresh costs nothing) and the SHELF (the walls somebody deliberately named and kept). Two stores
+  answering two different fears, and keeping them apart is what makes "New wall" safe — if the
+  session were the save, starting a blank one would overwrite what you had. Both hold
+  `serialize(doc)`, so a wall on the shelf, in a file and in a share link are one format with one
+  migration path. Pure above the storage functions, and it takes its clock as an argument (D103).
 - **`src/core/stl.ts`** — STL parsing, mesh measurement, the fitted print estimator.
 - **`src/core/threemf.ts`** — 3MF reading: units, transforms and winding, into the same
   `MeshData` an STL gives. **`src/core/zip.ts`** is the ZIP half, and **`src/core/modelFile.ts`**

@@ -400,6 +400,17 @@
   background: var(--border-subtle);
 }
 
+/* The shelf's count, on the Walls button: how many are kept, without opening it. */
+.app__wallscount {
+  padding-inline: var(--space-1);
+  border-radius: var(--radius-pill);
+  background: var(--surface-0);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--space-4);
+}
+
 /* Buy Me a Coffee.
    -----------------------------------------------------------------------------
    The one control in the app that is deliberately NOT on the palette: it carries
@@ -933,7 +944,8 @@
     padding-inline: var(--space-0);
     justify-content: center;
   }
-  .app__coffee__label {
+  .app__coffee__label,
+  .app__wallsword {
     position: absolute;
     inline-size: 1px;
     block-size: 1px;
@@ -941,6 +953,9 @@
     clip-path: inset(50%);
     white-space: nowrap;
   }
+  /* The count goes with the word — a bare number beside a stack icon reads as a
+     quantity of something on the wall rather than of saved walls. */
+  .app__wallscount { display: none; }
 
   .app__body {
     grid-template-columns: minmax(0, 1fr) var(--panel-width-right);

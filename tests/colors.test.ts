@@ -335,9 +335,17 @@ describe('colours round-trip', () => {
     expect(reload(doc).colors).toEqual(doc.colors);
   });
 
+  /*
+   * ONE base document, spread twice — the claim is about the order the swatches
+   * were clicked and nothing else. Two separate `solvedDoc()` calls used to work
+   * only because every document carried the same hard-coded id; they are unique
+   * now that walls can be saved and the shelf is keyed on identity, and two
+   * genuinely different documents are not the subject of this test.
+   */
   it('is byte-identical however the swatches were clicked', () => {
-    const a: LayoutDoc = { ...solvedDoc(), colors: { lines: { zebra: '#111111', alpha: '#222222' } } };
-    const b: LayoutDoc = { ...solvedDoc(), colors: { lines: { alpha: '#222222', zebra: '#111111' } } };
+    const base = solvedDoc();
+    const a: LayoutDoc = { ...base, colors: { lines: { zebra: '#111111', alpha: '#222222' } } };
+    const b: LayoutDoc = { ...base, colors: { lines: { alpha: '#222222', zebra: '#111111' } } };
     expect(serialize(a)).toBe(serialize(b));
   });
 

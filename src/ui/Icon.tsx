@@ -59,7 +59,8 @@ export type IconName =
   | 'chevronDown'
   | 'chevronRight'
   | 'sparkle'
-  | 'coffee';
+  | 'coffee'
+  | 'layers';
 
 export interface IconProps extends Omit<SVGProps<SVGSVGElement>, 'children'> {
   name: IconName;
@@ -239,6 +240,15 @@ const PATHS: Record<IconName, JSX.Element> = {
       <path d="M17 10.2h1.4a2.6 2.6 0 0 1 0 5.2H17" />
       <path d="M7.8 2.4v2.6M12.2 2.4v2.6" />
       <path d="M3.5 21.6h14" />
+    </>
+  ),
+  /* Saved walls: several of the same thing, stacked. Not a folder — nothing here
+     is a file system, and a folder promises somewhere to put things. */
+  layers: (
+    <>
+      <path d="m12 3 9 4.6-9 4.6-9-4.6Z" />
+      <path d="m3.6 12.3 8.4 4.3 8.4-4.3" />
+      <path d="m3.6 16.8 8.4 4.3 8.4-4.3" />
     </>
   ),
 };

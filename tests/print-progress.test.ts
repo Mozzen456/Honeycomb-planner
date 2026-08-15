@@ -294,9 +294,16 @@ describe('printed counts round-trip', () => {
     expect(reload(docWith(6, { hook: 4 })).printed).toEqual({ hook: 4 });
   });
 
+  /*
+   * ONE base document, spread twice. The claim is about the order the counts
+   * were typed; two separate `docWith(6)` calls used to be interchangeable only
+   * because every document carried the same hard-coded id, and ids are unique
+   * now that walls can be saved and the shelf is keyed on identity.
+   */
   it('is byte-identical on a second save, whatever order the counts were typed', () => {
-    const a: LayoutDoc = { ...docWith(6), printed: { zebra: 1, alpha: 2 } };
-    const b: LayoutDoc = { ...docWith(6), printed: { alpha: 2, zebra: 1 } };
+    const base = docWith(6);
+    const a: LayoutDoc = { ...base, printed: { zebra: 1, alpha: 2 } };
+    const b: LayoutDoc = { ...base, printed: { alpha: 2, zebra: 1 } };
     expect(serialize(a)).toBe(serialize(b));
     expect(serialize(reload(a))).toBe(serialize(a));
   });

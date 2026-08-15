@@ -23,6 +23,10 @@ import { panelModelFileName, panelModelSpecFor } from '../core/panelModel';
 import { decodeShareUrl, encodeShareUrl, deserialize, serialize } from '../core/persist';
 import { resolveProjectParts, shoppableParts } from '../core/projectParts';
 import {
+  loadSession, loadWalls, protectedPhotoIds, putWall, removeWall, storeSession, storeWalls,
+  type SavedWall,
+} from '../core/wallStore';
+import {
   emptyDoc, MAX_WALL_MM, MIN_WALL_MM, Store, type EditorState, type DropResult,
 } from '../core/store';
 import { generatedPlateSizes, solveTiling, type PanelSize } from '../core/tiling';
@@ -38,6 +42,7 @@ import { ObstaclePanel } from './ObstaclePanel';
 import { WallPhotoPanel } from './WallPhotoPanel';
 import { ImportDialog } from './ImportDialog';
 import { PartLibrary } from './PartLibrary';
+import { WallsDialog } from './WallsDialog';
 import { forgetPhotoUrl, removePhoto, savePhoto } from './partPhotos';
 import {
   clearMounting, loadUserOverrides, mergeOverrideFiles, setFootprint, setMounting,
@@ -171,6 +176,9 @@ export function App() {
   const [dropCheck, setDropCheck] = useState<DropResult>({ ok: true });
   const [toast, setToast] = useState<{ text: string; kind: 'error' | 'warn' | 'ok' } | null>(null);
   const [filter, setFilter] = useState('');
+  /** The shelf, read once at startup and kept in step with storage from here. */
+  const [walls, setWalls] = useState<SavedWall[]>(() => loadWalls());
+  const [wallsOpen, setWallsOpen] = useState(false);
   /**
    * The wall fixing the user has picked, if any — a cell for a single fixing, a
    * junction's anchor for the four-cell one.
@@ -252,11 +260,53 @@ export function App() {
      * where no attach can be in flight — and silent, because a number of
      * photographs nobody asked about is alarming rather than useful.
      */
-    void pruneWallPhotos(WALL_PHOTOS_KEPT, [store.getState().doc.photo?.id ?? '']);
+    /*
+     * ...and every SAVED wall's photo is protected too, which is new.
+     *
+     * D88 had to treat a layout holding a photo id as unknowable — "there is no
+     * list of documents the way there is a list of parts, so 'no open document
+     * claims it' is not evidence that nothing does". There is a list now. A wall
+     * saved three weeks ago, with nine photographs attached since, would
+     * otherwise come back off the shelf remembering exactly where its picture
+     * goes and unable to show it.
+     */
+    void pruneWallPhotos(
+      WALL_PHOTOS_KEPT,
+      protectedPhotoIds(loadWalls(), store.getState().doc.photo?.id),
+    );
     // Startup only. `catalog` is complete on the first render — imported parts
     // load synchronously from localStorage — so there is nothing to wait for.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /**
+   * The working copy, written back on every edit.
+   *
+   * This is the whole of "a refresh does not cost me an afternoon", and it is
+   * deliberately NOT a save: it has no name, it is not on the shelf, and
+   * starting a new wall simply replaces it. Keeping the two apart is what makes
+   * "New wall" safe to press.
+   *
+   * Debounced, because it serialises the entire document and the wall size
+   * commits on every keystroke (`NumberField`'s `commitOn: 'type'`, which is the
+   * live preview that makes resizing feel like resizing). Without the delay,
+   * typing `2400` writes four copies of a 60 kB wall.
+   *
+   * Failure is silent by design — see `storeSession`. A browser refusing storage
+   * costs the convenience, and saying so on every edit would be a toast nobody
+   * can act on.
+   */
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      try {
+        storeSession(serialize(state.doc));
+      } catch {
+        /* a document that will not serialise is a bug, not a storage problem;
+           the wall on screen is unaffected and the next edit tries again */
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [state.doc]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -707,6 +757,85 @@ export function App() {
     [bom, state.doc, say],
   );
 
+  // --- the shelf of saved walls --------------------------------------------
+
+  /**
+   * Keep this wall.
+   *
+   * Keyed on the DOCUMENT's id, so saving the same wall twice replaces it rather
+   * than growing a shelf full of near-identical copies. A refusal — the shelf is
+   * full, or the browser will not take any more — is said out loud, because a
+   * save that quietly did not happen leaves the wall on screen looking kept.
+   */
+  const saveWall = useCallback(() => {
+    const text = serialize(state.doc);
+    const res = putWall(walls, state.doc, text, Date.now());
+    if (res.refused !== undefined) {
+      say(res.refused, 'warn');
+      return;
+    }
+    if (!storeWalls(res.walls)) {
+      say(
+        'This browser would not store the wall — it may be full, or in private mode. '
+        + 'Export the JSON to keep it.',
+        'error',
+      );
+      return;
+    }
+    setWalls(res.walls);
+    say(`Saved “${state.doc.name || 'Untitled wall'}”`, 'ok');
+  }, [walls, state.doc, say]);
+
+  /**
+   * Start a blank one.
+   *
+   * Through `replaceDoc`, so it is an ordinary undoable edit: the wall you were
+   * on is one Ctrl+Z away, and the session is rewritten from whatever ends up on
+   * screen. The shelf is untouched either way.
+   */
+  const newWall = useCallback(() => {
+    store.replaceDoc(emptyDoc(), 'New wall');
+    setWallsOpen(false);
+    say('Started a new wall — Undo brings the last one back', 'ok');
+  }, [store, say]);
+
+  const openWall = useCallback((id: string) => {
+    const entry = walls.find((w) => w.id === id);
+    if (entry === undefined) return;
+    const res = deserialize(entry.text);
+    if (!res.doc) {
+      say(`Could not open that wall: ${res.errors[0] ?? 'unrecognised format'}`, 'error');
+      return;
+    }
+    store.replaceDoc(res.doc, `Open ${entry.name}`);
+    setWallsOpen(false);
+    say(
+      res.errors.length > 0
+        ? `Opened “${entry.name}” with ${res.errors.length} problem(s) — ${res.errors[0]}`
+        : `Opened “${entry.name}”`,
+      res.errors.length > 0 ? 'warn' : 'ok',
+    );
+  }, [walls, store, say]);
+
+  /**
+   * Take one off the shelf for good.
+   *
+   * The bytes of its photograph are NOT deleted with it. They are bounded as a
+   * cache by `pruneWallPhotos` at startup, and the same picture may belong to
+   * the wall on screen or to another saved one — deleting here would be the
+   * fastest way to make a different wall forget its own photograph.
+   */
+  const deleteWall = useCallback((id: string) => {
+    const next = removeWall(walls, id);
+    const gone = walls.find((w) => w.id === id);
+    if (!storeWalls(next)) {
+      say('This browser would not update the shelf', 'error');
+      return;
+    }
+    setWalls(next);
+    say(`Deleted “${gone?.name ?? 'that wall'}”`, 'ok');
+  }, [walls, say]);
+
   const share = useCallback(() => {
     try {
       const url = encodeShareUrl(state.doc, window.location.href.split('#')[0] ?? '');
@@ -1120,6 +1249,21 @@ export function App() {
             </div>
 
             <span className="app__actiondivider" aria-hidden="true" />
+
+            {/* The shelf, first: which wall you are working on comes before
+                anything you might do to it. */}
+            <button
+              type="button"
+              className="button button--subtle"
+              onClick={() => setWallsOpen(true)}
+              title="Save this wall, start a new one, or open one you kept"
+            >
+              <Icon name="layers" />
+              <span className="app__wallsword">Walls</span>
+              {walls.length > 0 && (
+                <span className="app__wallscount tabular-nums">{walls.length}</span>
+              )}
+            </button>
 
             {/* File in, link out — the two things a person does with a whole
                 layout, so they keep their words. Everything else up here is an
@@ -1628,6 +1772,19 @@ export function App() {
         );
       })()}
 
+      {wallsOpen && (
+        <WallsDialog
+          walls={walls}
+          currentId={state.doc.id}
+          currentName={state.doc.name.trim().length > 0 ? state.doc.name.trim() : 'Untitled wall'}
+          onSave={saveWall}
+          onNew={newWall}
+          onOpen={openWall}
+          onDelete={deleteWall}
+          onClose={() => setWallsOpen(false)}
+        />
+      )}
+
       {browsing && (
         <PartLibrary
           catalog={catalog}
@@ -1676,10 +1833,36 @@ export function App() {
 
 // ---------------------------------------------------------------------------
 
+/**
+ * The wall to open with, in order of how deliberate it is.
+ *
+ *   1. A SHARE LINK. Somebody followed a URL to see a particular wall; that is
+ *      the most explicit intent there is, and it must beat whatever this browser
+ *      happens to have been doing.
+ *   2. THE SESSION — the working copy, written back on every edit. This is what
+ *      makes a refresh, a closed tab or a browser crash cost nothing. It is not
+ *      a save and it is not on the shelf; it is simply where you were.
+ *   3. An empty wall.
+ *
+ * The session is read through `deserialize`, so a working copy written by an
+ * older build migrates exactly as a downloaded file does. A copy that cannot be
+ * read is DISCARDED rather than reported: nobody chose to open it, so there is
+ * no failure to explain — and a modal error on a cold start about a document the
+ * user never asked for is worse than quietly beginning afresh.
+ */
 function loadInitialDoc() {
   if (typeof window !== 'undefined' && window.location.hash.length > 1) {
     const res = decodeShareUrl(window.location.href);
     if (res.doc) return res.doc;
+  }
+  const session = loadSession();
+  if (session !== null) {
+    try {
+      const res = deserialize(session);
+      if (res.doc) return res.doc;
+    } catch {
+      /* fall through to a blank wall */
+    }
   }
   return emptyDoc();
 }

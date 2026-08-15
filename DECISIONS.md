@@ -3715,3 +3715,75 @@ The title bar needs **1095px** to hold brand + logo + actions on one row, which
 is within a few pixels of the 68rem tablet breakpoint — so past it the label is
 what gives and the yellow square keeps the cup. The words stay in the DOM: they
 are the link's accessible name.
+
+## D103 — A working copy, and a shelf
+
+Refreshing the page threw everything away. `loadInitialDoc` read the URL hash
+and otherwise handed back `emptyDoc()`, so a solved wall with thirty accessories
+on it survived exactly as long as the tab did — and the app is about to be
+published, where the first thing a stranger does is reload.
+
+**Two stores, because there are two different fears.**
+
+The SESSION is the wall on screen, written back on every edit. It is what makes
+a refresh, a closed tab or a crash cost nothing. It has no name, it is not on the
+shelf, and nobody asked for it: it is the working copy.
+
+The SHELF is the walls somebody deliberately kept, each named. It is what lets a
+person plan the garage and the workshop without one destroying the other.
+
+Keeping them apart is the whole design. If the session WERE the save, "New wall"
+would silently overwrite the thing you had; with two stores the shelf is
+untouched by anything done to the working copy, and New and Open both go through
+`replaceDoc` — so they are ordinary undoable edits and the wall you were on is
+one Ctrl+Z away.
+
+**The shelf stores `serialize(doc)`**, the same text a downloaded `.json`
+carries, so a wall on the shelf, a wall in a file and a wall in a share link are
+one format with one migration path. A SUMMARY is stored beside it — size, plates,
+items, photo id — so the list can be drawn without deserialising every wall on
+it.
+
+**It refuses at the bound and never evicts.** Dropping the oldest wall to make
+room for the newest is the one behaviour a shelf must not have; the point of it
+is that things stay where they were put. A refusal is a sentence, and so is a
+browser that will not take the write — a save that quietly did not happen leaves
+the wall on screen looking kept.
+
+**A malformed row is dropped alone.** A stored value is user input by the time it
+comes back, and failing the whole list would turn one bad row into "all your
+walls are gone", which is the failure this exists to prevent.
+
+### `id: 'layout'` — every document had the same one
+
+`emptyDoc()` returned a CONSTANT id, which was invisible for as long as only one
+document existed at a time. The shelf is keyed on that id, because saving the
+same wall twice has to replace it rather than grow a copy — so on the constant it
+meant: save the garage, press New wall, save the workshop, and the garage is
+gone. Found by saving two walls and reading back one.
+
+Ids are minted from time AND randomness now. Not a counter: a share link carries
+a document into somebody else's browser, where it meets a shelf this one has
+never seen, and two walls minted from a counter would collide there — one
+person's save quietly overwriting another's wall. Nothing sorts them; the shelf
+orders by `savedAt`, because a base-36 millisecond stamp sorts wrongly on the day
+it gains a digit (D88).
+
+Two round-trip tests broke on it and both were right to. Each built two documents
+from separate `emptyDoc()` calls and asserted the bytes matched — a claim about
+the ORDER swatches were clicked, and the order printed counts were typed, which
+only held because the id was a constant. They spread one base document now.
+
+### The photo bound can finally be told the truth
+
+`pruneWallPhotos` keeps the newest few pictures and whatever it is protected.
+D88 had to treat a saved layout as unknowable — "there is no list of documents
+the way there is a list of parts, so 'no open document claims it' is not evidence
+that nothing does". There is a list now, and every saved wall's `photoId` is
+handed to the bound at startup. Without it a wall would come back off the shelf
+remembering exactly where its photograph goes and unable to show it, which is the
+one state the feature was built to avoid.
+
+Deleting a wall does NOT delete its photograph: the same picture may belong to
+the wall on screen or to another saved one, and the bound already handles the
+bytes.
