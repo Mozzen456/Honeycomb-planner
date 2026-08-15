@@ -30,7 +30,7 @@ import {
   isGeneratedSize, panelFrameKey, panelIsBordered, panelModelSpecFor,
 } from '../core/panelModel';
 import { partCells } from '../core/store';
-import { photoCentreMm, photoRectMm } from '../core/wallPhoto';
+import { photoCentreMm, photoRectMm, photoRotation } from '../core/wallPhoto';
 import type {
   Catalog, CatalogPart, Hex, LayoutDoc, PlacedPanel, Rotation,
 } from '../core/types';
@@ -1395,6 +1395,16 @@ export function WallView3D(props: WallView3DProps) {
      * because they really are in front of it.
      */
     mesh.position.set(centre.x, centre.y, photo.depth === 'behind' ? -0.6 : PANEL_DEPTH + 0.6);
+    /*
+     * The turn, about the wall normal.
+     *
+     * NOT negated, unlike the plan's (D70): this view is y-up in world space
+     * exactly as the wall is, so a positive rotation about +z is already
+     * counter-clockwise seen from the room — which is the sense the field is
+     * stored in. The plan has to flip it because its pixels are y-down; here
+     * there is nothing to undo.
+     */
+    mesh.rotation.z = (photoRotation(photo) * Math.PI) / 180;
     s.photoGroup.add(mesh);
   }, [doc.photo, photoImg, ready]);
 

@@ -318,9 +318,28 @@ export interface WallPhoto {
    * `needsReview` exists to prevent in the catalogue.
    */
   calibrated: boolean;
-  /** Lower-left corner in wall millimetres, the same frame an `Obstacle` uses. */
+  /**
+   * Lower-left corner of the UNROTATED rectangle, in wall millimetres — the same
+   * frame an `Obstacle` uses.
+   *
+   * Unrotated on purpose: this and `mmPerPixel` describe the photo in its own
+   * frame, and `rotationDeg` turns that frame about its centre. Storing a
+   * rotated corner instead would make every read of this field ask "rotated by
+   * what?", and the calibration — which scales about a point the user clicked —
+   * would have to un-rotate before it could scale.
+   */
   xMm: number;
   yMm: number;
+  /**
+   * Turn about the photo's own centre, in degrees, counter-clockwise as the wall
+   * is seen from the room. Absent means square, which is what a photo dropped
+   * straight off a phone claims to be and rarely is.
+   *
+   * About the CENTRE and not a corner: a photograph is straightened by eye
+   * against features near the middle of it, and turning about a corner swings
+   * the whole picture out from under the pointer.
+   */
+  rotationDeg?: number;
   /** 0–1. Drawn over the wall in both views at exactly this. */
   opacity: number;
   /**

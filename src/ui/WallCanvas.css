@@ -140,16 +140,30 @@
 
 /* --- Setting the photograph's scale -------------------------------------- */
 
+/* WRAPS, and its controls never shrink — the same pair the toolbar around it
+   needs. This group holds the scale gesture, the turn, the depth toggle, the
+   opacity slider and Remove; on a phone that is 570px of content in a 358px
+   strip, and without the wrap it ran straight out of the toolbar and off the
+   side of the wall. */
 .wall-canvas__scale {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
+  /* Overrides the toolbar's blanket `flex: 0 0 auto` on its children — this
+     group has to SHRINK for its own wrap to ever happen, while the controls
+     inside it still do not. Without the override it sat at its 570px
+     max-content width and `flex-wrap` had nothing to do. */
+  flex: 0 1 auto;
   gap: var(--space-2);
+  min-inline-size: 0;
   padding-inline-start: var(--space-2);
   border-inline-start: var(--border-width-hair) solid var(--border-subtle);
   color: var(--text-secondary);
   font-size: var(--font-size-sm);
   white-space: nowrap;
 }
+
+.wall-canvas__scale > * { flex: 0 0 auto; }
 
 .wall-canvas__scale label {
   display: inline-flex;
@@ -199,6 +213,51 @@
   gap: var(--space-1);
   color: var(--text-tertiary);
   font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+}
+
+/* Straightening the photo: nudge, type, nudge. One well, so the three controls
+   read as one instrument rather than as three more buttons in a strip that
+   already has several. */
+.wall-canvas__turn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-0-5);
+  padding-inline: var(--space-1);
+  border: var(--border-width-hair) solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+}
+
+.wall-canvas__toolbar .wall-canvas__turnstep {
+  min-inline-size: var(--control-height-sm);
+  min-block-size: var(--control-height-sm);
+  padding-inline: var(--space-0);
+  justify-content: center;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-sm);
+}
+
+.wall-canvas__toolbar .wall-canvas__turnstep:hover { color: var(--text-primary); }
+
+/* 6ch, not the toolbar default: it holds "-180" and a tenth, and no more. */
+.wall-canvas__turn .wall-canvas__turnfield {
+  inline-size: 6ch;
+  min-block-size: var(--control-height-sm);
+  padding-inline: var(--space-1);
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: var(--font-size-xs);
+  font-variant-numeric: var(--font-numeric-tabular);
+  text-align: end;
+}
+
+.wall-canvas__turn .wall-canvas__turnfield:hover { border-color: var(--border-subtle); }
+
+.wall-canvas__turnunit {
+  margin-inline-end: var(--space-0-5);
+  color: var(--text-tertiary);
   font-size: var(--font-size-xs);
 }
 

@@ -51,7 +51,8 @@ import { NumberField } from './NumberField';
 import { obstacleRects } from '../core/obstacles';
 import { partCells } from '../core/store';
 import {
-  calibratePhoto, MAX_PHOTO_OPACITY, MIN_PHOTO_OPACITY, movePhoto, photoHit, photoRectMm,
+  calibratePhoto, MAX_PHOTO_OPACITY, MIN_PHOTO_OPACITY, movePhoto, photoCorners, photoHit,
+  photoRectMm, photoRotation, rotatePhoto,
 } from '../core/wallPhoto';
 import { attachWallPhoto, peekWallPhotoImage, wallPhotoImage } from './wallPhotoImage';
 import type {
@@ -1732,11 +1733,71 @@ export function WallCanvas(props: WallCanvasProps) {
                   {scaleArmed ? 'Now drag between two points…' : 'Set scale'}
                 </button>
                 {/*
-                  The two things you fiddle with CONSTANTLY while lining a zone
+                  The three things you fiddle with CONSTANTLY while lining a zone
                   up, kept where the wall is. Everything else about the photo —
                   replacing it, removing it, typing its position — is a once-per-
                   session job and stays in the rail.
+
+                  Straightening belongs here and not in the rail because it is
+                  done BY EYE against the lattice: you nudge it a degree and look,
+                  which you cannot do from a panel below a solved wall's entire
+                  parts list.
                 */}
+                <div className="wall-canvas__turn" role="group" aria-label="Turn the photo">
+                  <button
+                    type="button"
+                    className="wall-canvas__turnstep"
+                    title="Turn a degree anticlockwise"
+                    aria-label="Turn a degree anticlockwise"
+                    onClick={() => onPhotoChange(rotatePhoto(photo, photoRotation(photo) - 1))}
+                  >
+                    ↺
+                  </button>
+                  <NumberField
+                    className="wall-canvas__turnfield"
+                    value={photoRotation(photo)}
+                    min={-180}
+                    max={180}
+                    step={1}
+                    decimals={1}
+                    /*
+                     * Live, unlike a blocked zone's size (D67). Turning a photo
+                     * re-plans nothing — it moves no cell and cuts no plate — so
+                     * the commit is cheap, and watching the picture come level
+                     * as the number changes IS the feature.
+                     */
+                    onCommit={(v) => onPhotoChange(rotatePhoto(photo, v))}
+                    aria-label="Photo rotation in degrees"
+                  />
+                  <span className="wall-canvas__turnunit" aria-hidden="true">°</span>
+                  <button
+                    type="button"
+                    className="wall-canvas__turnstep"
+                    title="Turn a degree clockwise"
+                    aria-label="Turn a degree clockwise"
+                    onClick={() => onPhotoChange(rotatePhoto(photo, photoRotation(photo) + 1))}
+                  >
+                    ↻
+                  </button>
+                  {photoRotation(photo) !== 0 && (
+                    <button
+                      type="button"
+                      className="wall-canvas__turnstep"
+                      title="Straighten — back to square"
+                      aria-label="Straighten the photo"
+                      onClick={() => onPhotoChange(rotatePhoto(photo, 0))}
+                    >
+                      <Icon name="close" />
+                    </button>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  title="Turn a quarter turn — for a photo that came off the camera on its side"
+                  onClick={() => onPhotoChange(rotatePhoto(photo, photoRotation(photo) + 90))}
+                >
+                  90°
+                </button>
                 <button
                   type="button"
                   aria-pressed={photo.depth === 'front'}
@@ -2408,8 +2469,43 @@ function drawPhoto(
   // Zoomed far enough out to be sub-pixel. `drawImage` with a zero or negative
   // size throws rather than drawing nothing.
   if (!(w > 0.5) || !(h > 0.5)) return;
+
   ctx.globalAlpha = photo.opacity;
-  ctx.drawImage(image, tl.x, tl.y, w, h);
+
+  if (photoRotation(photo) === 0) {
+    ctx.drawImage(image, tl.x, tl.y, w, h);
+  } else {
+    /*
+     * The turned photo is drawn from its own CORNERS, mapped through `toScreen`
+     * — never by rotating the canvas by the stored angle.
+     *
+     * This plan is y-up and its pixels are not (D70), so the same angle written
+     * in screen space runs the other way round the picture: a photo straightened
+     * here would come out twice as crooked in 3D. The fix is not to negate it —
+     * a hand-written sign is the thing that goes wrong, and it went wrong for
+     * every seam and every outline before `toScreen` owned the flip. It is to
+     * compute in WALL millimetres and let `toScreen` do what it already does.
+     *
+     * `photoCorners` is the same function the hit test uses, so the picture and
+     * the pointer cannot come to different views about where the photo is.
+     *
+     * The image's own frame is y-DOWN: its origin is the top-left, which is
+     * corner 3. `u` runs along its top edge and `v` down its left edge, both in
+     * screen pixels per image pixel, and the two of them ARE the matrix.
+     * `transform` multiplies into whatever is already there — the device-pixel
+     * scale — where `setTransform` would throw it away.
+     */
+    const [bl, , tr, tlc] = photoCorners(photo).map(toScreen) as [Point, Point, Point, Point];
+    const ux = (tr.x - tlc.x) / image.width;
+    const uy = (tr.y - tlc.y) / image.width;
+    const vx = (bl.x - tlc.x) / image.height;
+    const vy = (bl.y - tlc.y) / image.height;
+    ctx.save();
+    ctx.transform(ux, uy, vx, vy, tlc.x, tlc.y);
+    ctx.drawImage(image, 0, 0);
+    ctx.restore();
+  }
+
   ctx.globalAlpha = 1;
 }
 

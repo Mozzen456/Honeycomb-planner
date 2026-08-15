@@ -3787,3 +3787,65 @@ one state the feature was built to avoid.
 Deleting a wall does NOT delete its photograph: the same picture may belong to
 the wall on screen or to another saved one, and the bound already handles the
 bytes.
+
+## D104 — Turning the photograph
+
+A photo of a real wall is never square to it. You hold the phone by eye, and the
+lattice you are lining it up against is the one thing in the picture that makes
+the error obvious. There was no way to fix it: the photo could be slid and
+scaled and nothing else.
+
+`rotationDeg` is on `WallPhoto`, counter-clockwise as the wall is SEEN, about the
+photo's own CENTRE. The centre and not a corner, because straightening is done
+by eye against features near the middle and turning about a corner swings the
+picture out from under the pointer. `xMm`/`yMm` stay the corner of the UNROTATED
+rectangle — that field and `mmPerPixel` describe the photo in its own frame, and
+storing a rotated corner would make every reader ask "rotated by what?".
+
+**Wrapped to (−180, 180], never clamped.** 190° and −170° are the same picture,
+and a control that stops dead at 180 makes the last few degrees the long way
+round. Zero is stored as ABSENT: a layout nobody has turned must serialise
+exactly as it always did, or every wall saved before this gains a field on its
+next save and every share link gets longer for nothing.
+
+**`photoCorners` is the one place the angle becomes geometry**, and both views
+and the hit test go through it — so the picture and the pointer cannot come to
+different views about where the photo is.
+
+### The sign, which is where this was going to go wrong
+
+The plan is y-up and its pixels are not (D70). The first version turned the
+canvas by the negated angle, which worked — and was exactly the shape of the bug
+that put every seam and every outline one edge out for as long as angles were
+written in screen space. A hand-written sign is the thing that goes wrong.
+
+So the plan does not rotate the canvas at all. It maps the photo's four CORNERS
+through `toScreen` and builds the matrix from two of the edges, which is the
+rule the whole file already follows: compute in wall millimetres and let
+`toScreen` own the flip. There is no negation left to get backwards.
+
+3D needs no correction either — it is y-up in world space exactly as the wall is,
+so `rotation.z` is already the stored sense.
+
+Measured rather than eyeballed: at 25° the red band along the photo's top edge
+fits a screen slope of **−0.463** against a predicted `tan 25° = 0.466`, rising
+to the right in both views. The 3D canvas cannot be sampled at all — no
+`preserveDrawingBuffer` — which is the other reason the plan derives from shared
+geometry instead of a parallel angle.
+
+### The control is in the STRIP, not the rail
+
+Straightening is done by eye against the lattice: nudge a degree, look. That
+cannot be done from a panel below a solved wall's entire parts list, which is the
+same reasoning that put the depth toggle and the opacity slider there (D88). It
+commits live, unlike a blocked zone's size (D67) — turning a photo re-plans
+nothing, so watching it come level as the number changes IS the feature.
+
+**And the strip already overflowed on a phone.** `.wall-canvas__scale` holds the
+scale gesture, the depth toggle, the opacity slider and Remove; at 390px that is
+570px of content in a 358px strip, and it ran off the side of the wall. It was
+already wrong before the turn control was added to it and the extra 141px only
+made it obvious. Fixed the same way as every other squeezed group here: the GROUP
+shrinks and wraps, its children never do — which needed an explicit `flex: 0 1
+auto` to override the toolbar's blanket `flex: 0 0 auto` on its children, or
+`flex-wrap` had nothing to do and the group sat at its max-content width.

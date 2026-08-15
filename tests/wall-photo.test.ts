@@ -29,8 +29,9 @@ import { staleWallPhotoIds } from '../src/core/userCatalog';
 import catalogJson from '../src/catalog/catalog.json';
 import type { Catalog, LayoutDoc, WallPhoto } from '../src/core/types';
 import {
-  calibratePhoto, clampMmPerPixel, DEFAULT_PHOTO_OPACITY, MAX_PHOTO_SPAN_MM, MIN_PHOTO_SPAN_MM,
-  movePhoto, newWallPhoto, photoCentreMm, photoHit, photoRectMm,
+  calibratePhoto, clampMmPerPixel, clampPhotoRotation, DEFAULT_PHOTO_OPACITY, MAX_PHOTO_SPAN_MM,
+  MIN_PHOTO_SPAN_MM, movePhoto, newWallPhoto, photoCentreMm, photoCorners, photoHit, photoRectMm,
+  photoRotation, rotatePhoto,
 } from '../src/core/wallPhoto';
 
 const catalog = catalogJson as unknown as Catalog;
@@ -306,5 +307,166 @@ describe('the document', () => {
     const before = store.getState().doc.panels;
     store.setPhoto(newWallPhoto('wallphoto1', 'garage.jpg', 2048, 1536, WALL));
     expect(store.getState().doc.panels).toEqual(before);
+  });
+});
+
+/**
+ * Turning the photograph.
+ *
+ * The angle is stored counter-clockwise AS THE WALL IS SEEN, which is the sense
+ * the 3D view turns its plane in and the sense a person means by "turn it left".
+ * The plan has to negate it because its pixels are y-down (D70) — the trap that
+ * put every seam one edge out when angles were written in screen space — so the
+ * geometry is pinned here, in wall millimetres, where there is no flip to argue
+ * about.
+ */
+describe('rotating the photo', () => {
+  /** 100 x 100 mm, centred on (500, 500), so every number below is by hand. */
+  const square = (): WallPhoto => ({
+    id: 'p', name: 'p.jpg', pixelWidth: 100, pixelHeight: 100, mmPerPixel: 1,
+    calibrated: true, xMm: 450, yMm: 450, opacity: 1, depth: 'behind', visible: true,
+  });
+
+  /**
+   * A WIDE photo, so a quarter turn is unmistakable: 200 x 100 mm centred on
+   * (500, 500) spans x 400–600 and y 450–550, and a quarter turn either way has
+   * to swap those spans.
+   */
+  const wide = (): WallPhoto => ({ ...square(), pixelWidth: 200, xMm: 400 });
+
+  const span = (photo: WallPhoto) => {
+    const c = photoCorners(photo);
+    return {
+      x: [Math.min(...c.map((p) => p.x)), Math.max(...c.map((p) => p.x))],
+      y: [Math.min(...c.map((p) => p.y)), Math.max(...c.map((p) => p.y))],
+    };
+  };
+
+  it('turns anticlockwise for a positive angle', () => {
+    expect(span(wide())).toEqual({ x: [400, 600], y: [450, 550] });
+
+    const turned = rotatePhoto(wide(), 90);
+    // Landscape becomes portrait...
+    const s = span(turned);
+    expect(s.x[0]).toBeCloseTo(450, 6);
+    expect(s.x[1]).toBeCloseTo(550, 6);
+    expect(s.y[0]).toBeCloseTo(400, 6);
+    expect(s.y[1]).toBeCloseTo(600, 6);
+
+    // ...and the corner that was bottom-RIGHT swings up to the TOP, which is
+    // what makes this anticlockwise rather than merely ninety degrees.
+    const [, br] = photoCorners(turned);
+    expect(br.x).toBeCloseTo(550, 6);
+    expect(br.y).toBeCloseTo(600, 6);
+  });
+
+  it('turns clockwise for a negative angle', () => {
+    // The mirror of the case above: the same corner swings DOWN instead.
+    const [, br] = photoCorners(rotatePhoto(wide(), -90));
+    expect(br.x).toBeCloseTo(450, 6);
+    expect(br.y).toBeCloseTo(400, 6);
+  });
+
+  /** The pivot is the centre, so it is the one point that cannot move. */
+  it('leaves the centre exactly where it was', () => {
+    for (const deg of [0, 1, 37, 90, -125, 180]) {
+      const turned = rotatePhoto(square(), deg);
+      expect(photoCentreMm(turned)).toEqual(photoCentreMm(square()));
+    }
+  });
+
+  it('keeps its size, whatever the angle', () => {
+    for (const deg of [17, 45, 90, -30]) {
+      const c = photoCorners(rotatePhoto(square(), deg));
+      expect(Math.hypot(c[1]!.x - c[0]!.x, c[1]!.y - c[0]!.y)).toBeCloseTo(100, 6);
+      expect(Math.hypot(c[3]!.x - c[0]!.x, c[3]!.y - c[0]!.y)).toBeCloseTo(100, 6);
+    }
+  });
+
+  /** Wrapped, not clamped: 190 and -170 are the same picture. */
+  it('wraps rather than stopping dead at half a turn', () => {
+    expect(clampPhotoRotation(190)).toBe(-170);
+    expect(clampPhotoRotation(-190)).toBe(170);
+    expect(clampPhotoRotation(360)).toBe(0);
+    expect(clampPhotoRotation(450)).toBe(90);
+    expect(clampPhotoRotation(180)).toBe(180);
+  });
+
+  it('refuses a number that is not one, and never reads back a negative zero', () => {
+    expect(clampPhotoRotation(NaN)).toBe(0);
+    expect(clampPhotoRotation(Infinity)).toBe(0);
+    expect(Object.is(clampPhotoRotation(-0.001), 0)).toBe(true);
+  });
+
+  /**
+   * Zero is ABSENT, not `0`. A layout nobody has turned must serialise exactly
+   * as it always did, or every wall saved before this feature gains a field on
+   * its next save and every share link gets longer for nothing.
+   */
+  it('stores square as no field at all', () => {
+    expect(rotatePhoto(square(), 0).rotationDeg).toBeUndefined();
+    expect('rotationDeg' in rotatePhoto(square(), 0)).toBe(false);
+    expect(rotatePhoto(rotatePhoto(square(), 45), 0).rotationDeg).toBeUndefined();
+    expect(photoRotation(square())).toBe(0);
+  });
+
+  /** The pointer has to agree with the picture, or a drag grabs empty wall. */
+  describe('the hit test follows the turn', () => {
+    it('lets go of a corner the turn has moved away from', () => {
+      const corner = { x: 549, y: 549 };          // just inside the square's own corner
+      expect(photoHit(square(), corner)).toBe(true);
+      expect(photoHit(rotatePhoto(square(), 45), corner)).toBe(false);
+    });
+
+    it('picks up a point the turn has moved ONTO', () => {
+      // Directly above the centre, beyond the unturned top edge but inside the
+      // diagonal once the square is turned 45 degrees.
+      const above = { x: 500, y: 560 };
+      expect(photoHit(square(), above)).toBe(false);
+      expect(photoHit(rotatePhoto(square(), 45), above)).toBe(true);
+    });
+
+    it('still holds the centre at every angle', () => {
+      for (const deg of [0, 30, 90, 145, -60]) {
+        expect(photoHit(rotatePhoto(square(), deg), { x: 500, y: 500 })).toBe(true);
+      }
+    });
+  });
+
+  describe('through save and load', () => {
+    const reload = (doc: LayoutDoc): LayoutDoc => {
+      const res = deserialize(serialize(doc));
+      expect(res.doc, res.errors.join('\n')).not.toBeNull();
+      return res.doc!;
+    };
+
+    it('comes back at the same angle', () => {
+      const doc = { ...emptyDoc(), photo: rotatePhoto(square(), -12.5) };
+      expect(reload(doc).photo?.rotationDeg).toBe(-12.5);
+    });
+
+    it('an unturned photo serialises exactly as it always did', () => {
+      const doc = { ...emptyDoc(), photo: square() };
+      expect(serialize(doc)).not.toContain('rotationDeg');
+      expect(reload(doc).photo?.rotationDeg).toBeUndefined();
+    });
+
+    it('wraps a hand-edited angle instead of trusting it', () => {
+      const hostile = JSON.stringify({
+        ...JSON.parse(serialize({ ...emptyDoc(), photo: square() })),
+        photo: { ...square(), rotationDeg: 725 },
+      });
+      expect(deserialize(hostile).doc?.photo?.rotationDeg).toBe(5);
+    });
+
+    it('drops a rotation that is not a number, rather than refusing the photo', () => {
+      const hostile = JSON.stringify({
+        ...JSON.parse(serialize({ ...emptyDoc(), photo: square() })),
+        photo: { ...square(), rotationDeg: 'sideways' },
+      });
+      const back = deserialize(hostile).doc?.photo;
+      expect(back).toBeDefined();
+      expect(back?.rotationDeg).toBeUndefined();
+    });
   });
 });

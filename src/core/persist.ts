@@ -16,7 +16,9 @@ import { BEDS, clampBedMm, CUSTOM_BED_ID, MAX_BED_MM, MIN_BED_MM } from './const
 import { hasColors, readColors } from './colors';
 import { DEFAULT_BORDER_MM, MAX_BORDER_MM } from './honeycomb';
 import { MAX_PROJECT_PARTS } from './projectParts';
-import { clampMmPerPixel, clampPhotoOpacity, DEFAULT_PHOTO_OPACITY } from './wallPhoto';
+import {
+  clampMmPerPixel, clampPhotoOpacity, clampPhotoRotation, DEFAULT_PHOTO_OPACITY, photoRotation,
+} from './wallPhoto';
 import type {
   FixingEdits, Group, Hex, LayoutDoc, Obstacle, PlacedItem, PlacedPanel, Rotation, WallColors,
   WallFrame, WallPhoto, WallSpec, ZoneRect,
@@ -252,6 +254,11 @@ function canonicalDoc(doc: LayoutDoc): Record<string, unknown> {
             calibrated: doc.photo.calibrated,
             xMm: doc.photo.xMm,
             yMm: doc.photo.yMm,
+            // Absent when square, like every other optional above: a layout
+            // nobody has turned must serialise exactly as it always did.
+            ...(photoRotation(doc.photo) !== 0
+              ? { rotationDeg: photoRotation(doc.photo) }
+              : {}),
             opacity: doc.photo.opacity,
             depth: doc.photo.depth,
             visible: doc.photo.visible,
@@ -1065,6 +1072,17 @@ export function migrate(raw: unknown): LoadResult {
           opacity: clampPhotoOpacity(
             typeof rawOpacity === 'number' ? rawOpacity : DEFAULT_PHOTO_OPACITY,
           ),
+          // Wrapped, not clamped, and absent stays absent — `rotatePhoto` is
+          // the one place that decides what a turn of zero looks like on disk.
+          ...(clampPhotoRotation(
+            typeof rawPhoto['rotationDeg'] === 'number' ? rawPhoto['rotationDeg'] : 0,
+          ) !== 0
+            ? {
+              rotationDeg: clampPhotoRotation(
+                typeof rawPhoto['rotationDeg'] === 'number' ? rawPhoto['rotationDeg'] : 0,
+              ),
+            }
+            : {}),
           depth: rawPhoto['depth'] === 'front' ? 'front' : 'behind',
           // Absent means shown: a photo that is in the document at all was put
           // there to be looked at, and a missing flag must not hide it.

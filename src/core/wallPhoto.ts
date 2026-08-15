@@ -69,17 +69,105 @@ export function photoRectMm(photo: WallPhoto): PhotoRect {
   };
 }
 
-/** Its middle — what the 3D view needs, since a plane is placed by its centre. */
+/**
+ * Its middle — what the 3D view needs, since a plane is placed by its centre,
+ * and the point everything about the rotation turns around.
+ *
+ * Unaffected by the rotation, which is the reason the centre is the pivot: a
+ * turned photo is still centred where it was, so nothing that positions the
+ * picture has to know the angle.
+ */
 export function photoCentreMm(photo: WallPhoto): Point {
   const r = photoRectMm(photo);
   return { x: r.xMm + r.widthMm / 2, y: r.yMm + r.heightMm / 2 };
 }
 
-/** Is this point on the photo? Used to decide whether a drag grabs it. */
+// ---------------------------------------------------------------------------
+// Which way up
+// ---------------------------------------------------------------------------
+
+/** Rotation is stored to a tenth of a degree — finer than anyone can aim. */
+const ROTATION_STEP = 10;
+
+/**
+ * The turn, normalised to (−180, 180].
+ *
+ * Wrapped rather than clamped: 190° and −170° are the same picture, and a
+ * control that stops dead at 180 makes turning the last few degrees the long way
+ * round. Wrapping also keeps the stored number small however many times someone
+ * holds the arrow key down.
+ */
+export function clampPhotoRotation(deg: number): number {
+  if (!Number.isFinite(deg)) return 0;
+  const rounded = Math.round(deg * ROTATION_STEP) / ROTATION_STEP;
+  const wrapped = ((rounded % 360) + 360) % 360;      // [0, 360)
+  const signed = wrapped > 180 ? wrapped - 360 : wrapped;
+  // `-0` is a real value that compares equal to 0 and fails `Object.is`, which
+  // is what a dirty check uses. Same rule as `readMounting`'s six numbers.
+  return Object.is(signed, -0) ? 0 : signed;
+}
+
+/** The effective angle. Absent means square. */
+export function photoRotation(photo: WallPhoto): number {
+  return clampPhotoRotation(photo.rotationDeg ?? 0);
+}
+
+/**
+ * Turn the photo to an absolute angle, about its own centre.
+ *
+ * Zero is stored as ABSENT, not as `0`. A layout nobody has turned must
+ * serialise exactly as it always did — the same rule the colours, the printed
+ * counts and the frame all follow — or every previously saved wall gains a field
+ * on its next save and every share link gets longer for nothing.
+ */
+export function rotatePhoto(photo: WallPhoto, deg: number): WallPhoto {
+  const rotationDeg = clampPhotoRotation(deg);
+  const { rotationDeg: _old, ...rest } = photo;
+  return rotationDeg === 0 ? rest : { ...rest, rotationDeg };
+}
+
+/**
+ * The four corners as DRAWN, in wall millimetres, anticlockwise from the
+ * bottom-left of the photo's own frame.
+ *
+ * The one place the rotation is turned into geometry. Both views and the hit
+ * test go through it, so a picture cannot be drawn at an angle the pointer does
+ * not agree with — which is the whole class of bug this app keeps finding when
+ * two readers derive the same thing separately.
+ */
+export function photoCorners(photo: WallPhoto): [Point, Point, Point, Point] {
+  const r = photoRectMm(photo);
+  const c = photoCentreMm(photo);
+  const t = (photoRotation(photo) * Math.PI) / 180;
+  const cos = Math.cos(t);
+  const sin = Math.sin(t);
+  const at = (dx: number, dy: number): Point => ({
+    x: c.x + dx * cos - dy * sin,
+    y: c.y + dx * sin + dy * cos,
+  });
+  const hw = r.widthMm / 2;
+  const hh = r.heightMm / 2;
+  return [at(-hw, -hh), at(hw, -hh), at(hw, hh), at(-hw, hh)];
+}
+
+/**
+ * Is this point on the photo? Used to decide whether a drag grabs it.
+ *
+ * The point is turned back into the photo's own frame and tested against the
+ * plain rectangle, rather than the rectangle being turned into a polygon and
+ * tested against. Same answer, and it stays a rectangle test — a point-in-quad
+ * test is where an off-by-one in corner order hides.
+ */
 export function photoHit(photo: WallPhoto, p: Point): boolean {
   const r = photoRectMm(photo);
-  return p.x >= r.xMm && p.x <= r.xMm + r.widthMm &&
-         p.y >= r.yMm && p.y <= r.yMm + r.heightMm;
+  const c = photoCentreMm(photo);
+  const t = (-photoRotation(photo) * Math.PI) / 180;
+  const dx = p.x - c.x;
+  const dy = p.y - c.y;
+  const x = c.x + dx * Math.cos(t) - dy * Math.sin(t);
+  const y = c.y + dx * Math.sin(t) + dy * Math.cos(t);
+  return x >= r.xMm && x <= r.xMm + r.widthMm &&
+         y >= r.yMm && y <= r.yMm + r.heightMm;
 }
 
 /**
