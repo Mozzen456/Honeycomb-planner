@@ -331,3 +331,47 @@ doing deliberately rather than as a side effect of a socket correction.
 **What holds until then.** Anything that says WHERE ON A PART a feature is must be measured on the
 oriented mesh — the frame the wall draws in — not on the file. `overrides.json` records that for the
 socket cells, with the measurement in the note.
+
+## P11. Zero-thickness membranes across the bore at a zone corner
+
+**Measured, not suspected**, and visible in the running app: two thin stripes running down through
+the hexagons from each corner of a blocked zone. Reported as "the 2 stripes going down in both
+corners".
+
+They are the three-piece corner split (D83) drawing the faces it claims cancel. The pieces divide
+the outline on `bx` and `px`, and each piece's BORE wall is emitted unconditionally by the inner
+skin, so along those two lines two pieces each draw their own wall back to back. Solid on neither
+side — both sides are open bore — so what stands there is a membrane of zero thickness. Counted as
+zero-width runs in a section through the mouth band, on the exported three-zone wall:
+
+| | before D105 | after D105 |
+| --- | --- | --- |
+| zone 1182.5, 472 | 240 | 358 |
+| zone 401.9, 696.2 | 58 | 114 |
+| zone 790.3, 460.2 | 178 | 234 |
+| **total** | **476** | **706** |
+
+So it PRE-DATES D105 and D105 widened it, because more cells now correctly take the corner path.
+The plate's silhouette and its aperture are unaffected and stay exact — `zone-apron.test.ts` and
+`zone-aperture.test.ts` both pass — so this is mesh quality and appearance, not shape.
+
+### What the fix has to do, and where the attempt stopped
+
+The outer skin already cancels a shared face: `boundaryEdges` drops any directed edge whose opposite
+turns up, and `weldTJunctions` splits partial overlaps so the endpoints match exactly. The inner
+skin has no such step. Adding one removes **all 706** membranes, and three things were learnt doing
+it:
+
+- Cancel through `boundaryEdges`, never a plain set of opposites. A clipped bore can double back so
+  one ring holds an edge AND its reverse; matched naively it cancels against itself, both sides drop
+  their band and the hole in the plate becomes a hole in the MESH — 8 unmatched edges on a closed
+  loop along the rail line.
+- `addSkirt` needs the same test. It runs whenever two levels' rings differ in length, and while one
+  piece dropped a band through the index-matched path its sibling drew it through this one.
+- With both done, **4 unmatched edges** survive in a small number of zone placements. That is where
+  it stopped: an unwatertight plate is a worse defect than a stripe, so the change was reverted
+  rather than landed. `zone-sliver.test.ts` and `zone-aperture.test.ts` catch it — trust them.
+
+The remaining asymmetry is between the two paths' idea of which level decides. A band spans levels
+`j` and `j+1`; the index-matched path can see one edge on the boundary and the other not, and the
+skirt path answers per level. Making the two agree is the open question.
