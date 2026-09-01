@@ -80,6 +80,36 @@ export function solidToGeometry(
   return geo;
 }
 
+/**
+ * A generated part's own (x, y, z) — out, across, up — into scene coordinates.
+ *
+ * Shared by the bin builder and the peg adder, which both draw a part they
+ * generated against a patch of wall and both hold it in the file frame
+ * `binModel.ts` documents.
+ *
+ * `(x, y, z) -> (y, z, x)` is CYCLIC and therefore a rotation. The same fact
+ * `AXES` in `detect.ts` rests on, and the same trap: an acyclic permutation
+ * would mirror the part, and a mirrored part's pegs still line up, so nothing
+ * here would look wrong.
+ */
+export function wallFrameGeometry(
+  positions: ArrayLike<number>,
+  dx: number,
+  dy: number,
+  dz: number,
+): THREE.BufferGeometry {
+  const out = new Float32Array(positions.length);
+  for (let i = 0; i < positions.length; i += 3) {
+    out[i] = positions[i + 1]! + dx;
+    out[i + 1] = positions[i + 2]! + dy;
+    out[i + 2] = positions[i]! + dz;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(out, 3));
+  geo.computeVertexNormals();
+  return geo;
+}
+
 const plateCache = new Map<string, THREE.BufferGeometry>();
 
 /**

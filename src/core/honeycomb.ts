@@ -1995,6 +1995,67 @@ export function meshIsClosed(mesh: SolidMesh): {
 }
 
 /**
+ * The gap between two stacked plates.
+ *
+ * One layer at the 0.2 mm this app's estimator profile assumes, and that is the
+ * whole trick: a stack printed with a single layer of air between the parts
+ * bridges across the gap instead of fusing, so the copies come apart in the
+ * hand and every one of them keeps a flat first layer. Any less and they weld;
+ * much more and the bridge sags into the part below.
+ *
+ * It is not a tolerance and it does not scale with the plate — it is a layer.
+ */
+export const STACK_GAP_MM = 0.2;
+
+/** How many copies a stack may hold. A bound on a typed number, not a printer. */
+export const MAX_STACK = 25;
+
+/** A typed count, made into a real one. The one place the bounds are applied. */
+export const clampStack = (copies: number): number =>
+  Math.max(1, Math.min(MAX_STACK, Math.floor(copies) || 1));
+
+/**
+ * `copies` of a mesh, one above the next, `STACK_GAP_MM` apart.
+ *
+ * The step is the mesh's own HEIGHT plus the gap, measured rather than assumed:
+ * a bordered plate and a plain one are both 8 mm tall today, and hard-coding
+ * `PANEL_DEPTH` here would silently stack them wrong the day one is not.
+ *
+ * The copies are separate closed shells, which is what a stack IS — they are
+ * meant to come apart. `meshIsClosed` still passes, and nothing here should try
+ * to join them.
+ */
+export function stackMesh(mesh: SolidMesh, copies: number, gapMm = STACK_GAP_MM): SolidMesh {
+  const n = clampStack(copies);
+  if (n === 1) return mesh;
+
+  const step = meshBoundsMm(mesh).size[2] + gapMm;
+  const per = mesh.positions.length;
+  const positions = new Float64Array(per * n);
+  for (let c = 0; c < n; c++) {
+    const lift = c * step;
+    for (let i = 0; i < per; i += 3) {
+      positions[c * per + i] = mesh.positions[i]!;
+      positions[c * per + i + 1] = mesh.positions[i + 1]!;
+      positions[c * per + i + 2] = mesh.positions[i + 2]! + lift;
+    }
+  }
+  return { positions, triangleCount: mesh.triangleCount * n };
+}
+
+/**
+ * How tall a stack of `copies` comes out.
+ *
+ * Takes the height of ONE rather than the mesh, because the control offering the
+ * stack has a plate's depth and no mesh — it is being asked before anything is
+ * generated. Same arithmetic either way, stated once.
+ */
+export const stackHeightMm = (oneMm: number, copies: number): number => {
+  const n = clampStack(copies);
+  return oneMm * n + STACK_GAP_MM * (n - 1);
+};
+
+/**
  * A binary STL.
  *
  * Binary, not ASCII: a 400 mm plate is ~90,000 triangles, which is 4.5 MB binary

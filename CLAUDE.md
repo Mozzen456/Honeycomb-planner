@@ -5,7 +5,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 A browser planner for a Honeycomb Storage Wall (HSW): lay accessories out on a hex grid, get back an
-exact list of what to print. The geometry is **measured from the STL files in `./models/`**, not
+exact list of what to print. A second tab GENERATES accessories to hang on it — see "The Build tab"
+below and D108. The geometry is **measured from the STL files in `./models/`**, not
 copied from any published description. `HSW-SPEC.md` records every number with its provenance,
 `DECISIONS.md` records why each call was made, `PARKED.md` records what is still open, and
 `UNKNOWN.md` lists what the scanner would not guess at.
@@ -20,7 +21,7 @@ better guide to where the work actually got to.
 
 ```bash
 npm run dev          # Vite dev server
-npm test             # vitest run — 52 files, 1161 tests
+npm test             # vitest run — 55 files, 1219 tests
 npm run typecheck    # tsc --noEmit
 npm run build        # typecheck + vite build (also copies models/ into dist/)
 
@@ -242,6 +243,15 @@ cells do (D56) — `borderCutCells` names them, `cutAroundObstacles` applies the
 border off gives them back. The old edge instead ran **26.7 mm** of solid plate between two cells of
 the outermost column, against a `MARGIN_X + t` of 17.2: a whole extra cell of plastic, which is what
 "the border looks chunky" meant every time.
+
+**A STACK is copies of one plate, a LAYER apart, and they stay separate solids** (D111).
+`stackMesh` lifts each copy by the mesh's own measured height plus `STACK_GAP_MM` (0.2) — the same
+rule, and the same number, as the OpenSCAD generator this app grew out of. Measured, not
+`PANEL_DEPTH`: every plate is 8 mm tall today and hard-coding that stacks them wrong the day one is
+not. The copies are meant to come apart, so nothing may try to join them — `meshIsClosed` passes
+because each shell is closed, exactly as for a bolted-on peg (D109). And measure the gap on the MESH
+with a ray: the plate's own bore profile has a 4.6 mm step in it, so splitting the vertex z-levels on
+a jump either cuts one plate into five or misses the 0.2 mm entirely.
 
 **`omit` is not one thing, and both readers must ask which.** A cell can be there because a zone ate
 it or because the edge halved it, and a cell at the wall's rim can be BOTH. `panelModelSpec` hands
@@ -553,6 +563,191 @@ flex shrank the buttons to 15 px and the field below two digits, and the wider `
 the whole control out of its column and over the part name. The column is sized to hold the total;
 the per-line filament column gave up 16 px for it.
 
+### The peg, the Build tab and the peg adder
+
+**The peg is 13.45 mm across FLATS and it is not any hexagon in `CELL`.** The wall is two-level
+(HSW-SPEC §5): an insert clips into a 22.0 mm cell and offers a 13.40 mm socket, and an accessory
+pegs into THAT. Reaching for `CELL.mouthAcrossFlats` here prints something that will not go near
+the wall. `PEG` in `constants.ts` is the measured one — 13.45 across flats, 15.53075 across
+corners, 8.0 long — read off all four shipped shelves and agreeing to 0.001 mm.
+
+**It is FLAT-TOP, like the wall and like the socket.** Turned 30° it fouls the socket, and that is
+the same class of error as D31/D35.
+
+**`PEG_PROFILE` drafts five faces and leaves the sixth, and that is deliberate** (D108). The face
+pointing DOWN keeps its plane for the whole taper — measured, shelf-2's bottom flat is still at
+z = 0.001 at 7.7 mm along a peg whose sides have come in 0.278 — because that is the face the part
+is PRINTED on. Draft it and the peg lifts off the bed. So `pegRing` takes two offsets, not one, and
+the asymmetry in it is a print fact rather than a modelling quirk.
+
+**A row of pegs steps by `SAME_ROW_STEP` = 2·ROW_STEP, never by ROW_STEP.** The columns stagger by
+half a pitch, so one column across is 11.8 mm UP — a real cell, but not one a level row can use.
+`cellsFor` names cells in axial coordinates and the test puts every peg through `hexToMm`; never
+write `q * 20.438` in `binModel.ts`.
+
+**The pegs SPREAD to the widest whole-step spacing the width allows** (`pegStep`). Not a
+refinement: two pegs 41 mm apart in the middle of a 187 mm bin let it rock about its own centre.
+It is also what the designer did — all four shipped shelves are at the widest step their own width
+allows, and `tests/bin-model.test.ts` pins the rule against that table rather than against itself.
+
+**A bin gets a TOP row of pegs whenever the height allows, and it costs a bridge.** The bottom row
+puts its flats on the bed and prints with nothing in the air; the top row cannot, and there is
+nowhere to put a support that is not inside the wall's own socket. The panel says so in a sentence,
+and the sentence is MEASURED: `measureMesh` counts downward faces steeper than 45° excluding the
+bed face, so a one-row bin must come out at exactly zero and a two-row bin at its top pegs' bottom
+flats and nothing else.
+
+**`topPegRow` taking the highest row that FITS is what keeps `drawOffsetYMm` legal.** `orient`
+centres a part on its wall-plane bounding box and the 3D view puts that centre on the box centre of
+its CELLS (D73) — halfway up the bin against halfway between the peg rows. Those differ, and the
+correction goes into `offsetYMm`, which `readTrim` clamps at `MAX_OFFSET_MM` = 40 SILENTLY. Because
+the top row is always within one pitch of the top, the drift can never exceed half a pitch. Change
+`topPegRow` and check that bound again.
+
+**Testing solidity by the ABSENCE of surface is the peg adder's one counter-intuitive rule** (D109).
+A solid has no triangles inside it, so a part that really is solid through the seat depth has
+NOTHING in a slab just behind its face. `candidateCells` therefore passes a cell when the face slab
+is covered AND the seat slab is EMPTY. The first version asked for coverage in the deep slab and
+offered no cell on any part ever — it was measuring the silhouette's outline and calling it
+solidity. If you touch this, remember which way round it goes.
+
+**`PEG_SEAT_MM` is the minimum part thickness as well as the overlap.** It is 2 mm and both jobs
+depend on it: deep enough that the peg's solid and the part's overlap unambiguously, and — because
+the seat probe demands solid for all of it — it is what refuses a cell over 0.4 mm of skin. Raising
+it refuses ordinary 2.2 mm plates, which is most of what people upload.
+
+**A peg added to an upload is a SECOND SOLID, not a union.** There is no polygon boolean here and
+there is not going to be one. `meshIsClosed` still passes — every directed edge has one opposite
+within its own shell — but the output is deliberately several components, which is what putting two
+objects in a 3MF does and what every slicer unions. Do not "fix" it into one.
+
+**The peg adder is also the 3MF converter, and NOTHING blocks its download.** It reads both
+formats and writes STL, so a 3MF in comes out as an STL with or without pegs. That was unreachable
+while `reviewPegs` refused an empty plan — the refusal disabled the button, so the most obvious use
+of a tool that reads 3MF and writes STL was the one it would not do. `reviewPegs` returns no errors
+at all now. `Add to project` still needs a peg, and that one is real: the wall places a part by its
+cells.
+
+**A 3MF fixture is a REAL zip — `tests/fixtures/threemf.ts`.** Shared by `threemf.test.ts` and
+`peg-adder.test.ts`, because proving a conversion needs a genuine archive with correct CRCs, and two
+copies of a ZIP writer is two chances to write it wrong. Any test about 3MF should reach for that
+rather than a hand-made `MeshData`, which would prove the STL writer works and nothing about the
+format.
+
+**EVERY cell in the peg adder is clickable, including cells outside the part.** The lattice is the
+only hard constraint. How well the part backs a cell is a MEASUREMENT in three grades — `solid`,
+`partial`, `bare` — drawn as three colours and said in the notes; it is not a gate. It was a gate
+once and that was wrong: no rule here can know about a part it has never seen, and a cell you cannot
+press is a conversation the tool refused to have. The only thing that blocks a download is picking
+no cells at all.
+
+**A `bare` peg is different in KIND, not degree, and the note has to say so.** With nothing behind
+it the peg is a separate closed solid in the file — it prints as a loose piece. Partly-backed is a
+matter of how well it holds; bare is a matter of what comes off the printer.
+
+**The cell pad is FILLED, and it was a ring once.** A ring's middle is a hole and the raycast goes
+straight through it, so the cell could only be picked by hitting a few millimetres of rim — which
+is never where anybody aims.
+
+**A 3D view's wheel handler must be a NON-PASSIVE NATIVE listener, not React's `onWheel`.** React
+attaches wheel passively, so `preventDefault` inside it does nothing and the page scrolls out from
+under the model while it zooms. Invisible on a wide window and obvious on a narrow one; both the bin
+builder and the peg adder carry the native listener.
+
+**A file dropped on the Build tab must `stopPropagation`.** The shell has a window-level drop
+handler that sends any model to the IMPORT flow — a different thing to do with the same file — and
+window is the last hop in the bubble path, so stopping it at the tool is enough.
+
+**A `BinSpec` is the INSIDE of the bin, and `outerMm` is the only thing that says what the outside
+is.** The sliders set the cavity — will the box of screws go in it — and the box is a consequence.
+The fields are named `innerWidthMm` / `innerHeightMm` / `innerDepthMm` for that reason: they used to
+be outside measurements, and a rename is what forces every reader to say which it meant instead of
+carrying on with a field whose meaning changed underneath it.
+
+Which means most of `binModel` wants the OUTSIDE: the back panel runs the full height of the box, the
+flat part of it is bounded by the outer width, and `topPegRow` asks about the panel, not the cavity.
+So `buildBinMesh` converts ONCE at the top and `topPegRow` takes a spec rather than a number — a
+plain `heightMm` argument is exactly how the inside would get passed to it by mistake.
+
+`minWidthMm(pegs, wallMm)` takes the wall for the same reason: the constraint is on the outside (the
+outermost peg must sit on the flat back panel), and this is the one place that translates it inward.
+
+**Check the cavity on the SOLID, not on the arithmetic.** `tests/bin-model.test.ts` casts a skew ray
+from twelve probes — six just inside the claimed cavity's faces, six just outside — and the probes
+are placed from the SPEC and the wall alone, never from `outerMm`. Placed relative to the outside
+they would move with a wrong conversion and agree with it.
+
+**The bin's pegs are OVERLAPPING SOLIDS, not holes cut in the back panel** (D110). It used to cut
+exact hexagonal holes and grow the peg out of them — one connected manifold — and that could only
+ever place a GRID: two pegs one column apart sit half a pitch above each other and their hexagons
+overlap in the very bands the cutting is organised by. Hand-placed pegs are not a grid, so the peg
+became the same overlapping solid `pegAdder` welds onto an upload. One peg mechanism for the whole
+app. The cost is that a bin is several closed shells rather than one solid; each is closed and
+correctly wound, and a slicer unions them.
+
+**`latticeOffset` is FROZEN the moment pegs are placed by hand.** The automatic origin moves with
+the peg count and the width — a wider bin spreads its pegs, which slides the first one — so a chosen
+cell would walk across the panel on a resize. `pegCentres` goes through `cellsFor` + `cellPointMm`
+for both cases; it used to be two formulas and that is the failure this repo keeps paying for.
+
+**The bin's cells are picked in 3D, like the peg adder's, and the pads are `depthTest: false`.** A
+bin's back panel faces the wall, so depth-tested the pads would show from one angle only and finding
+it would be the first thing anybody had to learn. Drawn on top they are pressable from any angle and
+the raycast still hits the pad you can see. It was a flat map in the rail first; two tools that do
+the same thing should do it the same way.
+
+**A pad's position must come from the LATTICE, not from `cells[0]`.** `place` = `hexToMm(0,0) −
+latticeOffsetMm`. Deriving it as `hexToMm(cells[0]) − pegCentres[0]` gives the same number for every
+cell — until there are none, when the two halves fall back to different defaults and the whole bin
+jumps in the preview. If a pad and its cell drift apart you press one pad and get a peg on another,
+which looks like a broken raycast and is arithmetic.
+
+**`binModel.backPanelCells` is not `hex.panelCells`.** One is the cells on a bin's back panel, the
+other the cell block of a wall plate. They were briefly the same word.
+
+**The bin's outside is ONE extruded outline, and `backHalf` is not `halfW`.** The corners are
+rounded on the four VERTICAL edges, which is free — the build direction is up the wall, so a fillet
+on the extrusion profile leaves every face vertical. The profile's closing segment is the flat part
+of the back panel, the only stretch that is not a plain wall because it carries the holes; so the
+flat panel stops a radius short of the silhouette on each side and `backHalf = halfW − r` bounds
+every peg, hole and split. `minWidthMm` carries `2 × CORNER_RADIUS_MM` for the same reason, and
+`pegStep` measures its room against the flat part, not the box.
+
+**Write the profile's cardinal points out; do not evaluate them from the arc.** `cos(−π/2)` is
+6.1e-17, not 0, and `meshIsClosed` compares vertices EXACTLY. `roundedProfile` emits the four
+tangent points and the eight corners literally and only generates the arcs' INTERIOR points.
+
+**The rim is a quad strip between two profiles built by the same function.** Same `ARC_STEPS`, same
+order, so point i of the outline belongs with point i of the cavity's. Cut the ring into rectangles
+instead and it needs vertices the walls and the cavity do not have — a T-junction at every one.
+
+**`capU` fans from point 1 because point 1 is always on an ARC.** A fan apex sitting on one of the
+straight edges flattens every triangle along that edge, and a degenerate triangle is something
+`meshIsClosed` counts and a slicer chokes on.
+
+**A corner radius is invisible to a bounding box — measure the DIAGONAL.** `w × d` is unchanged by
+rounding. `max(a + d)` is not: for a rounded rectangle it is `halfW + D − r(2 − √2)`, and for a
+sharp one exactly `halfW + D`. That is what `tests/bin-model.test.ts` asserts, and it fails the
+moment somebody squares the corners off.
+
+**A generated mesh must be built from bit-identical expressions where two faces meet.**
+`meshIsClosed` compares vertices EXACTLY, on purpose. `pegRing` uses closed forms rather than
+intersecting planes so that at zero draft the four expressions collapse to the same bits, and the
+back panel's holes are cut from the peg's own d = 0 ring rather than from a recomputed half-width.
+Same discipline as `cornerPositions` in `honeycomb.ts`, same reason.
+
+**The preview draws a REAL plate, and `previewPatch` lives in the core.** A patch that missed a peg
+cell would draw the peg onto the web between two cells and look very nearly right, so it is a claim
+about the lattice and belongs where a test holds it. The second camera button is `Behind` rather
+than `Front`: straight on, the bin covers the thing it is proving.
+
+**A generated bin needs no alignment step, and `needsReview` is FALSE — honestly.** The footprint
+is not a bounding-box bound, it is the cell list the mesh was built from. Its mounting is written
+by `App.addBinToProject` as `wallFaceAxis: 'x'`, `matingEnd: 'low'`, `seat: 'insert'`,
+`offsetMm: −PEG.lengthMm`, and `tests/bin-mounting.test.ts` runs the whole chain and demands every
+peg centre land on its own cell. That mounting is restated in the test on purpose — it lives inside
+a React callback, and the test is what says so if the two part company.
+
 ### Reading a model file
 
 **Two formats, one `MeshData`, one dispatcher.** `parseModelFile` in `src/core/modelFile.ts` is the
@@ -786,6 +981,16 @@ per shape shares one material, so two plates of a shape cannot be drawn in two t
 A lit plate is the plate's tone carried TOWARD the selection colour, never replaced by it: replaced,
 the honeycomb reads as a flat slab and you cannot see the cells, which is usually why you clicked.
 
+**The generate list lights plates too, through the SAME line** (D107). Hover a row in "Plates to
+generate", or press its Download, and its copies light on the wall — so the rail must name that plate
+the way the parts list names it. `bom.customLineKey(group.key)` is that one spelling, called by
+`panelLineKeys`, `computeBom` and the rail; a fourth copy of `custom/` is a highlight that lights
+nothing. Hover is its OWN state (`hoverLine`), never written into `litLine`: a hover ends, and folded
+together, moving the pointer off a row would clear a highlight somebody had clicked. `shownLine =
+hoverLine ?? litLine` is what every consumer gets, the parts list included, so pointing at a plate in
+the rail also marks the line it is counted on. Download PINS rather than toggles — you pressed it to
+get the file.
+
 **A prop the draw effect reads has to be in its dependency array.** `litPanelIds` reached
 `WallCanvas` and was left out of the effect's deps, so clicking a line marked the row and repainted
 nothing — which looks exactly like a highlight that does not work, and was only found by clicking it.
@@ -878,13 +1083,28 @@ The UI is a thin shell.
   which of a part's own cells carry the insert it hangs on. Both the wall and the alignment tool
   place inserts through that one function.
 - **`src/core/obstacles.ts`** — switches, sockets and pipes, as cells the wall must avoid.
+- **`src/core/binModel.ts`** — the OTHER generator: a wall bin, on the same lattice and out of the
+  same constants. Owns where a peg goes (`cellsFor`, `pegCentres`, `pegStep`), what a peg is
+  (`pegRing`, off `PEG_PROFILE`), how tall a bin has to be before it gets a second row
+  (`topPegRow`), what that costs to print (`topRowBridgesMm`) and how far the drawing has to be
+  nudged (`drawOffsetYMm`). No polygon boolean and no CSG: the bin is a stack of slabs whose shared
+  faces are built from bit-identical expressions, which is what `meshIsClosed` demands (D108).
 - **`src/core/honeycomb.ts`** — the parametric model maker: cells (and an optional frame) become a
   printable, watertight plate, plus a binary STL writer. Built from the measured bore profile, and
   checked against all seven shipped plates. No polygon boolean anywhere — a border is two half-planes
   and a convex polygon clipped by one stays convex.
+  Also `stackMesh`, which is how a plate is downloaded several at a time (D111).
 - **`src/core/panelModel.ts`** — the bridge from a planned panel to a printable one: which cells a
   plate really has, which frame lines apply, and which sides it meets. The single owner of the
   planner-versus-printer split (D56).
+- **`src/core/pegMesh.ts`** — the peg AS GEOMETRY, shared by both generators: the ring (closed form,
+  so `binModel` can cut its holes from the same numbers) and `buildPegSolid`, a closed peg capped at
+  both ends for welding onto an upload. Not `peg.ts`, which MEASURES the peg an uploaded part
+  already has in order to guess how it mounts.
+- **`src/core/pegAdder.ts`** — pegs on somebody else's model (D109): turning an upload into the wall
+  frame, `bestFace` searching the six, `candidateCells` deciding where a peg may go, and
+  `buildPeggedMesh` welding them on. The place that owns the difference between "on the lattice"
+  (absolute, a `Hex`) and "on the part" (measured, and the reason a cell can be refused).
 - **`src/core/colors.ts`** — what colour a thing is printed in: the four levels, the hex gate, and
   the palette a build actually uses. Pure, and the only place the order is decided (D93).
 - **`src/core/measure.ts`** — measuring on the plan, snapping, and blocked zones as rectangles you
@@ -913,6 +1133,14 @@ The UI is a thin shell.
   both want it and want it identically, and two copies would drift the moment one learnt about
   photos and the other did not. That is the shape of D50, D52 and D66, each of which was a second
   reader of one fact quietly disagreeing with the first.
+- **`src/ui/BinBuilder.tsx`** — the Build tab: three sliders, a peg stepper, a 3D preview and two
+  buttons. It derives no geometry of its own — every number it shows comes back out of `binModel`,
+  and `pegSpacingNote` reads the spacing through `hexToMm` so the label is a measurement of what
+  was built rather than a restatement of what was intended.
+- **`src/ui/PegAdder.tsx`** — the Build tab's second tool: drop a model, pick a face, click cells,
+  download it with pegs in. It derives no geometry — the candidate cells, the review and the merged
+  mesh all come out of `pegAdder.ts` — and its one rule of its own is that a refused cell is not
+  clickable.
 - **`src/ui/BomPanel.tsx`** — the parts list itself: sections, issues in plain language, the printed
   counts, the colour swatches, the totals. Pure presentation over a computed `Bom` — it derives no
   number of its own beyond formatting, and every action leaves through a callback. When something
@@ -930,6 +1158,9 @@ The UI is a thin shell.
   surface and a menu that waits for the button to come back up survives the whole of the first drag
   under it; Escape closes it AND returns focus to the trigger. Not portalled — the title bar does not
   clip its overflow the way the parts list does.
+- **`src/ui/StackMenu.tsx`** — how many copies of a plate go in one file, asked in a popover on the
+  Download STL button. Portalled for `ColorSwatch`'s reason, and it fires `onOpen` from an EFFECT:
+  lighting the plate is a `setState` in `App`, and a state updater runs during render (D111).
 - **`src/ui/NumberField.tsx` / `src/ui/ColorSwatch.tsx`** — the two shared inputs, and they share a
   shape worth knowing before writing a third: the value being edited is LOCAL, the commit is
   separate and deliberate (`commitOn: 'confirm'`; the popover's OK), and the rules that decide when
@@ -1208,6 +1439,27 @@ reader still doing its own `BEDS.find` gets undefined and falls back to "unknown
 with no panels. The size is on the DOCUMENT because a saved layout's plates were cut to that bed;
 it is clamped to `MIN_BED_MM`–`MAX_BED_MM` in the store AND again in `deserialize`, and the ceiling
 is real: the plate grid grows with the bed's AREA, so 1000 × 1000 already offers 1968 sizes.
+
+### Two TABS, and then two views inside one of them
+
+`Wall` plans a wall out of plates and lays accessories on it; `Build` generates something to hang on
+one (D108). They are a different question from the `3D` / `Plan` switch in the toolbar, and they sit
+in a different tier for that reason: the TITLE bar carries what you are doing at all, the toolbar
+carries the parameters the next solve reads (D100). The toolbar is hidden on `Build`, because
+nothing in it means anything to the generator and a row of controls that do nothing is worse than no
+row.
+
+The tab is NOT on the document. Which half of the product you had open is not a property of a wall,
+and a share link that put the recipient in the generator instead of on the wall they were sent would
+be actively wrong.
+
+`Build` itself carries two tools, switched in its own bar: **Bin** generates a whole part, **Add
+pegs** puts the fastening on a model you already have (D109). Both end in the same two buttons.
+
+The two TABS share exactly one thing: `Add to project` writes whatever was generated into the
+library and into `doc.library`, after which it is an ordinary part — draggable, counted, coloured,
+exported. One callback, `addGeneratedPart`, so a bin and a pegged upload cannot arrive by two
+different routes.
 
 ### Two views
 

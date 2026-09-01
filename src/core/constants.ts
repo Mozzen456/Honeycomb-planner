@@ -188,3 +188,78 @@ export function bedFor(
     depth,
   };
 }
+
+// ---------------------------------------------------------------------------
+// The hexagonal PEG an accessory mates through
+// ---------------------------------------------------------------------------
+
+/**
+ * The peg the four shipped shelves hang on, measured off `models/shelves/*.stl`.
+ *
+ * This is the second half of the two-level system in HSW-SPEC §5. An INSERT
+ * clips into a cell and offers a hexagonal SOCKET; a peg this size goes into
+ * that socket. It is a different hexagon from anything in `CELL` — 13.45 across
+ * flats against the cell's 22.0 mouth — and confusing the two would print an
+ * accessory that will not go anywhere near the wall.
+ *
+ * Every number here was read off the meshes and every one of them agrees across
+ * all four shelves to better than 0.001 mm:
+ *
+ *   - across flats 13.45, so across corners 13.45·2/√3 = 15.53075. The four
+ *     shelves measure 15.53072, which is the round number typed once and the
+ *     STL's float32 back;
+ *   - 8.0 mm long, of which the first 4.0 are the full section;
+ *   - the shelves' peg centres sit 4·ROW_STEP = 81.752 mm apart, exactly two
+ *     same-row lattice steps, and the four shelves differ in width by exactly
+ *     2·ROW_STEP each. The lattice is in the part, not just near it.
+ *
+ * ORIENTATION. The peg is drawn FLAT-TOP, like the wall: flats top and bottom,
+ * corners left and right, so 13.45 is measured up the wall and 15.53 across it.
+ * A peg turned 30° would foul the socket and is the same class of error as
+ * D31/D35.
+ */
+export const PEG = {
+  /** Across flats — the dimension that actually fits the socket. */
+  acrossFlats: 13.45,
+  /** Across corners. Derived, because the flats are the typed number. */
+  acrossCorners: (13.45 * 2) / Math.sqrt(3),
+  /** How far the peg goes into the socket. */
+  lengthMm: 8.0,
+} as const;
+
+/** Circumradius of the peg hexagon — centre to corner. */
+export const PEG_RADIUS = PEG.acrossCorners / 2;
+
+/**
+ * How far each of the peg's six faces is drawn IN, along its length.
+ *
+ * Not a scaled hexagon, and that is the interesting part: the BOTTOM face keeps
+ * its plane for the whole of the draft, while the other five taper. Measured on
+ * shelf-2, the bottom flat sits at z = 0.001 at 7.7 mm along a peg whose sides
+ * have already come in 0.278 — because that flat is the face the shelf is
+ * PRINTED on. The designer drew the part lying with the peg's bottom flat on
+ * the bed, and drafting that face would have lifted it off.
+ *
+ * So this table is a print-orientation fact as much as a fitting one, and
+ * `binModel.ts` reproduces it rather than rounding it into a cone: a peg that
+ * tapers on its underside has less material where the load bears.
+ *
+ * `sidesMm` applies to the five drafted faces, `bottomMm` to the one at the
+ * bottom. The last 0.3 mm is a 45° lead-in on all six.
+ */
+export const PEG_PROFILE: readonly { alongMm: number; sidesMm: number; bottomMm: number }[] = [
+  { alongMm: 0.0, sidesMm: 0, bottomMm: 0 },
+  { alongMm: 4.0, sidesMm: 0, bottomMm: 0 },
+  { alongMm: 7.7, sidesMm: 0.2775, bottomMm: 0 },
+  { alongMm: 8.0, sidesMm: 0.6005, bottomMm: 0.3005 },
+];
+
+/**
+ * Centre-to-centre distance between two cells in the SAME horizontal row.
+ *
+ * Two columns, not one: the stagger puts the next column half a pitch up, so the
+ * nearest cell at the same height is `2·ROW_STEP` away. This is the only
+ * horizontal spacing a row of pegs may use, and it is why all four shipped
+ * shelves differ in width by exactly this much.
+ */
+export const SAME_ROW_STEP = 2 * ROW_STEP;

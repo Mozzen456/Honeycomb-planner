@@ -1,0 +1,103 @@
+/* =============================================================================
+   StackMenu — how many copies of this plate go in one file
+   =============================================================================
+
+   Positioned in FIXED coordinates by the component and portalled to the body,
+   because the rail it is opened from lives inside the parts list, which clips
+   its own overflow.
+
+   The width cap follows the same rule ColorSwatch's does: it has to clear the
+   WIDEST ROW, which is the buttons rather than the prose, with the rows allowed
+   to be narrower than their content so the cap makes them wrap instead of
+   escaping (D95).
+   ============================================================================= */
+
+.stack-pop {
+  position: fixed;
+  z-index: var(--z-popover);
+  inline-size: max-content;
+  max-inline-size: min(calc(var(--space-8) * 5), calc(100vw - var(--space-5)));
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background-color: var(--surface-1);
+  border: var(--border-width-hair) solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+}
+
+.stack-pop > * {
+  min-inline-size: var(--space-0);
+}
+
+.stack-pop__title {
+  color: var(--text-secondary);
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: var(--letter-spacing-caps);
+  text-transform: uppercase;
+}
+
+.stack-pop__note {
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-snug);
+}
+
+.stack-pop__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/* The stepper's parts do not shrink — the same rule the parts list's printed
+   counter needed: flex squeezed those buttons to 15 px and the field below two
+   digits, which is a control you cannot hit and a number you cannot read. */
+.stack-pop__step,
+.stack-pop__count,
+.stack-pop__all {
+  flex: none;
+}
+
+.stack-pop__step {
+  min-inline-size: var(--space-6);
+}
+
+.stack-pop__count {
+  inline-size: var(--space-8);
+  padding: var(--space-0-5) var(--space-1);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  text-align: center;
+  background-color: var(--surface-0);
+  border: var(--border-width-hair) solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.stack-pop__count:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* Pushed to the far end: it is a shortcut, not the third part of the stepper. */
+.stack-pop__all {
+  margin-inline-start: auto;
+}
+
+.stack-pop__meta {
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.stack-pop__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.stack-pop__actions .button {
+  min-inline-size: var(--space-0);
+}

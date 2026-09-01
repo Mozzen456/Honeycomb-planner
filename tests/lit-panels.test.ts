@@ -18,7 +18,9 @@ import { describe, expect, it } from 'vitest';
 
 import catalogJson from '../src/catalog/catalog.json';
 import overridesJson from '../src/catalog/overrides.json';
-import { computeBom, panelsForLine } from '../src/core/bom';
+import { computeBom, customLineKey, panelsForLine } from '../src/core/bom';
+import { customPanelGroups } from '../src/core/customiser';
+import { panelFrameKey } from '../src/core/panelModel';
 import { applyOverrides } from '../src/core/overrides';
 import { emptyDoc } from '../src/core/store';
 import { cutAroundObstacles } from '../src/core/store';
@@ -146,5 +148,58 @@ describe('panelsForLine', () => {
     const before = JSON.stringify(doc);
     panelsForLine(doc, doc.panels[0]!.partId);
     expect(JSON.stringify(doc)).toBe(before);
+  });
+});
+
+/**
+ * The generate list in the rail lights a plate's copies when you hover its row
+ * or download its STL, and it has to name that plate the way the parts list
+ * names it — otherwise pointing at the file you are about to print lights
+ * nothing, or lights the wrong plates.
+ *
+ * `customLineKey` is that one spelling. These hold it to the parts list rather
+ * than to the string `custom/`, so the two cannot agree on paper and differ on
+ * screen.
+ */
+describe('customLineKey', () => {
+  /** The grouping the rail does, verbatim — shape plus edge (D66). */
+  const groupsOf = (doc: LayoutDoc) =>
+    customPanelGroups(doc.panels, (p) => panelFrameKey(p, doc.panels, doc.frame));
+
+  it('names exactly the plates in the group, for a wall cut round a switch', () => {
+    const plain = solvedDoc();
+    const doc: LayoutDoc = {
+      ...plain,
+      obstacles: [SWITCH],
+      panels: cutAroundObstacles(plain.panels, [SWITCH], undefined),
+    };
+    const groups = groupsOf(doc);
+    expect(groups.length).toBeGreaterThan(0);
+
+    for (const group of groups) {
+      const ids = panelsForLine(doc, customLineKey(group.key));
+      expect([...ids].sort()).toEqual(group.panels.map((p) => p.id).sort());
+    }
+  });
+
+  it('is a line the parts list actually has, bordered wall included', () => {
+    const plain = solvedDoc();
+    const frame = { left: true, right: true, top: true, bottom: true, holes: false, thicknessMm: 4 };
+    const doc: LayoutDoc = {
+      ...plain,
+      frame,
+      panels: cutAroundObstacles(plain.panels, undefined, frame),
+    };
+    const groups = groupsOf(doc);
+    expect(groups.length).toBeGreaterThan(0);
+
+    const lines = new Map(computeBom(doc, catalog).printed.map((l) => [l.partId, l]));
+    for (const group of groups) {
+      const line = lines.get(customLineKey(group.key));
+      // The row says "×n" and the line says the same, or the highlight is
+      // lighting a different set of plates from the one being counted.
+      expect(line, `no parts-list line for ${group.key}`).toBeDefined();
+      expect(line!.quantity).toBe(group.panels.length);
+    }
   });
 });

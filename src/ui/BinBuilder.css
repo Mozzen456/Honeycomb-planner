@@ -1,0 +1,353 @@
+/*
+ * The Build tab.
+ *
+ * Two columns: the preview takes what is left, the rail is fixed at the same
+ * width as the parts list so switching tabs does not move the page under you.
+ * Everything here is tokens — see TOKENS.md and the note in CLAUDE.md about
+ * `var(--token, literal)` fallbacks, which are how five 3px literals got into
+ * this codebase pretending to be tokenised.
+ */
+
+.builder {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--panel-width-right);
+  min-block-size: 0;
+  overflow: hidden;
+}
+
+/* Same backdrop as the wall's 3D view, and for the same reason: the renderer is
+   built with `alpha: true` and sets no scene background, so this gradient IS
+   the backdrop in both themes from one definition (D100). */
+.builder__stage {
+  position: relative;
+  min-inline-size: 0;
+  min-block-size: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(
+      130% 100% at 50% 38%,
+      color-mix(in srgb, var(--canvas-panel-tint) 60%, var(--canvas-wall)) 0%,
+      var(--canvas-wall) 78%
+    ),
+    var(--canvas-wall);
+  touch-action: none;
+  cursor: grab;
+}
+
+.builder__stage:active { cursor: grabbing; }
+
+.builder__stage canvas {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+}
+
+.builder__hint {
+  position: absolute;
+  inset-block-end: var(--space-4);
+  inset-inline-start: var(--space-4);
+  margin: 0;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface-1) 78%, transparent);
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-2xs);
+  pointer-events: none;
+  user-select: none;
+}
+
+/* The hint is a mouse crib sheet, and on a narrow window it ran under the
+   Fit/Behind strip — two pieces of text on top of each other, which is the first
+   thing anyone notices. Same pair of rules the wall view carries. */
+@media (max-width: 60rem) {
+  .builder__hint { display: none; }
+}
+
+@media (pointer: coarse) {
+  .builder__hint { display: none; }
+}
+
+/* `contain: layout paint` for the reason CLAUDE.md gives: without it this
+   panel's overflow propagates to the viewport inside the 100dvh shell and
+   focusing anything in it scrolls the top bar off screen. Not `strict` —
+   that implies `size` and collapses the grid track. */
+.builder__rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-block-size: 0;
+  padding: var(--space-4);
+  overflow-y: auto;
+  border-inline-start: var(--border-width-hair) solid var(--border-subtle);
+  background: var(--surface-1);
+  contain: layout paint;
+}
+
+.builder__intro { display: grid; gap: var(--space-1); }
+
+.builder__title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--letter-spacing-tight);
+}
+
+.builder__blurb {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-normal);
+}
+
+.builder__controls {
+  display: grid;
+  gap: var(--space-3);
+}
+
+/* label · slider · number · unit. The slider is the only thing that flexes; the
+   number keeps a fixed width so the four rows line up down the right-hand edge
+   whatever is typed into them. */
+.builder__row {
+  display: grid;
+  grid-template-columns: 3.5rem minmax(0, 1fr) 4.25rem 1.75rem;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.builder__label {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.builder__unit {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+}
+
+.builder__slider {
+  inline-size: 100%;
+  min-inline-size: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.builder__slider:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.builder__number {
+  inline-size: 100%;
+  min-inline-size: 0;
+}
+
+/* The peg stepper spans the slider and number columns, because the count is one
+   value and splitting it across two cells would read as two controls. */
+.builder__stepper {
+  grid-column: 2 / span 2;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/* `flex: none` on the parts, and a fixed width on the readout. Left to flex,
+   these shrank to unreadable stubs in a narrow rail — the same failure the
+   printed-count stepper in the parts list had. */
+.builder__stepper > * { flex: none; }
+
+.builder__steppervalue {
+  inline-size: 2.5rem;
+  text-align: center;
+  color: var(--text-primary);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+}
+
+.builder__facts {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-3);
+  border: var(--border-width-hair) solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+}
+
+.builder__facts > div {
+  display: grid;
+  grid-template-columns: 4.5rem minmax(0, 1fr);
+  gap: var(--space-2);
+  align-items: baseline;
+}
+
+.builder__facts dt {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--letter-spacing-caps);
+  text-transform: uppercase;
+}
+
+.builder__facts dd {
+  margin: 0;
+  min-inline-size: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-normal);
+  overflow-wrap: anywhere;
+}
+
+/* One primary per region (D100): Download is what this tab exists for, so Add
+   to project is `--subtle` rather than a second filled button. */
+.builder__actions {
+  display: grid;
+  gap: var(--space-2);
+  margin-block-start: auto;
+}
+
+.builder__actions .button { justify-content: center; }
+
+/* Below the tablet breakpoint the rail goes under the preview rather than
+   squeezing it: at this width the fixed rail leaves the bin about 200px, which
+   is not enough to see whether the pegs are in the cells. */
+@media (max-width: 60rem) {
+  .builder {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(16rem, 1fr) auto;
+    overflow-y: auto;
+  }
+
+  /* One scroller, not two. Stacked, the page scrolls; a rail that also scrolled
+     would trap the wheel over the controls and leave the buttons unreachable
+     from the preview. `contain` goes with it — it exists to stop this panel's
+     overflow reaching the viewport, and stacked there is no overflow to stop. */
+  .builder__rail {
+    overflow: visible;
+    contain: none;
+    border-inline-start: none;
+    border-block-start: var(--border-width-hair) solid var(--border-subtle);
+  }
+}
+
+/* Same metrics as the wall view's Fit/Front strip, so the two floating clusters
+   in the product read as one component seen twice rather than two near-misses. */
+.builder__tools {
+  position: absolute;
+  inset-block-end: var(--space-4);
+  inset-inline-end: var(--space-4);
+  display: flex;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border: var(--border-width-hair) solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  box-shadow: var(--shadow-sm);
+}
+
+.builder__tools button {
+  min-block-size: var(--control-height-md);
+  padding-inline: var(--space-3);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-none);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-standard),
+              color var(--duration-fast) var(--ease-standard);
+}
+
+.builder__tools button:hover { background: var(--surface-3); color: var(--text-primary); }
+.builder__tools button:active { background: var(--accent-bg); }
+.builder__tools button:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* The wall thickness, tucked after the outside measurement: it explains where
+   the difference between the two rows came from, and is not itself a number
+   anybody is looking for. */
+.builder__aside { color: var(--text-tertiary); }
+
+/* --- the peg adder ------------------------------------------------------- */
+
+/* The face and nudge buttons: several small controls on one row, wrapping
+   rather than shrinking, for the reason D100 gives about the toolbar's wells —
+   flex's default `min-width: auto` protects a shrunk item only as far as its own
+   content box, and squeezed these would print on top of one another. */
+.builder__faces {
+  grid-column: 2 / span 3;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.builder__faces > * { flex: none; }
+
+.builder__faces button[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--accent-on);
+}
+
+/* A file input styled as a button: the input itself is the hit target, so it
+   covers the label rather than being hidden — a `display: none` input cannot be
+   reached by a keyboard. */
+.builder__file {
+  grid-column: 2 / span 3;
+  position: relative;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.builder__file input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.builder__empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-sm);
+  pointer-events: none;
+}
+
+.builder__issues {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.builder__issue {
+  display: grid;
+  grid-template-columns: var(--icon-size-sm) minmax(0, 1fr);
+  gap: var(--space-2);
+  align-items: start;
+  padding: var(--space-2);
+  border: var(--border-width-hair) solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-0);
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-normal);
+}
+
+.builder__issue--error {
+  border-color: var(--danger-border);
+  background: var(--danger-bg);
+  color: var(--danger-fg);
+}

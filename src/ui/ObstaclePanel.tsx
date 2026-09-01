@@ -20,6 +20,7 @@
 
 import { useMemo, useState } from 'react';
 
+import { customLineKey } from '../core/bom';
 import { bedFor } from '../core/constants';
 import {
   customPanelGroups, toCustomiserScad,
@@ -36,6 +37,8 @@ import {
 } from '../core/panelModel';
 import type { LayoutDoc, Obstacle, PlacedPanel, WallFrame } from '../core/types';
 import { NumberField } from './NumberField';
+import { StackMenu } from './StackMenu';
+
 import './ObstaclePanel.css';
 
 export interface ObstaclePanelProps {
@@ -44,7 +47,23 @@ export interface ObstaclePanelProps {
   onFrameChange: (frame: WallFrame | undefined) => void;
   onCopy: (text: string, what: string) => void;
   /** Hand a generated plate to the browser as a file. */
-  onDownload: (panel: PlacedPanel, label: string) => void;
+  /** `copies` stacked into one file — see `StackMenu`. One is a plain plate. */
+  onDownload: (panel: PlacedPanel, label: string, copies: number) => void;
+  /**
+   * The parts-list line the wall is lit for, so the row that means shows it.
+   *
+   * A LINE and not a list of panel ids, for the reason `panelsForLine` exists:
+   * the plates a line means are derived from the wall as it is now.
+   */
+  litLine?: string | null;
+  /** Light this plate's copies while the pointer is over its row; null on leave. */
+  onHoverLine?: (lineKey: string | null) => void;
+  /**
+   * Keep them lit after the pointer has gone. `toggle` is the row's own click —
+   * press it again and the highlight goes out; a download just pins it, because
+   * turning the wall's answer off is not what asking for the file meant.
+   */
+  onLightLine?: (lineKey: string, toggle: boolean) => void;
 }
 
 const FRAME_SIDE_LABELS: { key: keyof WallFrame; label: string }[] = [
@@ -54,7 +73,10 @@ const FRAME_SIDE_LABELS: { key: keyof WallFrame; label: string }[] = [
   { key: 'right', label: 'Right' },
 ];
 
-export function ObstaclePanel({ doc, onChange, onFrameChange, onCopy, onDownload }: ObstaclePanelProps) {
+export function ObstaclePanel({
+  doc, onChange, onFrameChange, onCopy, onDownload,
+  litLine = null, onHoverLine, onLightLine,
+}: ObstaclePanelProps) {
   const [preset, setPreset] = useState(0);
   const obstacles = doc.obstacles ?? [];
   const frame = doc.frame ?? NO_WALL_FRAME;
@@ -275,10 +297,21 @@ export function ObstaclePanel({ doc, onChange, onFrameChange, onCopy, onDownload
               const info = built[i];
               const first = group.panels[0];
               if (!first || !info) return null;
+              const lineKey = customLineKey(group.key);
+              const lit = litLine === lineKey;
 
               if (info.error) {
+                // Lights on hover like any other row, and this is the row where
+                // it matters most: the message says a shape cannot be made, and
+                // the only useful next question is WHICH plate on the wall.
                 return (
-                  <li className="custom-panel custom-panel--bad" key={group.key}>
+                  <li
+                    className="custom-panel custom-panel--bad"
+                    key={group.key}
+                    data-lit={lit ? 'true' : undefined}
+                    onPointerEnter={() => onHoverLine?.(lineKey)}
+                    onPointerLeave={() => onHoverLine?.(null)}
+                  >
                     <p className="custom-panel__name">{label} — ×{group.panels.length}</p>
                     <p className="custom-panel__meta">{info.error}</p>
                   </li>
@@ -291,10 +324,41 @@ export function ObstaclePanel({ doc, onChange, onFrameChange, onCopy, onDownload
                   Math.min(info.widthMm, info.heightMm) <= Math.min(bed.width, bed.depth));
               const borders = FRAME_SIDE_LABELS.filter((s) => info.sides[s.key]).map((s) => s.label);
 
+              /*
+               * The plate this row is about, named the way the parts list names
+               * it (`bom.customLineKey`) so the wall lights the same copies
+               * whichever surface you point at. Hovering the row lights them,
+               * clicking the name keeps them lit, and downloading pins them —
+               * the file you just asked for is the plate glowing on the wall.
+               */
               return (
-                <li className="custom-panel" key={group.key}>
+                <li
+                  className="custom-panel"
+                  key={group.key}
+                  // An attribute rather than a class, exactly as a parts-list
+                  // row does it: the row already has a `--bad` state and this is
+                  // not a third combination of it.
+                  data-lit={lit ? 'true' : undefined}
+                  onPointerEnter={() => onHoverLine?.(lineKey)}
+                  onPointerLeave={() => onHoverLine?.(null)}
+                >
                   <p className="custom-panel__name">
-                    {label}
+                    {onLightLine === undefined ? (
+                      label
+                    ) : (
+                      <button
+                        type="button"
+                        className="custom-panel__light"
+                        onClick={() => onLightLine(lineKey, true)}
+                        title={
+                          lit
+                            ? `Stop highlighting ${label}`
+                            : `Highlight every ${label} on the wall`
+                        }
+                      >
+                        {label}
+                      </button>
+                    )}
                     <span className="custom-panel__qty tabular-nums">×{group.panels.length}</span>
                   </p>
                   <p className="custom-panel__meta tabular-nums">
@@ -308,18 +372,24 @@ export function ObstaclePanel({ doc, onChange, onFrameChange, onCopy, onDownload
                     </p>
                   )}
                   <div className="custom-panel__actions">
-                    <button
-                      type="button"
-                      className="button button--primary"
-                      onClick={() => onDownload(first, label)}
-                    >
-                      Download STL
-                    </button>
+                    <StackMenu
+                      label={label}
+                      needed={group.panels.length}
+                      // Pinned, never toggled, and pinned when the popover
+                      // OPENS rather than when the file is written: you are
+                      // about to be asked how many, and "how many of which
+                      // one" is a question the wall answers. Hover has it lit
+                      // already; this is what keeps it lit once the pointer
+                      // leaves the row for the popover.
+                      onOpen={() => onLightLine?.(lineKey, false)}
+                      onDownload={(copies) => onDownload(first, label, copies)}
+                    />
                     <button
                       type="button"
                       className="button"
                       title="Parameters for the OpenSCAD customiser, if you want to change the shape by hand"
                       onClick={() => {
+                        onLightLine?.(lineKey, false);
                         const spec = panelModelSpec(first, doc.panels, doc.frame);
                         const params = toCustomiserCells(spec.cells) ?? group.params;
                         if (!params) {

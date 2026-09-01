@@ -283,6 +283,22 @@ function mountsThroughSocket(
  * Returns ids so a caller can match placements without re-deriving anything;
  * empty for an accessory line, which is answered by `doc.items` instead.
  */
+/**
+ * The parts-list line a group of GENERATED plates is counted on.
+ *
+ * One line of string building, and it exists because three places need the
+ * answer: `panelLineKeys`, `computeBom`, and the generate list in the rail,
+ * which lights a plate's copies on the wall when you hover or download it. A
+ * fourth spelling of `custom/` is a highlight that lights nothing — the same
+ * shape as every other second reader of one fact in this codebase.
+ *
+ * The key is `customPanelGroups`' own — the plate's SHAPE and its edge — so it
+ * survives a re-solve, which the letter in the label does not.
+ */
+export function customLineKey(groupKey: string): string {
+  return `custom/${groupKey}`;
+}
+
 export function panelsForLine(doc: LayoutDoc | undefined, partId: string): string[] {
   if (typeof partId !== 'string' || partId.length === 0) return [];
   const out: string[] = [];
@@ -317,7 +333,7 @@ export function panelLineKeys(doc: LayoutDoc | undefined): ReadonlyMap<string, s
   // The generated plates first, since a plate on one of those lines is exactly
   // a plate that is NOT on its own stock one.
   for (const group of customPanelGroups(panels, frameKeyOf)) {
-    for (const panel of group.panels) out.set(panel.id, `custom/${group.key}`);
+    for (const panel of group.panels) out.set(panel.id, customLineKey(group.key));
   }
   for (const panel of panels) {
     if (out.has(panel.id)) continue;
@@ -1090,7 +1106,7 @@ export function computeBom(doc: LayoutDoc, catalog: Catalog): Bom {
     // the letter, which is a position in this list and changes the moment
     // another custom plate appears. Re-solve a wall and the plates you have
     // already printed are still the same plates.
-    const partId = `custom/${group.key}`;
+    const partId = customLineKey(group.key);
     const done = printedOf(progress, partId, quantity);
 
     totalParts += quantity;
