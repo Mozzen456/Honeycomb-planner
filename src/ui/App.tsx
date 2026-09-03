@@ -1455,7 +1455,7 @@ export function App() {
               Import
               <input
                 type="file"
-                accept={`${MODEL_ACCEPT},application/json,.json`}
+                accept={MODEL_ACCEPT}
                 multiple
                 onChange={(e) => {
                   for (const f of e.target.files ?? []) importFile(f);

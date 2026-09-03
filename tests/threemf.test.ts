@@ -34,7 +34,7 @@ import type { Catalog } from '../src/core/types';
 
 import catalogJson from '../src/catalog/catalog.json';
 import { readFileSync } from 'node:fs';
-import { make3mf, makeZip, meshXml, modelXml, RELS } from './fixtures/threemf';
+import { make3mf, makeMultiPart3mf, makeZip, meshXml, modelXml, RELS } from './fixtures/threemf';
 import { resolve } from 'node:path';
 
 const catalog = catalogJson as unknown as Catalog;
@@ -353,5 +353,71 @@ describe('a 3MF lands in the same place as the STL of the same model', () => {
     expect(from3mf.part.volumeMm3).toBeCloseTo(fromStl.part.volumeMm3, 2);
     // ...and it is recognisably the same part in the catalogue, too.
     expect(from3mf.part.footprint).toEqual(original.footprint);
+  });
+});
+
+/**
+ * The two shapes a real file has that a hand-written one does not, both found
+ * on files somebody actually tried to upload.
+ */
+describe('3MFs as the world actually writes them', () => {
+  it('follows a component into another part of the archive', async () => {
+    // Bambu Studio's shape: `3D/3dmodel.model` holds no mesh at all. Read
+    // within one part this is "contains no triangles" — a true sentence about
+    // the part and a wrong one about the file.
+    const zip = await makeMultiPart3mf();
+    const { mesh, warnings } = await parseModelFile('bambu.3mf', zip);
+    expect(mesh.triangleCount).toBe(12);
+    expect(warnings).toEqual([]);
+    const m = measureMesh(mesh);
+    expect(m.bboxMm).toEqual([10, 10, 10]);
+    expect(m.volumeMm3).toBeCloseTo(1000, 6);
+  });
+
+  it('carries the transform across the part boundary', async () => {
+    // A component's transform applies to geometry in the OTHER part, so this is
+    // the check that the two are composed rather than the far part being read
+    // as if it stood alone.
+    const zip = await makeMultiPart3mf({ transform: ' transform="2 0 0 0 1 0 0 0 1 5 0 0"' });
+    const { mesh } = await parseModelFile('bambu.3mf', zip);
+    const m = measureMesh(mesh);
+    expect(m.bboxMm).toEqual([20, 10, 10]);
+    expect(m.minMm[0]).toBeCloseTo(5, 6);
+  });
+
+  it('says which part is missing rather than reading nothing', async () => {
+    const zip = await makeZip({
+      '_rels/.rels': RELS,
+      '3D/3dmodel.model': modelXml({
+        objects:
+          '<object id="2" type="model"><components>' +
+          '<component objectid="1" p:path="/3D/Objects/gone.model"/></components></object>' +
+          meshXml('3'),
+        build: '<item objectid="2"/><item objectid="3"/>',
+      }),
+    });
+    const { mesh, warnings } = await parseModelFile('half.3mf', zip);
+    // The half that IS there still arrives; the half that is not is said.
+    expect(mesh.triangleCount).toBe(12);
+    expect(warnings.some((w) => w.includes('3D/Objects/gone.model'))).toBe(true);
+  });
+
+  it('reads an archive written as ZIP64, whatever its size', async () => {
+    // 195 kB from Printables, with every size and offset sentinelled. Refusing
+    // it said "this is a ZIP64 archive", which is correct and useless.
+    const zip = await make3mf(modelXml(), { deflate: true, zip64: true });
+    const { mesh } = await parseModelFile('printables.3mf', zip);
+    expect(mesh.triangleCount).toBe(12);
+    expect(measureMesh(mesh).volumeMm3).toBeCloseTo(1000, 6);
+  });
+
+  it('refuses a ZIP64 archive whose records are missing', async () => {
+    // The sentinel is a promise about what comes next. Broken, it must fail as
+    // a sentence rather than by reading the directory from offset 0xFFFFFFFF.
+    const zip = await make3mf(modelXml(), { zip64: true });
+    const bytes = new Uint8Array(zip);
+    // Break the locator's signature, 20 bytes before the ordinary record.
+    bytes[bytes.length - 22 - 20] = 0x00;
+    await expect(parseModelFile('broken.3mf', bytes.buffer)).rejects.toThrow(/ZIP64 locator/);
   });
 });

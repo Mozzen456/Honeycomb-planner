@@ -4513,3 +4513,81 @@ DURING render — so calling it there is "cannot update a component while render
 a different component", which is a warning today and a dropped update under a
 stricter mode. Found by reading the console in the running app, which is the only
 place it appears.
+
+---
+
+## D112 — Three ways a real 3MF was refused
+
+Reported as "I cannot choose file and upload, I can only drag in STL, 3MF not
+working at all". Three separate faults, none of which the suite could see,
+because every 3MF it had ever read was one this repo wrote.
+
+### The geometry need not be in the model part
+
+Bambu Studio — which is what a great many people on this wall print with —
+writes `3D/3dmodel.model` holding no mesh at all:
+
+```xml
+<object id="1" type="model">
+  <components>
+    <component objectid="1" p:path="/3D/Objects/object_1.model"/>
+  </components>
+</object>
+```
+
+That is the PRODUCTION extension: an object reference may name another part of
+the same archive. Resolved within one part, the file reads as "This 3MF contains
+no triangles" — a true statement about the part that was read and a wrong one
+about the file. Three of the four 3MFs already on the reporter's machine were
+this shape, and the fourth (single-part) was the one that had always worked.
+
+So an object reference is now a PAIR: which part, and which id in it. The parts
+are loaded to closure BEFORE anything is emitted — breadth-first and iterative,
+because reading a ZIP entry is asynchronous and flattening is not, and mixing
+the two would make every caller of `emit` await.
+
+**`seen` must be keyed on the pair, and this is the trap.** Ids are numbered per
+part, so both parts numbering their object `1` is ordinary — and keyed on the id
+alone the component reads as a reference to ITSELF, the "loop" is cut, and the
+geometry is silently dropped. The fixture therefore collides its ids on purpose:
+with different ids the bug passes unnoticed, which is exactly how it would have
+shipped.
+
+### ZIP64 is not about size
+
+`zip.ts` refused ZIP64 by name, on the reasoning that a 3MF is measured in
+megabytes and ZIP64 begins at four gigabytes. True about the format, false about
+the files: a writer may emit the ZIP64 records ALWAYS, and a **195 kB** model
+from Printables has every size and offset in its directory set to the
+`0xFFFFFFFF` sentinel with the real values in each entry's extra field. The
+refusal read "This is a ZIP64 archive", which is correct and useless.
+
+The sentinels are followed now. **The extra field is a packed LIST, not a struct
+with fixed slots** — it holds only the fields that were sentinelled, in the order
+uncompressed, compressed, local offset — so each value is consumed only if its
+own field asked for it. Read at fixed positions you get an offset where a size
+should be, which inflates to garbage rather than failing; the test breaks it that
+way round and watches it go red.
+
+### An `accept` filter hid the file it was for
+
+`accept=".stl,.3mf,model/stl,model/3mf"`, and on macOS that made a 3MF
+**unpickable**. A file dialog filters by the system's idea of a type, and this
+Mac has no idea what a `.3mf` is — `mdls` reports `dyn.ah62d4rv4ge8xg5pg`, the
+placeholder macOS mints for an extension nothing has claimed. Neither MIME type
+is registered either. So the dialog greyed out the very file somebody opened it
+to choose, while the same file dropped on the window worked — which is precisely
+what "I can only drag it in" describes.
+
+The filter was never doing real work: `isModelFile` checks the name and
+`parseModelFile` checks the BYTES, so a wrong pick already comes back as a
+sentence. `MODEL_ACCEPT` is now `undefined` — React omits the attribute
+entirely, where an empty string would set `accept=""`.
+
+### What the tests were worth before this
+
+All 32 of them passed on every file in this repo and on none of the five real
+3MFs on the reporter's machine. A fixture the code under test would also have
+written can only prove self-consistency; the fixtures now write the two shapes
+the world writes — a multi-part archive and a ZIP64 one — and each fix was
+confirmed by removing it and watching the new test fail.

@@ -28,6 +28,16 @@
  * against with its cyclic axis permutation. Triangles under a mirroring
  * transform have their winding flipped back.
  *
+ * **4. Parts.** The geometry need not be in the model part at all. The
+ * PRODUCTION extension lets an object's `<component>` name another `.model`
+ * inside the same archive with `p:path`, and Bambu Studio — which is what a
+ * great many people on this wall are printing with — writes every real mesh
+ * that way: `3D/3dmodel.model` holds nothing but a component pointing at
+ * `3D/Objects/object_1.model`. Resolved within one part, such a file reads as
+ * "contains no triangles", which is a true statement about the part that was
+ * read and a wrong one about the file. So the reader loads the whole graph of
+ * parts and an object reference is a PAIR — which part, and which id in it.
+ *
  * The XML is read with a tag scanner rather than a DOM, because `DOMParser` is
  * a browser API and the rule in this repo is that load-bearing code is testable
  * without a browser. The scanner's limits are stated at `scanTags`.
@@ -77,6 +87,14 @@ const MAX_DEPTH = 12;
 
 /** The same ceiling `stl.ts` would hit on a hostile file, stated here too. */
 const MAX_TRIANGLES = 20_000_000;
+
+/**
+ * How many model parts one file may pull in. A real multi-part 3MF has one per
+ * object — a dozen at most — and the bound exists because a path that is NOT in
+ * the archive still costs an entry in the map, so a file naming thousands of
+ * missing parts would otherwise be free to make thousands of them.
+ */
+const MAX_PARTS = 256;
 
 export interface ThreeMfResult {
   mesh: MeshData;
@@ -187,18 +205,61 @@ export function determinant(m: Matrix): number {
 // The model
 // ---------------------------------------------------------------------------
 
+/**
+ * Which object, in which part.
+ *
+ * `path` is `null` for a reference inside the part that made it — the ordinary
+ * single-file case — and a normalised archive path when the production
+ * extension's `p:path` sends it elsewhere. Ids are numbered PER PART, so
+ * "object 1" means nothing on its own: the pair is the identity.
+ */
+interface ObjectRef {
+  objectid: string;
+  path: string | null;
+  transform: Matrix;
+}
+
 interface MeshObject {
   id: string;
   vertices: number[];
   /** Vertex INDICES, three per triangle — a 3MF is indexed where an STL is soup. */
   indices: number[];
-  components: { objectid: string; transform: Matrix }[];
+  components: ObjectRef[];
 }
 
 interface ParsedModel {
   unit: string;
   objects: Map<string, MeshObject>;
-  build: { objectid: string; transform: Matrix }[];
+  build: ObjectRef[];
+}
+
+/** Every model part this file reaches, by normalised archive path. */
+type ModelSet = Map<string, ParsedModel>;
+
+/**
+ * An archive path as the directory spells it: no leading slash.
+ *
+ * The production extension writes absolute paths (`/3D/Objects/object_1.model`)
+ * and a ZIP directory never has the leading slash, so the two never match
+ * without this.
+ */
+export const normalisePartPath = (raw: string): string => raw.replace(/^\/+/, '');
+
+/**
+ * One reference, off a `<component>` or a `<build><item>`.
+ *
+ * `attr` looks for `path` and finds `p:path`, because a prefix ends at a colon
+ * and `\b` sees the boundary — which is what makes the whole scanner
+ * prefix-agnostic. The path is normalised here so nothing downstream has to
+ * remember to.
+ */
+function refFrom(objectid: string, attrs: string): ObjectRef {
+  const raw = attr(attrs, 'path');
+  return {
+    objectid,
+    path: raw !== null && raw.trim().length > 0 ? normalisePartPath(raw.trim()) : null,
+    transform: parseMatrix(attr(attrs, 'transform')),
+  };
 }
 
 function parseModelXml(xml: string): ParsedModel {
@@ -221,9 +282,7 @@ function parseModelXml(xml: string): ParsedModel {
     }
     if (name === 'item' && !closing && inBuild) {
       const objectid = attr(attrs, 'objectid');
-      if (objectid !== null) {
-        build.push({ objectid, transform: parseMatrix(attr(attrs, 'transform')) });
-      }
+      if (objectid !== null) build.push(refFrom(objectid, attrs));
       continue;
     }
     if (name === 'object') {
@@ -264,9 +323,7 @@ function parseModelXml(xml: string): ParsedModel {
       }
     } else if (name === 'component') {
       const objectid = attr(attrs, 'objectid');
-      if (objectid !== null) {
-        current.components.push({ objectid, transform: parseMatrix(attr(attrs, 'transform')) });
-      }
+      if (objectid !== null) current.components.push(refFrom(objectid, attrs));
     }
   }
   return { unit, objects, build };
@@ -284,7 +341,8 @@ function parseModelXml(xml: string): ParsedModel {
  * too big, and it would look like a parsing failure rather than a unit one.
  */
 function emit(
-  model: ParsedModel,
+  models: ModelSet,
+  path: string,
   objectid: string,
   transform: Matrix,
   scale: number,
@@ -297,8 +355,19 @@ function emit(
     warnings.push('This model nests components more deeply than expected; the deepest were skipped.');
     return;
   }
-  if (seen.has(objectid)) {
+  /*
+   * Keyed on the PAIR. Ids are numbered per part, so two parts each holding an
+   * "object 1" is the normal shape of a Bambu file — keyed on the id alone,
+   * the second one reads as a self-reference and its geometry is dropped.
+   */
+  const key = `${path}#${objectid}`;
+  if (seen.has(key)) {
     warnings.push(`Object "${objectid}" refers to itself; the loop was cut.`);
+    return;
+  }
+  const model = models.get(path);
+  if (model === undefined) {
+    warnings.push(`This model refers to a part ("${path}") that is not in the file.`);
     return;
   }
   const object = model.objects.get(objectid);
@@ -307,11 +376,21 @@ function emit(
     return;
   }
 
-  seen.add(objectid);
+  seen.add(key);
   for (const component of object.components) {
-    emit(model, component.objectid, compose(transform, component.transform), scale, out, seen, depth + 1, warnings);
+    emit(
+      models,
+      component.path ?? path,
+      component.objectid,
+      compose(transform, component.transform),
+      scale,
+      out,
+      seen,
+      depth + 1,
+      warnings,
+    );
   }
-  seen.delete(objectid);
+  seen.delete(key);
 
   const { vertices, indices } = object;
   if (indices.length === 0) return;
@@ -368,6 +447,32 @@ export function modelPathIn(names: Iterable<string>, relsXml: string | null): st
   return all.find((n) => n.toLowerCase().endsWith('.model')) ?? null;
 }
 
+/** Every other part this one names, normalised, in document order. */
+function referencedPaths(model: ParsedModel): string[] {
+  const out: string[] = [];
+  for (const item of model.build) if (item.path !== null) out.push(item.path);
+  for (const object of model.objects.values()) {
+    for (const component of object.components) {
+      if (component.path !== null) out.push(component.path);
+    }
+  }
+  return out;
+}
+
+/**
+ * The archive's own spelling of a wanted path, or null.
+ *
+ * Case-insensitively, as a fallback: a ZIP directory is byte-exact and some
+ * writers disagree with their own references about capitalisation, which would
+ * otherwise present as a file that "contains no triangles".
+ */
+function entryNamed(entries: Map<string, ZipEntry>, wanted: string): string | null {
+  if (entries.has(wanted)) return wanted;
+  const lower = wanted.toLowerCase();
+  for (const name of entries.keys()) if (name.toLowerCase() === lower) return name;
+  return null;
+}
+
 /**
  * Read a 3MF as one mesh in millimetres.
  *
@@ -408,6 +513,51 @@ export async function parse3mf(buffer: ArrayBuffer): Promise<ThreeMfResult> {
   const model = parseModelXml(xml);
   const warnings: string[] = [];
 
+  /*
+   * Every part the graph reaches, loaded before anything is emitted.
+   *
+   * Breadth-first and iterative rather than recursive through `emit`, because
+   * reading a ZIP entry is asynchronous and the flattening is not — one is a
+   * question about the archive and the other about geometry, and mixing them
+   * would make every caller of `emit` await.
+   */
+  const models: ModelSet = new Map([[path, model]]);
+  const queue = referencedPaths(model);
+  while (queue.length > 0) {
+    const wanted = queue.shift()!;
+    if (models.has(wanted)) continue;
+    if (models.size >= MAX_PARTS) {
+      warnings.push(`This 3MF refers to more than ${MAX_PARTS} model parts; the rest were skipped.`);
+      break;
+    }
+    const name = entryNamed(entries, wanted);
+    if (name === null) {
+      // Recorded as empty, not left missing: `emit` then says "object not in
+      // the file" once, rather than this loop asking for it again.
+      models.set(wanted, { unit: model.unit, objects: new Map(), build: [] });
+      warnings.push(`This 3MF names a part ("${wanted}") it does not contain.`);
+      continue;
+    }
+    let partXml: string;
+    try {
+      partXml = decoder.decode(await readEntry(buffer, entries.get(name)!));
+    } catch (e) {
+      throw new ThreeMfError(e instanceof ZipError ? e.message : String(e));
+    }
+    const part = parseModelXml(partXml);
+    if (part.unit !== model.unit) {
+      // The spec says every part declares the root's unit. One that does not is
+      // a file to be suspicious of, and the alternative to saying so is a part
+      // silently 25.4x out.
+      warnings.push(
+        `Part "${wanted}" declares its unit as "${part.unit}" where the model says ` +
+          `"${model.unit}"; the model's was used.`,
+      );
+    }
+    models.set(wanted, part);
+    queue.push(...referencedPaths(part));
+  }
+
   const scale = UNIT_SCALE[model.unit];
   if (scale === undefined) {
     throw new ThreeMfError(
@@ -431,13 +581,13 @@ export async function parse3mf(buffer: ArrayBuffer): Promise<ThreeMfResult> {
     ? model.build
     : [...model.objects.values()]
         .filter((o) => o.indices.length > 0)
-        .map((o) => ({ objectid: o.id, transform: IDENTITY }));
+        .map((o) => ({ objectid: o.id, path: null, transform: IDENTITY }));
 
   if (items.length === 0) throw new ThreeMfError('This 3MF contains no geometry');
 
   const out: number[] = [];
   for (const item of items) {
-    emit(model, item.objectid, item.transform, scale, out, new Set(), 0, warnings);
+    emit(models, item.path ?? path, item.objectid, item.transform, scale, out, new Set(), 0, warnings);
   }
 
   const triangleCount = Math.floor(out.length / 9);

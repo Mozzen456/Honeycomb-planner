@@ -765,6 +765,26 @@ what most of `tests/import.test.ts` exercises.
 dispatcher, keyed on `part.file`. Converting to STL on the way in would mean the bytes in storage
 are not the file the person chose.
 
+**A 3MF's geometry need not be in the model part** (D112). The production extension lets an object's
+`<component>` name another `.model` in the same archive with `p:path`, and Bambu Studio writes EVERY
+real mesh that way — `3D/3dmodel.model` holds a component and nothing else. So an object reference is
+a PAIR, part plus id, and the parts are loaded to closure before anything is emitted. Ids are
+numbered PER PART, so `seen` must be keyed on the pair: both parts numbering their object `1` is
+ordinary, and keyed on the id alone the component reads as a self-reference and the geometry is
+dropped. `makeMultiPart3mf` collides its ids on purpose, because with different ids that bug passes.
+
+**ZIP64 is not about size** (D112). A writer may emit the ZIP64 records always: a 195 kB model from
+Printables has every size and offset sentinelled. Refusing it said "This is a ZIP64 archive", which
+was correct and useless. The extra field is a packed LIST holding only the fields that were
+sentinelled, in the order uncompressed, compressed, local offset — read at fixed slots you get an
+offset where a size should be, which inflates to garbage rather than failing.
+
+**`MODEL_ACCEPT` is `undefined`, and must stay that way** (D112). `accept=".stl,.3mf,…"` made a 3MF
+unpickable on macOS: a file dialog filters by the system's idea of a TYPE and macOS has none for
+`.3mf` (`mdls` reports a `dyn.…` placeholder), so the dialog greyed out the very file it was opened
+for while the same file dropped on the window worked. The filter was never load-bearing —
+`isModelFile` checks the name and `parseModelFile` checks the bytes.
+
 **Three ways a 3MF is silently wrong, and all three are handled in `threemf.ts`:**
 
 - **Units.** An STL has none and this app assumes millimetres; a 3MF DECLARES one and it may be
