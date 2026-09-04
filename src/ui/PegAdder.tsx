@@ -31,6 +31,7 @@ import {
   candidateCells,
   cellPointMm,
   DEFAULT_ORIENTATION,
+  faceTowardWall,
   orientForPegs,
   pegLayoutNote,
   reviewPegs,
@@ -78,6 +79,15 @@ export function PegAdder({ onAddToProject, say }: PegAdderProps): JSX.Element {
   /** null means "wherever the part's centre is" — see `latticeOffset`. */
   const [nudge, setNudge] = useState<{ x: number; y: number } | null>(null);
   const [cells, setCells] = useState<Hex[]>([]);
+  /**
+   * Armed: the next click on the model names the face that meets the wall.
+   *
+   * A MODE, because the stage already has a click and it means "peg this cell".
+   * The pads cover the part on purpose — they are the thing you aim at — so
+   * asking for a face without turning them off would be asking somebody to hit
+   * the gaps between them.
+   */
+  const [picking, setPicking] = useState(false);
 
   const part = useMemo(
     () => (file === null ? null : orientForPegs(file.mesh, orientation)),
@@ -130,6 +140,7 @@ export function PegAdder({ onAddToProject, say }: PegAdderProps): JSX.Element {
           // A new model's cells mean nothing — they were picked on another part.
           setCells([]);
           setNudge(null);
+          setPicking(false);
           if (warnings.length > 0) say(warnings[0]!, 'warn');
         })
         .catch((err: unknown) => say(`Could not read ${chosen.name}: ${(err as Error).message}`, 'error'))
@@ -144,6 +155,36 @@ export function PegAdder({ onAddToProject, say }: PegAdderProps): JSX.Element {
     setCells([]);
     setNudge(null);
   }, []);
+
+  /**
+   * A face was clicked. `normal` is in the ORIENTED frame, which is the frame
+   * the stage draws in — `faceTowardWall` snaps it to one of the six and hands
+   * back the orientation that lays it on the wall.
+   */
+  const pickFace = useCallback(
+    (normal: [number, number, number]) => {
+      setPicking(false);
+      // Through `reorient`, like the six buttons — it clears the cells, which
+      // were picked on a face that is no longer the one against the wall. NOT
+      // inside a `setOrientation` updater: React runs an updater during render,
+      // and a `setCells` in there is a state update from inside a render.
+      reorient(faceTowardWall(orientation, normal));
+    },
+    [orientation, reorient],
+  );
+
+  /** Escape leaves the mode without choosing, like every other armed tool. */
+  useEffect(() => {
+    if (!picking) return;
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        setPicking(false);
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [picking]);
 
   const toggle = useCallback((cell: Hex) => {
     setCells((prev) =>
@@ -235,6 +276,8 @@ export function PegAdder({ onAddToProject, say }: PegAdderProps): JSX.Element {
         chosen={cells}
         latticeOffset={latticeOffset}
         onToggle={toggle}
+        picking={picking}
+        onPickFace={pickFace}
       />
 
       <aside className="builder__rail">
@@ -287,6 +330,25 @@ export function PegAdder({ onAddToProject, say }: PegAdderProps): JSX.Element {
                       {f.label}
                     </button>
                   ))}
+                  {/*
+                    The seventh way to answer the same question, and usually the
+                    only usable one: "−Y" says nothing about a headset holder.
+                    Point at the face on screen and it turns to meet the wall.
+                  */}
+                  <button
+                    type="button"
+                    className="button button--subtle builder__pick"
+                    aria-pressed={picking}
+                    title={
+                      picking
+                        ? 'Click the face on the model that meets the wall — Esc to stop'
+                        : 'Choose the wall face by clicking it on the model'
+                    }
+                    onClick={() => setPicking((was) => !was)}
+                  >
+                    <Icon name="target" />
+                    {picking ? 'Click a face…' : 'Pick on model'}
+                  </button>
                 </div>
               </div>
 
@@ -466,12 +528,18 @@ function PegStage({
   chosen,
   latticeOffset,
   onToggle,
+  picking,
+  onPickFace,
 }: {
   part: OrientedPart | null;
   candidates: Candidate[];
   chosen: Hex[];
   latticeOffset: { x: number; y: number };
   onToggle: (cell: Hex) => void;
+  /** Armed: a click names the wall face instead of pegging a cell. */
+  picking: boolean;
+  /** The clicked face's normal, in the ORIENTED frame (out, across, up). */
+  onPickFace: (normal: [number, number, number]) => void;
 }): JSX.Element {
   const hostRef = useRef<HTMLDivElement>(null);
   const stateRef = useRef<{
@@ -481,6 +549,21 @@ function PegStage({
     stage: THREE.Group;
     key: THREE.DirectionalLight;
     picks: THREE.Object3D[];
+    /** The part itself, which is what a FACE pick raycasts against. */
+    partMesh: THREE.Mesh | null;
+    /**
+     * Put the camera where the orbit says it is, NOW.
+     *
+     * The render loop does this once a frame, which is not good enough for a
+     * raycast: a click arriving between the last pointer move and the next
+     * frame would be cast from where the camera USED to be. Measured — a drag
+     * that turned the model 180° followed by an immediate click read the face
+     * that had been in front before the turn, because `camera.matrixWorld` was
+     * still the old one. So both the pointer handler and the loop go through
+     * here, and it ends with `updateMatrixWorld` because `lookAt` does not:
+     * `Raycaster.setFromCamera` reads the matrix, not the position.
+     */
+    place: () => void;
     orbit: { az: number; el: number; zoom: number; target: THREE.Vector3 };
     fitted: number;
   } | null>(null);
@@ -514,18 +597,14 @@ function PegStage({
       stage,
       key,
       picks: [] as THREE.Object3D[],
+      partMesh: null as THREE.Mesh | null,
+      place: () => {},
       orbit: { ...HOME, zoom: 1, target: new THREE.Vector3() },
       fitted: 200,
     };
     stateRef.current = state;
 
-    let raf = 0;
-    const tick = (): void => {
-      const w = host.clientWidth || 1;
-      const h = host.clientHeight || 1;
-      renderer.setSize(w, h, false);
-      camera.aspect = w / h;
-      camera.updateProjectionMatrix();
+    state.place = (): void => {
       const { az, el, zoom, target } = state.orbit;
       const dist = zoom * state.fitted;
       camera.position.set(
@@ -534,6 +613,17 @@ function PegStage({
         target.z + dist * Math.cos(el) * Math.cos(az),
       );
       camera.lookAt(target);
+      camera.updateMatrixWorld();
+    };
+
+    let raf = 0;
+    const tick = (): void => {
+      const w = host.clientWidth || 1;
+      const h = host.clientHeight || 1;
+      renderer.setSize(w, h, false);
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      state.place();
       key.position.copy(camera.position);
       renderer.render(scene, camera);
       raf = requestAnimationFrame(tick);
@@ -604,11 +694,13 @@ function PegStage({
       new THREE.MeshLambertMaterial({ color: readTheme().part }),
     );
     s.stage.add(mesh);
+    s.partMesh = mesh;
     const box = new THREE.Box3().setFromObject(mesh);
     s.orbit.target.copy(box.getCenter(new THREE.Vector3()));
     s.fitted = Math.max(90, box.getSize(new THREE.Vector3()).length() * 1.3);
     return () => {
       s.stage.remove(mesh);
+      s.partMesh = null;
       geometry.dispose();
       mesh.material.dispose();
     };
@@ -618,6 +710,13 @@ function PegStage({
   useEffect(() => {
     const s = stateRef.current;
     if (s === null || !ready || part === null) return;
+    /*
+     * While a face is being chosen the pads come off entirely. They are drawn
+     * over the part on purpose — they are what you aim at the rest of the time —
+     * so leaving them up would mean asking somebody to hit the gaps between
+     * them, and the pegs among them would be about to be cleared anyway.
+     */
+    if (picking) return;
     const theme = readTheme();
     const added: THREE.Object3D[] = [];
     const geometries: THREE.BufferGeometry[] = [];
@@ -689,7 +788,7 @@ function PegStage({
       }
       s.picks = [];
     };
-  }, [part, candidates, chosen, latticeOffset, ready, readTheme, themeTick]);
+  }, [part, candidates, chosen, latticeOffset, ready, readTheme, themeTick, picking]);
 
   // -- pointer ---------------------------------------------------------------
   const drag = useRef<{ x: number; y: number; moved: number } | null>(null);
@@ -716,6 +815,8 @@ function PegStage({
     const host = hostRef.current;
     if (host === null) return;
     const rect = host.getBoundingClientRect();
+    // Before the ray, not after: see `place`.
+    s.place();
     const ray = new THREE.Raycaster();
     ray.setFromCamera(
       new THREE.Vector2(
@@ -724,6 +825,38 @@ function PegStage({
       ),
       s.camera,
     );
+    if (picking) {
+      const hit = s.partMesh === null ? undefined : ray.intersectObject(s.partMesh, false)[0];
+      if (hit?.face) {
+        /*
+         * The normal is computed here from the three vertices rather than read
+         * off `hit.face.normal`, so it cannot depend on what a three.js version
+         * chooses to fill in — and it is the same statement the test makes.
+         * The material is front-sided, so the triangle we hit is one facing the
+         * camera: the face you can SEE is the face you picked.
+         */
+        const pos = (s.partMesh!.geometry as THREE.BufferGeometry).getAttribute('position');
+        const a = new THREE.Vector3().fromBufferAttribute(pos, hit.face.a);
+        const b = new THREE.Vector3().fromBufferAttribute(pos, hit.face.b);
+        const c = new THREE.Vector3().fromBufferAttribute(pos, hit.face.c);
+        const n = new THREE.Vector3()
+          .subVectors(b, a)
+          .cross(new THREE.Vector3().subVectors(c, a))
+          .normalize();
+        /*
+         * Scene to the oriented frame. `wallFrameGeometry` writes scene
+         * (x, y, z) = (across, up, out), and `OrientedPart` is ordered
+         * (out, across, up) — so this is that permutation, undone, in the one
+         * place that knows both. Cyclic, therefore a rotation and not a mirror.
+         */
+        onPickFace([n.z, n.x, n.y]);
+        // Home again, so the face that was chosen is the face now in view: the
+        // whole point of the gesture is watching it come round to the wall.
+        s.orbit.az = HOME.az;
+        s.orbit.el = HOME.el;
+      }
+      return;
+    }
     const hit = ray.intersectObjects(s.picks, false)[0];
     const cell = hit?.object.userData['cell'] as Hex | undefined;
     if (cell) onToggle(cell);
@@ -741,7 +874,11 @@ function PegStage({
       {part === null && (
         <p className="builder__empty">Drop an STL or 3MF here</p>
       )}
-      <p className="builder__hint">click a cell to peg it · drag to turn · wheel to zoom</p>
+      <p className="builder__hint">
+        {picking
+          ? 'click the face that meets the wall · Esc to stop'
+          : 'click a cell to peg it · drag to turn · wheel to zoom'}
+      </p>
     </div>
   );
 }

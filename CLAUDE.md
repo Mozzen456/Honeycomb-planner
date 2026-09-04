@@ -634,6 +634,23 @@ copies of a ZIP writer is two chances to write it wrong. Any test about 3MF shou
 rather than a hand-made `MeshData`, which would prove the STL writer works and nothing about the
 format.
 
+**A raycast must place the camera FIRST, in its own handler** (D113). Both 3D pick surfaces put
+`camera.position` in the `requestAnimationFrame` loop, so a click arriving between the last pointer
+move and the next frame is cast from where the camera USED to be — measured in the running app as a
+model turned 180° whose next click picked the face that had been in front before the turn (`az` at
+0.0056 with the camera still at z = −195). `PegStage.place()` is the one place that positions it, and
+the loop and the pointer handler both call it; it ends with `updateMatrixWorld()` because `lookAt`
+does not and `Raycaster.setFromCamera` reads the MATRIX. The cell picking had the same bug and nobody
+had hit it, because a human drag ends many frames before the click after it.
+
+**`faceTowardWall` finds the face by running the forward map over six candidates, never by inverting
+it** (D113). `Pick on model` arms a mode and the next click on the part names the face that meets the
+wall — "−Y" is a fact about a file's axes and means nothing about a model somebody just downloaded.
+The click's normal is snapped to the nearest of the six; the face already on the wall is the
+IDENTITY, because the commonest accidental click must not spin the part; and the quarter turn is
+carried, as the six buttons carry it. The pads come off while the mode is armed, or you would be
+aiming at the gaps between them.
+
 **EVERY cell in the peg adder is clickable, including cells outside the part.** The lattice is the
 only hard constraint. How well the part backs a cell is a MEASUREMENT in three grades — `solid`,
 `partial`, `bare` — drawn as three colours and said in the notes; it is not a gate. It was a gate

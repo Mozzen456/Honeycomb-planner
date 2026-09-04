@@ -174,6 +174,88 @@ export function orientForPegs(mesh: MeshData, o: Orientation): OrientedPart {
 }
 
 /**
+ * Where a FILE-frame direction points once the part has been oriented.
+ *
+ * The same signed permutation `orientForPegs` applies to positions, on a
+ * direction: no centring, because a direction has no position. Written as its
+ * own function rather than inlined so the two cannot drift — an orientation
+ * that moved the mesh one way and its normals another would be the hardest kind
+ * of bug to see, since everything would still look like a part.
+ */
+export function orientedDirection(
+  o: Orientation,
+  dir: readonly [number, number, number],
+): [number, number, number] {
+  const [ui, vi, wi] = AXIS_INDEX[o.wallFaceAxis];
+  const flip = o.matingEnd === 'high' ? -1 : 1;
+  let a = dir[ui]!;
+  let v = dir[vi]! * flip;
+  const w = dir[wi]! * flip;
+  for (let t = ((o.quarterTurns % 4) + 4) % 4; t > 0; t--) {
+    const na = -v;
+    v = a;
+    a = na;
+  }
+  // The oriented frame, in `OrientedPart`'s own order: out, across, up.
+  return [w, a, v];
+}
+
+/** The six directions a flat face of a box can point, in the FILE's frame. */
+const FILE_DIRECTIONS: readonly { dir: [number, number, number]; axis: Axis; end: 'low' | 'high' }[] = [
+  { dir: [-1, 0, 0], axis: 'x', end: 'low' },
+  { dir: [1, 0, 0], axis: 'x', end: 'high' },
+  { dir: [0, -1, 0], axis: 'y', end: 'low' },
+  { dir: [0, 1, 0], axis: 'y', end: 'high' },
+  { dir: [0, 0, -1], axis: 'z', end: 'low' },
+  { dir: [0, 0, 1], axis: 'z', end: 'high' },
+];
+
+/**
+ * Point at a face, and get the orientation that turns it toward the wall.
+ *
+ * `normal` is the clicked face's normal in the ORIENTED frame — which is what
+ * the view has, since it draws the oriented part. The six axis buttons ask the
+ * same question in the file's own words; this asks it in the words of the thing
+ * on screen, which is the only vocabulary somebody looking at an unfamiliar
+ * model actually has. "−Y" means nothing about a headset holder.
+ *
+ * Snapped to the nearest of the six, because a real model's faces are rarely
+ * exactly axis-aligned and the lattice only has six choices anyway. The winner
+ * is the file direction whose oriented direction the click most agrees with —
+ * found by running the forward map over all six rather than inverting it, so
+ * there is no second copy of the transform to get backwards.
+ *
+ * The quarter turn is CARRIED, exactly as the six buttons carry it: it is a
+ * separate judgement about which way up the part reads, and clearing it would
+ * undo a choice the person made on purpose.
+ */
+export function faceTowardWall(
+  o: Orientation,
+  normal: readonly [number, number, number],
+): Orientation {
+  let best = FILE_DIRECTIONS[0]!;
+  let bestDot = -Infinity;
+  for (const candidate of FILE_DIRECTIONS) {
+    const d = orientedDirection(o, candidate.dir);
+    const dot = d[0] * normal[0] + d[1] * normal[1] + d[2] * normal[2];
+    if (dot > bestDot) {
+      bestDot = dot;
+      best = candidate;
+    }
+  }
+  /*
+   * `best` is the outward normal of the face that was clicked, in the file's
+   * frame — and a face meets the wall when its normal is the OUT axis's
+   * negative. `orientForPegs` computes out as `src[wi] * flip`, and
+   * `AXIS_INDEX[A][2]` is A's own index, so the axis is `best.axis` directly
+   * and the end is the one whose flip makes that component −1: a face pointing
+   * along −axis needs flip +1 (`low`), along +axis needs −1 (`high`). Which is
+   * exactly what the six buttons already mean by their labels.
+   */
+  return { ...o, wallFaceAxis: best.axis, matingEnd: best.end };
+}
+
+/**
  * The face with the most cells on it, tried rather than guessed.
  *
  * Opening on an arbitrary face and reporting "0 of 13 can take a peg" is a tool

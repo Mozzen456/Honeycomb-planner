@@ -351,3 +351,14 @@
   background: var(--danger-bg);
   color: var(--danger-fg);
 }
+
+/* The seventh face button: point at the model instead of naming an axis. It
+   sits with the six but is not one of them — subtle rather than ghost — because
+   it arms a MODE rather than choosing a face. `aria-pressed` still tints it
+   through `.builder__faces`, which is right: armed is a state you must be able
+   to see. */
+.builder__pick {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}

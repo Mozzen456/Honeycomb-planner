@@ -4591,3 +4591,65 @@ All 32 of them passed on every file in this repo and on none of the five real
 written can only prove self-consistency; the fixtures now write the two shapes
 the world writes — a multi-part archive and a ZIP64 one — and each fix was
 confirmed by removing it and watching the new test fail.
+
+---
+
+## D113 — Point at the face that meets the wall
+
+Asked for: "not all models really make sense, so I need a button to select the
+face towards the wall — when I click that it gets rotated towards the wall."
+
+The peg adder had six buttons: −X, +X, −Y, +Y, −Z, +Z. They are complete and
+they are useless on an unfamiliar model. "−Y" is a fact about the file's
+coordinate system, and nobody who has just downloaded a headset holder knows
+which way its author pointed Y. The only vocabulary a person actually has is
+the thing on screen: *that* face, the one I am looking at.
+
+So `Pick on model` arms a mode, and the next click on the part names the face
+that meets the wall. `faceTowardWall` in `pegAdder.ts` does the work.
+
+**The winner is found by running the forward map, not by inverting it.** Six
+candidate file directions go through `orientedDirection` — the same signed
+permutation `orientForPegs` applies to positions — and the one that best agrees
+with the click wins. An inverse would be a second copy of the transform, and
+this repo's whole history is second copies of a transform quietly disagreeing
+with the first.
+
+**Snapped to the nearest of the six**, because a real model's faces are rarely
+square to anything and the lattice has six choices regardless. Clicking the face
+already against the wall is the identity: the commonest accidental click must be
+a no-op rather than a spin.
+
+**The quarter turn is carried**, exactly as the six buttons carry it. It is a
+separate judgement — which way up the part reads — and clearing it would undo a
+choice somebody made deliberately.
+
+**The pads come off while the mode is armed.** They are drawn over the part on
+purpose the rest of the time, so leaving them up would be asking somebody to hit
+the gaps between them.
+
+### The bug this uncovered: a raycast from a camera that had not moved yet
+
+The first version failed a test it should have passed — turn the model 180° and
+click the face now in front, and it picked the face that had been in front
+before. The geometry was right; the camera was stale.
+
+`camera.position` was computed inside the `requestAnimationFrame` loop, and the
+pointer handler raycast through `s.camera` — so a click arriving between the
+last pointer move and the next frame was cast from where the camera USED to be.
+Logged in the running app: `az` had moved to 0.0056 while the camera still sat
+at z = −195, half a turn away.
+
+`place()` now puts the camera where the orbit says it is, and BOTH the render
+loop and the pointer handler go through it. It ends with `updateMatrixWorld()`
+because `lookAt` does not, and `Raycaster.setFromCamera` reads the matrix rather
+than the position — the classic way for this fix to look applied and do nothing.
+
+**This was never specific to face picking: the CELL picking had it too.** Drag
+the model and immediately click a pad and you would peg a cell from the old
+view. Nobody had reported it because a human drag ends many frames before the
+click that follows it — which is exactly why it survived, and exactly why the
+fix belongs in the one place both picks go through.
+
+Found by driving the running app, not by reading the code: the unit tests all
+passed, because the transform they test was never wrong.

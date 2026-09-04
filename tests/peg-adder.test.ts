@@ -28,9 +28,11 @@ import {
   cellAtMm,
   cellPointMm,
   DEFAULT_ORIENTATION,
+  faceTowardWall,
   orientForPegs,
   reviewPegs,
   type Orientation,
+  type OrientedPart,
   type PegPlan,
 } from '../src/core/pegAdder';
 import { buildPegSolid, PEG_SEAT_MM } from '../src/core/pegMesh';
@@ -448,5 +450,148 @@ describe('the file that comes out', () => {
     expect(reviewPegs(plate, onBed)).toMatchObject({ onBed: 2, bridging: 0 });
     const high = { ...onBed, cells: [{ q: 0, r: 0 }, { q: 0, r: 2 }] };
     expect(reviewPegs(plate, high)).toMatchObject({ onBed: 1, bridging: 1 });
+  });
+});
+
+/**
+ * Picking the face by pointing at it.
+ *
+ * The six axis buttons ask in the file's own words, which mean nothing about a
+ * model somebody just downloaded. This asks in the words of the thing on
+ * screen: click the face you can see, and it turns to meet the wall.
+ *
+ * Every check here is stated on the MESH — where the clicked face ends up after
+ * the orientation comes back — rather than on the returned axis and end, which
+ * would only restate the function's own arithmetic.
+ */
+const FACE_LIST: { wallFaceAxis: Orientation['wallFaceAxis']; matingEnd: 'low' | 'high' }[] = [
+  { wallFaceAxis: 'x', matingEnd: 'low' },
+  { wallFaceAxis: 'x', matingEnd: 'high' },
+  { wallFaceAxis: 'y', matingEnd: 'low' },
+  { wallFaceAxis: 'y', matingEnd: 'high' },
+  { wallFaceAxis: 'z', matingEnd: 'low' },
+  { wallFaceAxis: 'z', matingEnd: 'high' },
+];
+
+describe('turning a face toward the wall', () => {
+  /**
+   * A box with a different length on every axis — so a wrong AXIS cannot pass
+   * by symmetry — and with each face's triangles known, so a wrong END cannot
+   * either. Wound outwards, like everything else this repo writes.
+   */
+  const [X, Y, Z] = [30, 50, 70];
+  const CORNERS = [
+    [0, 0, 0], [X, 0, 0], [X, Y, 0], [0, Y, 0],
+    [0, 0, Z], [X, 0, Z], [X, Y, Z], [0, Y, Z],
+  ];
+  const TRIS = [
+    [0, 2, 1], [0, 3, 2], // z low
+    [4, 5, 6], [4, 6, 7], // z high
+    [0, 1, 5], [0, 5, 4], // y low
+    [1, 2, 6], [1, 6, 5], // x high
+    [2, 3, 7], [2, 7, 6], // y high
+    [3, 0, 4], [3, 4, 7], // x low
+  ];
+  /** Which triangle sits on each face, and which corners lie in its plane. */
+  const FACE_TRIS: Record<string, { tri: number; onFace: (v: number[]) => boolean }> = {
+    'z-low': { tri: 0, onFace: (v) => v[2] === 0 },
+    'z-high': { tri: 2, onFace: (v) => v[2] === Z },
+    'y-low': { tri: 4, onFace: (v) => v[1] === 0 },
+    'x-high': { tri: 6, onFace: (v) => v[0] === X },
+    'y-high': { tri: 8, onFace: (v) => v[1] === Y },
+    'x-low': { tri: 10, onFace: (v) => v[0] === 0 },
+  };
+
+  const box = (): MeshData => {
+    const positions = new Float32Array(TRIS.length * 9);
+    TRIS.forEach((tri, t) => {
+      tri.forEach((i, k) => positions.set(CORNERS[i]!, t * 9 + k * 3));
+    });
+    return { positions, triangleCount: TRIS.length, format: 'binary' };
+  };
+
+  /**
+   * The outward normal of triangle `t` of the ORIENTED part, straight off the
+   * geometry.
+   *
+   * Deliberately NOT `orientedDirection`: that is the function under test, and
+   * generating the input with it would make the assertion algebraically true
+   * whether the transform were right or wrong. This is what a raycast on the
+   * drawn mesh hands the view, which is the real input.
+   */
+  const faceNormal = (part: OrientedPart, t: number): [number, number, number] => {
+    const p = (k: number): number[] => [
+      part.positions[t * 9 + k * 3]!,
+      part.positions[t * 9 + k * 3 + 1]!,
+      part.positions[t * 9 + k * 3 + 2]!,
+    ];
+    const [a, b, c] = [p(0), p(1), p(2)];
+    const u = [b![0]! - a![0]!, b![1]! - a![1]!, b![2]! - a![2]!];
+    const v = [c![0]! - a![0]!, c![1]! - a![1]!, c![2]! - a![2]!];
+    const n: [number, number, number] = [
+      u[1]! * v[2]! - u[2]! * v[1]!,
+      u[2]! * v[0]! - u[0]! * v[2]!,
+      u[0]! * v[1]! - u[1]! * v[0]!,
+    ];
+    const len = Math.hypot(...n);
+    return [n[0] / len, n[1] / len, n[2] / len];
+  };
+
+  it('lays the face you pointed at flat against the wall', () => {
+    const mesh = box();
+    // Every target face, from every starting orientation INCLUDING a quarter
+    // turn: the click arrives in whatever frame the view happens to be showing,
+    // so the answer has to be right from all of them.
+    for (const from of FACE_LIST) {
+      for (const quarterTurns of [0, 1, 2, 3]) {
+        const start: Orientation = { ...from, quarterTurns };
+        const shown = orientForPegs(mesh, start);
+
+        for (const [label, face] of Object.entries(FACE_TRIS)) {
+          const next = faceTowardWall(start, faceNormal(shown, face.tri));
+          const part = orientForPegs(mesh, next);
+
+          /*
+           * The whole claim, on the mesh: after the turn, the corners lying in
+           * the clicked face's plane are EXACTLY the ones now at out = 0 — the
+           * wall face. Vertex order survives `orientForPegs`, so corner k of
+           * the file is corner k of the oriented part.
+           */
+          for (let t = 0; t < TRIS.length; t++) {
+            for (let k = 0; k < 3; k++) {
+              const corner = CORNERS[TRIS[t]![k]!]!;
+              const out = part.positions[t * 9 + k * 3]!;
+              expect(out < 1e-9, `${label} from ${from.wallFaceAxis}${from.matingEnd}+${quarterTurns}`)
+                .toBe(face.onFace(corner));
+            }
+          }
+        }
+      }
+    }
+  });
+
+  it('snaps a normal that is not quite square', () => {
+    // Real faces are rarely exactly axis-aligned, and the lattice has six
+    // choices anyway. A click 12° off must land on the face it is on.
+    const start = DEFAULT_ORIENTATION;
+    expect(faceTowardWall(start, [-0.96, 0.2, 0.19]))
+      .toEqual(faceTowardWall(start, [-1, 0, 0]));
+  });
+
+  it('is the identity when you point at the face already on the wall', () => {
+    // The commonest accidental click has to be a no-op rather than a spin.
+    for (const from of FACE_LIST) {
+      for (const quarterTurns of [0, 1, 2, 3]) {
+        const start: Orientation = { ...from, quarterTurns };
+        expect(faceTowardWall(start, [-1, 0, 0])).toEqual(start);
+      }
+    }
+  });
+
+  it('carries the quarter turn, as the six buttons do', () => {
+    // It is a separate judgement — which way up the part reads — and clearing
+    // it would undo a choice somebody made on purpose.
+    const start: Orientation = { wallFaceAxis: 'z', matingEnd: 'low', quarterTurns: 3 };
+    expect(faceTowardWall(start, [0, 1, 0]).quarterTurns).toBe(3);
   });
 });
