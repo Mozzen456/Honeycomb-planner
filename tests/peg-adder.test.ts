@@ -29,6 +29,9 @@ import {
   cellPointMm,
   DEFAULT_ORIENTATION,
   faceTowardWall,
+  mat3Apply,
+  orientationMatrix,
+  turnMatrix,
   orientForPegs,
   reviewPegs,
   type Orientation,
@@ -570,12 +573,98 @@ describe('turning a face toward the wall', () => {
     }
   });
 
-  it('snaps a normal that is not quite square', () => {
-    // Real faces are rarely exactly axis-aligned, and the lattice has six
-    // choices anyway. A click 12° off must land on the face it is on.
-    const start = DEFAULT_ORIENTATION;
-    expect(faceTowardWall(start, [-0.96, 0.2, 0.19]))
-      .toEqual(faceTowardWall(start, [-1, 0, 0]));
+  /**
+   * A wedge: a 33.7° ramp, so its biggest face is square to nothing. This is
+   * the model class the whole feature exists for — a bracket with an angled
+   * back, a curved shell, anything off a scanner — and the six axis buttons
+   * cannot express it at all.
+   */
+  const WEDGE_CORNERS = [
+    [0, 0, 0], [40, 0, 0], [40, 30, 0], [0, 30, 0], [0, 0, 20], [40, 0, 20],
+  ];
+  // Eight triangles: two ends, and three quads. Wound outwards — checked by the
+  // determinant test below, and by the fact that a wrong winding lays a face
+  // flat with the solid on the far side of it, which the flatness test catches.
+  const WEDGE_TRIS = [
+    [0, 2, 1], [0, 3, 2], // z = 0, the base
+    [0, 5, 4], [0, 1, 5], // y = 0, the tall back
+    [4, 5, 2], [4, 2, 3], // the 33.7° ramp — square to no axis at all
+    [0, 4, 3], // x = 0
+    [1, 2, 5], // x = 40
+  ];
+  const wedge = (): MeshData => {
+    const positions = new Float32Array(WEDGE_TRIS.length * 9);
+    WEDGE_TRIS.forEach((tri, t) =>
+      tri.forEach((i, k) => positions.set(WEDGE_CORNERS[i]!, t * 9 + k * 3)));
+    return { positions, triangleCount: WEDGE_TRIS.length, format: 'binary' };
+  };
+
+  it('lays a face flat at whatever angle it really is', () => {
+    /*
+     * The claim, on the mesh and for EVERY triangle of both shapes: click it,
+     * and its own three corners are on the wall (out = 0) with the whole part
+     * on the near side of them. Nothing here says "axis" — an angled face has
+     * no axis, which is the point.
+     */
+    for (const make of [box, wedge]) {
+      const mesh = make();
+      for (const from of FACE_LIST) {
+        const start: Orientation = { ...from, quarterTurns: 1 };
+        const shown = orientForPegs(mesh, start);
+        for (let t = 0; t < mesh.triangleCount; t++) {
+          const next = faceTowardWall(start, faceNormal(shown, t));
+          const part = orientForPegs(mesh, next);
+          for (let k = 0; k < 3; k++) expect(part.positions[t * 9 + k * 3]!).toBeCloseTo(0, 6);
+          for (let i = 0; i < part.positions.length; i += 3) {
+            expect(part.positions[i]!).toBeGreaterThan(-1e-6);
+          }
+        }
+      }
+    }
+  });
+
+  it('turns rather than mirrors', () => {
+    // A reflection would be a left-hand hook on a right-hand wall, and it looks
+    // completely fine — the same failure the cyclic permutations exist to stop.
+    // Orthonormal with determinant +1 is the whole test.
+    const mesh = wedge();
+    const shown = orientForPegs(mesh, DEFAULT_ORIENTATION);
+    for (let t = 0; t < mesh.triangleCount; t++) {
+      const m = orientationMatrix(faceTowardWall(DEFAULT_ORIENTATION, faceNormal(shown, t)));
+      const det =
+        m[0]! * (m[4]! * m[8]! - m[5]! * m[7]!) -
+        m[1]! * (m[3]! * m[8]! - m[5]! * m[6]!) +
+        m[2]! * (m[3]! * m[7]! - m[4]! * m[6]!);
+      expect(det).toBeCloseTo(1, 9);
+      for (let r = 0; r < 3; r++) {
+        expect(Math.hypot(m[r * 3]!, m[r * 3 + 1]!, m[r * 3 + 2]!)).toBeCloseTo(1, 9);
+      }
+    }
+  });
+
+  it('turns the way it always turned', () => {
+    /*
+     * The quarter turn moved out of the axis permutation and into the matrix,
+     * and it had to come through unchanged: it was `(a, v) -> (−v, a)`, so
+     * across goes to up. Nothing else pins the DIRECTION — both ways are
+     * perfectly good rotations — and reversing it would quietly send the button
+     * the other way round.
+     */
+    const across: [number, number, number] = [0, 1, 0];
+    expect(mat3Apply(turnMatrix(1), across).map((x) => Math.round(x))).toEqual([0, 0, 1]);
+    expect(mat3Apply(turnMatrix(4), across).map((x) => Math.round(x))).toEqual([0, 1, 0]);
+  });
+
+  it('leaves the six exact, so a square model is untouched by floating point', () => {
+    // The buttons still have to produce the numbers they always did: with no
+    // tilt every entry of the matrix is 0 or ±1, so the arithmetic is the same
+    // to the bit and a plate's cells cannot drift.
+    for (const from of FACE_LIST) {
+      for (const quarterTurns of [0, 1, 2, 3]) {
+        const m = orientationMatrix({ ...from, quarterTurns });
+        for (const x of m) expect(Number.isInteger(x)).toBe(true);
+      }
+    }
   });
 
   it('is the identity when you point at the face already on the wall', () => {

@@ -643,13 +643,20 @@ the loop and the pointer handler both call it; it ends with `updateMatrixWorld()
 does not and `Raycaster.setFromCamera` reads the MATRIX. The cell picking had the same bug and nobody
 had hit it, because a human drag ends many frames before the click after it.
 
-**`faceTowardWall` finds the face by running the forward map over six candidates, never by inverting
-it** (D113). `Pick on model` arms a mode and the next click on the part names the face that meets the
-wall — "−Y" is a fact about a file's axes and means nothing about a model somebody just downloaded.
-The click's normal is snapped to the nearest of the six; the face already on the wall is the
-IDENTITY, because the commonest accidental click must not spin the part; and the quarter turn is
-carried, as the six buttons carry it. The pads come off while the mode is armed, or you would be
-aiming at the gaps between them.
+**A clicked face is laid flat at the angle it REALLY is — never snapped to one of six** (D114,
+superseding D113's snapping). `Pick on model` arms a mode and the next click lays that surface on the
+wall. Snapping made the feature a duplicate of the six buttons beside it and helped none of the
+models that need it: a 15° back, a curved shell, anything off a scanner has no flat square to the
+file's axes. `Orientation` therefore carries a free `tilt`, and the ORDER is the design —
+`turn · tilt · permutation · file`: the permutation is a fact about the file (innermost, and exact,
+so the six buttons still produce 0/±1 to the bit), the turn is "which way up once it is on the wall"
+(outermost, so it stays a turn about the WALL normal after a tilt moves it). A click composes as
+`tilt' = turnᵀ · Q · turn · tilt` — the conjugation is what keeps the quarter turn somebody chose.
+`Q` is the SHORTEST arc, because a click says which way a surface faces and nothing about spin.
+Clicking the face already on the wall is exactly the identity and collapses the tilt back to absent;
+no axis button is lit while a tilt is set, and pressing one clears it. Determinant +1 and orthonormal
+rows are tested per face: a reflection here is a left-hand hook on a right-hand wall. The pads come
+off while the mode is armed, or you would be aiming at the gaps between them.
 
 **EVERY cell in the peg adder is clickable, including cells outside the part.** The lattice is the
 only hard constraint. How well the part backs a cell is a MEASUREMENT in three grades — `solid`,

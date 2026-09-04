@@ -320,12 +320,24 @@ export function PegAdder({ onAddToProject, say }: PegAdderProps): JSX.Element {
                       key={f.label}
                       type="button"
                       className="button button--ghost"
+                      // Not pressed while the part sits at a free angle: none
+                      // of the six is the face on the wall then, and showing one
+                      // as chosen would be the control claiming otherwise.
                       aria-pressed={
-                        orientation.wallFaceAxis === f.axis && orientation.matingEnd === f.end
+                        orientation.tilt === undefined &&
+                        orientation.wallFaceAxis === f.axis &&
+                        orientation.matingEnd === f.end
                       }
                       title={`Put the ${f.label} face of the file against the wall`}
                       onClick={() =>
-                        reorient({ ...orientation, wallFaceAxis: f.axis, matingEnd: f.end })}
+                        reorient({
+                          ...orientation,
+                          wallFaceAxis: f.axis,
+                          matingEnd: f.end,
+                          // Square it up: these buttons mean "this flat of the
+                          // FILE", which is a different claim from a tilt.
+                          tilt: undefined,
+                        })}
                     >
                       {f.label}
                     </button>
@@ -342,7 +354,7 @@ export function PegAdder({ onAddToProject, say }: PegAdderProps): JSX.Element {
                     title={
                       picking
                         ? 'Click the face on the model that meets the wall — Esc to stop'
-                        : 'Choose the wall face by clicking it on the model'
+                        : 'Lay any face on the wall by clicking it, at whatever angle it is'
                     }
                     onClick={() => setPicking((was) => !was)}
                   >
@@ -366,6 +378,7 @@ export function PegAdder({ onAddToProject, say }: PegAdderProps): JSX.Element {
                   </button>
                   <span className="builder__aside tabular-nums">
                     {(orientation.quarterTurns % 4) * 90}°
+                    {orientation.tilt !== undefined && ' · from a picked face'}
                   </span>
                 </div>
               </div>

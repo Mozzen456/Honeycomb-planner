@@ -4653,3 +4653,66 @@ fix belongs in the one place both picks go through.
 
 Found by driving the running app, not by reading the code: the unit tests all
 passed, because the transform they test was never wrong.
+
+---
+
+## D114 — At the angle it really is, not the nearest of six
+
+D113 snapped a clicked face to the nearest of the six axis directions. Reported
+back within the hour: "needs to be where on the geometry I clicked it rotates,
+and maybe not one of the predetermined ones."
+
+Right, and the snapping made the feature a duplicate of the buttons beside it.
+Six axis flats is the same claim the six buttons already make, so the models
+that needed help got none: a bracket with a 15° back, a curved shell, anything
+off a scanner has no flat square to the file's axes, and "nearest" there means
+wrong by up to 45°. **The surface you click goes flat on the wall, at whatever
+angle it actually is.**
+
+### `Orientation` gains a free rotation, and where it sits is the design
+
+```
+oriented = turn · tilt · permutation · file
+```
+
+- the PERMUTATION is a fact about the file — which of its axes meets the wall —
+  so it is innermost, and it stays exact: entries of 0 and ±1, so the six
+  buttons produce the same numbers to the bit as the hand-written loop did;
+- the TILT is the free part, from a click;
+- the TURN is "which way up does it read once it is on the wall", so it is
+  outermost — it has to stay a turn about the WALL normal after a tilt has moved
+  which direction that is.
+
+A click therefore composes as `tilt' = turnᵀ · Q · turn · tilt`. The conjugation
+is what lets the quarter turn somebody chose survive a re-aim unchanged; without
+it the turn silently becomes a turn about the old normal.
+
+`Q` is the SHORTEST arc from the clicked normal to −out, because the click says
+which way the surface faces and nothing about how the part should be spun around
+it — any more rotation would be invented. The antiparallel case is taken by hand
+(the axis is undefined there, and any perpendicular one is a correct half turn).
+
+Clicking the face already on the wall is still exactly the identity, and the
+tilt collapses back to absent when it is, so an untilted orientation stays
+untilted.
+
+**A rotation, never a reflection.** A mirrored part is a left-hand hook on a
+right-hand wall and it looks completely fine, which is the same failure the
+cyclic axis permutations exist to prevent. `tests/peg-adder.test.ts` asserts
+determinant +1 and orthonormal rows for every face of both test solids.
+
+**None of the six buttons is lit while a tilt is set**, because none of them is
+the face on the wall then, and a lit button would be the control claiming
+otherwise. Pressing one clears the tilt: they mean "this flat of the FILE",
+which is a different claim.
+
+### Testing it
+
+The claim is stated on the MESH, for every triangle of a box and of a 33.7°
+wedge, from all six starting faces: click a triangle and its own three corners
+land at out = 0 with the whole solid on the near side of them. Nothing in that
+sentence mentions an axis — an angled face has none, which is the point.
+
+Confirmed in the running app on that wedge: clicking the ramp gives 16.6 mm out
+and 36.1 up, which are 30·20/√1300 and √1300 — the wedge's extent along the
+ramp's own normal, and the ramp's own length. Snapped, it read 20.0 or 30.0.

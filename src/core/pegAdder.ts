@@ -59,6 +59,11 @@ import type { Hex } from './types';
 // Which way up the part goes
 // ---------------------------------------------------------------------------
 
+/** A rotation, 3x3 row-major. Nine numbers rather than a class, like `Matrix`. */
+export type Mat3 = readonly number[];
+
+export const IDENTITY3: Mat3 = [1, 0, 0, 0, 1, 0, 0, 0, 1];
+
 export interface Orientation {
   /** Which axis of the FILE meets the wall. */
   wallFaceAxis: Axis;
@@ -66,6 +71,21 @@ export interface Orientation {
   matingEnd: 'low' | 'high';
   /** Quarter turns about the wall normal, so the part stands up the right way. */
   quarterTurns: number;
+  /**
+   * A FREE rotation, in the oriented frame, between the axis choice and the
+   * quarter turn. Absent means none, and absent is the ordinary case.
+   *
+   * The six axis buttons can only ever say "one of these six flats meets the
+   * wall", and plenty of models have no such flat: a bracket with a 15° back, a
+   * curved shell, anything exported from a scan. So the face you CLICK is laid
+   * on the wall at whatever angle it actually is, and that is what this holds.
+   *
+   * Between the two on purpose. The axis choice is a fact about the FILE, so it
+   * belongs innermost; the quarter turn is "which way up does it read once it is
+   * on the wall", so it belongs outermost — it must stay a turn about the wall
+   * normal even after a tilt has moved which direction that is.
+   */
+  tilt?: Mat3;
 }
 
 export interface PegPlan extends Orientation {
@@ -86,6 +106,131 @@ export const DEFAULT_ORIENTATION: Orientation = {
   matingEnd: 'low',
   quarterTurns: 0,
 };
+
+// ---------------------------------------------------------------------------
+// Rotations
+// ---------------------------------------------------------------------------
+
+/** `a` applied AFTER `b` — the order composition actually reads in. */
+export function mat3Mul(a: Mat3, b: Mat3): Mat3 {
+  const out = new Array<number>(9);
+  for (let r = 0; r < 3; r++) {
+    for (let c = 0; c < 3; c++) {
+      out[r * 3 + c] = a[r * 3]! * b[c]! + a[r * 3 + 1]! * b[3 + c]! + a[r * 3 + 2]! * b[6 + c]!;
+    }
+  }
+  return out;
+}
+
+/** A rotation's inverse is its transpose, and saying so avoids a solver. */
+export const mat3Transpose = (m: Mat3): Mat3 => [
+  m[0]!, m[3]!, m[6]!,
+  m[1]!, m[4]!, m[7]!,
+  m[2]!, m[5]!, m[8]!,
+];
+
+export const mat3Apply = (m: Mat3, v: readonly number[]): [number, number, number] => [
+  m[0]! * v[0]! + m[1]! * v[1]! + m[2]! * v[2]!,
+  m[3]! * v[0]! + m[4]! * v[1]! + m[5]! * v[2]!,
+  m[6]! * v[0]! + m[7]! * v[1]! + m[8]! * v[2]!,
+];
+
+const isIdentity3 = (m: Mat3): boolean =>
+  IDENTITY3.every((x, i) => Math.abs((m[i] ?? 0) - x) < 1e-12);
+
+/**
+ * The exact permutation that puts `wallFaceAxis`/`matingEnd` against the wall.
+ *
+ * Entries are 0 and ±1, so composing with it is bit-exact — which is why the
+ * six buttons still produce the same numbers they always did, matrix or no
+ * matrix. A `high` end is a 180° TURN and not a negated axis: negating one on
+ * its own is a reflection, and a mirrored part is a left-hand hook on a
+ * right-hand wall.
+ */
+export function permutationFor(axis: Axis, end: 'low' | 'high'): Mat3 {
+  const [ui, vi, wi] = AXIS_INDEX[axis];
+  const flip = end === 'high' ? -1 : 1;
+  const row = (index: number, scale: number): number[] => {
+    const r = [0, 0, 0];
+    r[index] = scale;
+    return r;
+  };
+  // Rows are the oriented frame's own order: out, across, up.
+  return [...row(wi, flip), ...row(ui, 1), ...row(vi, flip)];
+}
+
+/**
+ * `n` quarter turns about the wall normal, in the oriented frame.
+ *
+ * Out is untouched and (across, up) go to (−up, across), which is exactly what
+ * the old inline loop did to (a, v) — the turn was always a rotation about out,
+ * so moving it outside the permutation changes nothing and lets it stay a turn
+ * about the wall normal once a tilt is in between.
+ */
+export function turnMatrix(quarterTurns: number): Mat3 {
+  const t = ((quarterTurns % 4) + 4) % 4;
+  let m: Mat3 = IDENTITY3;
+  const one: Mat3 = [1, 0, 0, 0, 0, -1, 0, 1, 0];
+  for (let i = 0; i < t; i++) m = mat3Mul(one, m);
+  return m;
+}
+
+/** File to oriented, in one matrix: the turn, then the tilt, then the axis. */
+export function orientationMatrix(o: Orientation): Mat3 {
+  const base = permutationFor(o.wallFaceAxis, o.matingEnd);
+  const tilted = o.tilt === undefined ? base : mat3Mul(o.tilt, base);
+  return mat3Mul(turnMatrix(o.quarterTurns), tilted);
+}
+
+/**
+ * The shortest rotation taking unit `from` to unit `to`.
+ *
+ * Shortest because there is no other information: the click says which way the
+ * surface faces and nothing about how the part should be spun around it, so any
+ * extra rotation would be invented. Rodrigues, with the antiparallel case taken
+ * by hand — there the axis is undefined and any perpendicular one is a correct
+ * 180° turn, so one is chosen from whichever coordinate of `from` is smallest,
+ * which cannot be parallel to it.
+ */
+export function shortestArc(from: readonly number[], to: readonly number[]): Mat3 {
+  const norm = (v: readonly number[]): [number, number, number] => {
+    const len = Math.hypot(v[0]!, v[1]!, v[2]!) || 1;
+    return [v[0]! / len, v[1]! / len, v[2]! / len];
+  };
+  const f = norm(from);
+  const t = norm(to);
+  const dot = f[0] * t[0] + f[1] * t[1] + f[2] * t[2];
+  if (dot > 1 - 1e-12) return IDENTITY3;
+
+  let axis: [number, number, number] = [
+    f[1] * t[2] - f[2] * t[1],
+    f[2] * t[0] - f[0] * t[2],
+    f[0] * t[1] - f[1] * t[0],
+  ];
+  let angle = Math.acos(Math.max(-1, Math.min(1, dot)));
+  if (Math.hypot(...axis) < 1e-9) {
+    // Antiparallel: half a turn about anything perpendicular to `from`.
+    const abs = [Math.abs(f[0]), Math.abs(f[1]), Math.abs(f[2])];
+    const k = abs.indexOf(Math.min(...abs));
+    const other = [0, 0, 0];
+    other[k] = 1;
+    axis = [
+      f[1] * other[2]! - f[2] * other[1]!,
+      f[2] * other[0]! - f[0] * other[2]!,
+      f[0] * other[1]! - f[1] * other[0]!,
+    ];
+    angle = Math.PI;
+  }
+  const [x, y, z] = norm(axis);
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  const k = 1 - c;
+  return [
+    c + x * x * k, x * y * k - z * s, x * z * k + y * s,
+    y * x * k + z * s, c + y * y * k, y * z * k - x * s,
+    z * x * k - y * s, z * y * k + x * s, c + z * z * k,
+  ];
+}
 
 /**
  * The part in the WALL's frame, and in the file frame the output is written in:
@@ -121,8 +266,7 @@ const AXIS_INDEX: Record<Axis, [number, number, number]> = {
  * its own is a reflection. Same rule, same reason, as `meshLibrary.orient`.
  */
 export function orientForPegs(mesh: MeshData, o: Orientation): OrientedPart {
-  const [ui, vi, wi] = AXIS_INDEX[o.wallFaceAxis];
-  const flip = o.matingEnd === 'high' ? -1 : 1;
+  const m = orientationMatrix(o);
   const src = mesh.positions;
   const n = mesh.triangleCount * 3;
 
@@ -131,19 +275,15 @@ export function orientForPegs(mesh: MeshData, o: Orientation): OrientedPart {
   const out = new Float64Array(n);
   for (let k = 0; k < n; k++) {
     const i = k * 3;
-    let a = src[i + ui]!;
-    let v = src[i + vi]! * flip;
-    const w = src[i + wi]! * flip;
-    // Quarter turns in the wall plane: (a, v) -> (−v, a), applied as many times
-    // as asked. Whole turns only, so this is exact.
-    for (let t = ((o.quarterTurns % 4) + 4) % 4; t > 0; t--) {
-      const na = -v;
-      v = a;
-      a = na;
-    }
-    across[k] = a;
-    up[k] = v;
-    out[k] = w;
+    const x = src[i]!;
+    const y = src[i + 1]!;
+    const z = src[i + 2]!;
+    // One matrix, whose rows ARE the oriented frame: out, across, up. With no
+    // tilt every entry is 0 or ±1, so this is the same arithmetic the axis
+    // permutation and the quarter-turn loop did, to the bit.
+    out[k] = m[0]! * x + m[1]! * y + m[2]! * z;
+    across[k] = m[3]! * x + m[4]! * y + m[5]! * z;
+    up[k] = m[6]! * x + m[7]! * y + m[8]! * z;
   }
 
   const span = (arr: Float64Array): [number, number] => {
@@ -186,73 +326,44 @@ export function orientedDirection(
   o: Orientation,
   dir: readonly [number, number, number],
 ): [number, number, number] {
-  const [ui, vi, wi] = AXIS_INDEX[o.wallFaceAxis];
-  const flip = o.matingEnd === 'high' ? -1 : 1;
-  let a = dir[ui]!;
-  let v = dir[vi]! * flip;
-  const w = dir[wi]! * flip;
-  for (let t = ((o.quarterTurns % 4) + 4) % 4; t > 0; t--) {
-    const na = -v;
-    v = a;
-    a = na;
-  }
-  // The oriented frame, in `OrientedPart`'s own order: out, across, up.
-  return [w, a, v];
+  return mat3Apply(orientationMatrix(o), dir);
 }
 
-/** The six directions a flat face of a box can point, in the FILE's frame. */
-const FILE_DIRECTIONS: readonly { dir: [number, number, number]; axis: Axis; end: 'low' | 'high' }[] = [
-  { dir: [-1, 0, 0], axis: 'x', end: 'low' },
-  { dir: [1, 0, 0], axis: 'x', end: 'high' },
-  { dir: [0, -1, 0], axis: 'y', end: 'low' },
-  { dir: [0, 1, 0], axis: 'y', end: 'high' },
-  { dir: [0, 0, -1], axis: 'z', end: 'low' },
-  { dir: [0, 0, 1], axis: 'z', end: 'high' },
-];
-
 /**
- * Point at a face, and get the orientation that turns it toward the wall.
+ * Point at a face, and get the orientation that lays it on the wall.
  *
- * `normal` is the clicked face's normal in the ORIENTED frame — which is what
- * the view has, since it draws the oriented part. The six axis buttons ask the
- * same question in the file's own words; this asks it in the words of the thing
- * on screen, which is the only vocabulary somebody looking at an unfamiliar
- * model actually has. "−Y" means nothing about a headset holder.
+ * `normal` is the clicked surface's normal in the ORIENTED frame — which is
+ * what the view has, since it draws the oriented part.
  *
- * Snapped to the nearest of the six, because a real model's faces are rarely
- * exactly axis-aligned and the lattice only has six choices anyway. The winner
- * is the file direction whose oriented direction the click most agrees with —
- * found by running the forward map over all six rather than inverting it, so
- * there is no second copy of the transform to get backwards.
+ * **At whatever angle it actually is.** The first version of this snapped to
+ * the nearest of the six axis faces, and that is the same tool the six buttons
+ * already were: it cannot help the models that need help. A bracket with a 15°
+ * back, a curved shell, anything off a scanner — none of them has a flat square
+ * to the file's axes, so "nearest" always meant "wrong by up to 45°". The
+ * surface you clicked goes flat on the wall.
  *
- * The quarter turn is CARRIED, exactly as the six buttons carry it: it is a
- * separate judgement about which way up the part reads, and clearing it would
- * undo a choice the person made on purpose.
+ * The rotation is the SHORTEST arc taking that normal to −out, because the
+ * click carries no information about how the part should be spun around it —
+ * anything more would be invented. Spinning it is what the quarter turn is for,
+ * which is why the turn stays OUTSIDE the tilt and keeps meaning "about the
+ * wall normal"; the conjugation here is what preserves that while leaving the
+ * turn the person chose alone.
+ *
+ * Clicking the face already against the wall is exactly the identity — the
+ * commonest accidental click has to be a no-op — and the tilt collapses back to
+ * absent when it is, so an untilted orientation stays untilted.
  */
 export function faceTowardWall(
   o: Orientation,
   normal: readonly [number, number, number],
 ): Orientation {
-  let best = FILE_DIRECTIONS[0]!;
-  let bestDot = -Infinity;
-  for (const candidate of FILE_DIRECTIONS) {
-    const d = orientedDirection(o, candidate.dir);
-    const dot = d[0] * normal[0] + d[1] * normal[1] + d[2] * normal[2];
-    if (dot > bestDot) {
-      bestDot = dot;
-      best = candidate;
-    }
-  }
-  /*
-   * `best` is the outward normal of the face that was clicked, in the file's
-   * frame — and a face meets the wall when its normal is the OUT axis's
-   * negative. `orientForPegs` computes out as `src[wi] * flip`, and
-   * `AXIS_INDEX[A][2]` is A's own index, so the axis is `best.axis` directly
-   * and the end is the one whose flip makes that component −1: a face pointing
-   * along −axis needs flip +1 (`low`), along +axis needs −1 (`high`). Which is
-   * exactly what the six buttons already mean by their labels.
-   */
-  return { ...o, wallFaceAxis: best.axis, matingEnd: best.end };
+  const turn = turnMatrix(o.quarterTurns);
+  const q = shortestArc(normal, [-1, 0, 0]);
+  const tilt = mat3Mul(
+    mat3Mul(mat3Transpose(turn), q),
+    mat3Mul(turn, o.tilt ?? IDENTITY3),
+  );
+  return isIdentity3(tilt) ? { ...o, tilt: undefined } : { ...o, tilt };
 }
 
 /**
