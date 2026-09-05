@@ -32,6 +32,7 @@ import {
   cellPointMm,
   DEFAULT_ORIENTATION,
   faceTowardWall,
+  normaliseSpin,
   orientForPegs,
   pegLayoutNote,
   reviewPegs,
@@ -154,6 +155,22 @@ export function PegAdder({ onAddToProject, say }: PegAdderProps): JSX.Element {
     setOrientation(next);
     setCells([]);
     setNudge(null);
+  }, []);
+
+  /**
+   * Turning about the wall normal, from the slider or the button.
+   *
+   * NOT through `reorient`: that clears the picked cells, and rightly so when
+   * the FACE changes — those cells were on another face. A spin keeps the same
+   * face on the wall, so the cells are still the cells you chose, and dropping
+   * them on every step of a slider drag would empty the plan by accident.
+   *
+   * The button is `+ 90` and not "snap to the next quarter", so a fine angle
+   * set on the slider survives it: turn it 12° to line something up, then a
+   * quarter more, and you get 102° rather than losing the 12.
+   */
+  const spin = useCallback((deg: number) => {
+    setOrientation((was) => ({ ...was, spinDeg: normaliseSpin(deg) }));
   }, []);
 
   /**
@@ -365,22 +382,42 @@ export function PegAdder({ onAddToProject, say }: PegAdderProps): JSX.Element {
               </div>
 
               <div className="builder__row">
-                <span className="builder__label">Turn</span>
-                <div className="builder__faces">
-                  <button
-                    type="button"
-                    className="button button--ghost"
-                    title="Quarter turn, so the part stands up the way you want it"
-                    onClick={() =>
-                      reorient({ ...orientation, quarterTurns: orientation.quarterTurns + 1 })}
-                  >
-                    ↻ 90°
-                  </button>
-                  <span className="builder__aside tabular-nums">
-                    {(orientation.quarterTurns % 4) * 90}°
-                    {orientation.tilt !== undefined && ' · from a picked face'}
-                  </span>
-                </div>
+                <label className="builder__label" htmlFor="pegadder-turn">Turn</label>
+                {/*
+                  * A slider, because plenty of parts do not read straight at a
+                  * multiple of 90° — a hook angled off a bracket, a label that
+                  * should sit level — and the four quarter turns were the only
+                  * angles this could reach.
+                  *
+                  * `spin` rather than `reorient`: turning the part about the
+                  * wall normal does not change which face is on the wall, so
+                  * the cells stay valid. Clearing them on every step of a drag
+                  * would make the slider unusable, which is the same argument
+                  * as `NumberField`'s `commitOn` (D67) in a different shape.
+                  */}
+                <input
+                  id="pegadder-turn"
+                  className="builder__slider"
+                  type="range"
+                  min={0}
+                  max={359}
+                  step={1}
+                  value={Math.round(orientation.spinDeg)}
+                  aria-label="Turn about the wall normal, in degrees"
+                  onChange={(e) => spin(Number(e.target.value))}
+                />
+                <button
+                  type="button"
+                  className="button button--ghost"
+                  title="A clean quarter turn — exact, where a slider lands near it"
+                  onClick={() => spin(orientation.spinDeg + 90)}
+                >
+                  ↻ 90°
+                </button>
+                <span className="builder__aside tabular-nums">
+                  {Math.round(normaliseSpin(orientation.spinDeg))}°
+                  {orientation.tilt !== undefined && ' · from a picked face'}
+                </span>
               </div>
 
               {/*

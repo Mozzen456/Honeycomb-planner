@@ -658,6 +658,14 @@ no axis button is lit while a tilt is set, and pressing one clears it. Determina
 rows are tested per face: a reflection here is a left-hand hook on a right-hand wall. The pads come
 off while the mode is armed, or you would be aiming at the gaps between them.
 
+**The turn about the wall normal is a FREE angle (`spinDeg`), exact at the quarters** (D115).
+`turnMatrix` builds the permutation when the angle is a whole number of quarter turns and only
+reaches for `cos`/`sin` otherwise — `Math.cos(Math.PI / 2)` is 6.1e-17 and this matrix multiplies
+every vertex of somebody's model. The ↻ 90° button is `+ 90` and not "snap to the next quarter", so a
+fine angle set on the slider survives it. And a spin must NOT go through `reorient`: turning keeps
+the same face on the wall, so the picked cells are still valid, and clearing them on every step of a
+slider drag would empty the plan. A FACE change does clear them — those cells were on another face.
+
 **EVERY cell in the peg adder is clickable, including cells outside the part.** The lattice is the
 only hard constraint. How well the part backs a cell is a MEASUREMENT in three grades — `solid`,
 `partial`, `bare` — drawn as three colours and said in the notes; it is not a gate. It was a gate

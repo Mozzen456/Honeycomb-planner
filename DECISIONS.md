@@ -4716,3 +4716,42 @@ sentence mentions an axis — an angled face has none, which is the point.
 Confirmed in the running app on that wedge: clicking the ramp gives 16.6 mm out
 and 36.1 up, which are 30·20/√1300 and √1300 — the wedge's extent along the
 ramp's own normal, and the ramp's own length. Snapped, it read 20.0 or 30.0.
+
+---
+
+## D115 — The turn is a slider, and the quarter turn stays
+
+Asked for: "now so that I can rotate with a slider, but keep the 90 degree
+button."
+
+`quarterTurns: number` becomes `spinDeg: number` — degrees about the wall
+normal, any angle. Four positions was never enough: a hook angled off a bracket,
+a label that should sit level, a part that reads straight at 37°. The slider is
+0–359 and the button is still there, because most parts DO want one of the four
+and hunting for 90 on a slider is worse than pressing a button.
+
+**The button is `+ 90`, not "snap to the next quarter".** Set 37° to line
+something up, press it, and you get 127° — the fine angle you just found
+survives. Snapping would throw it away, and it is the harder of the two to get
+back.
+
+**The quarter turns stay EXACT.** `Math.cos(Math.PI / 2)` is 6.1e-17, and this
+matrix multiplies every vertex of somebody's model, so a part turned a clean 90°
+would come out imperceptibly skewed — in a codebase where `meshIsClosed`
+compares vertices exactly. `turnMatrix` builds the permutation whenever the
+angle is a whole number of quarter turns and only reaches for `cos`/`sin`
+otherwise. Same rule as `roundedProfile` writing its cardinal points out rather
+than evaluating them from the arc.
+
+**A spin does NOT clear the picked cells; a face change does.** They are
+different edits: turning about the wall normal keeps the same face on the wall,
+so the cells are still the cells you chose, while a new face makes them cells on
+some other face. Routing the slider through `reorient` would empty the plan on
+every step of a drag — which is `NumberField`'s `commitOn` argument (D67) in a
+different shape. So `spin` sets the angle and nothing else.
+
+It stays OUTERMOST in the orientation for D114's reason: a turn about the wall
+normal has to remain one after a tilt has moved which direction that is. Tested
+as the property that actually matters — a spin cannot change how deep the part
+is, since depth is measured along that normal — from both a square face and a
+tilted one.

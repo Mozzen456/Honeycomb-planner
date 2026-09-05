@@ -69,8 +69,19 @@ export interface Orientation {
   wallFaceAxis: Axis;
   /** Which end of that axis: `low` is the minimum. */
   matingEnd: 'low' | 'high';
-  /** Quarter turns about the wall normal, so the part stands up the right way. */
-  quarterTurns: number;
+  /**
+   * Rotation about the wall normal, in DEGREES, so the part stands up the way
+   * you want it. Free, because plenty of parts do not read straight at a
+   * multiple of 90° — a hook angled off a bracket, a label that should sit
+   * level — and the quarter turn is just the four places you land on most.
+   *
+   * Kept exact AT those four: `turnMatrix` uses the permutation rather than
+   * `cos`/`sin` whenever the angle is a whole number of quarter turns, so a
+   * square part is not skewed by 6e-17 for having been turned. Same rule as
+   * `roundedProfile` writing its cardinal points out rather than evaluating
+   * them from the arc.
+   */
+  spinDeg: number;
   /**
    * A FREE rotation, in the oriented frame, between the axis choice and the
    * quarter turn. Absent means none, and absent is the ordinary case.
@@ -104,7 +115,13 @@ export interface PegPlan extends Orientation {
 export const DEFAULT_ORIENTATION: Orientation = {
   wallFaceAxis: 'z',
   matingEnd: 'low',
-  quarterTurns: 0,
+  spinDeg: 0,
+};
+
+/** Degrees into [0, 360), so the readout and the slider agree with the model. */
+export const normaliseSpin = (deg: number): number => {
+  if (!Number.isFinite(deg)) return 0;
+  return ((deg % 360) + 360) % 360;
 };
 
 // ---------------------------------------------------------------------------
@@ -160,26 +177,40 @@ export function permutationFor(axis: Axis, end: 'low' | 'high'): Mat3 {
 }
 
 /**
- * `n` quarter turns about the wall normal, in the oriented frame.
+ * A rotation of `deg` about the wall normal, in the oriented frame.
  *
- * Out is untouched and (across, up) go to (−up, across), which is exactly what
- * the old inline loop did to (a, v) — the turn was always a rotation about out,
- * so moving it outside the permutation changes nothing and lets it stay a turn
- * about the wall normal once a tilt is in between.
+ * Out is untouched and (across, up) turn about it — at 90° that is
+ * (−up, across), which is exactly what the old inline loop did to (a, v). The
+ * turn was always a rotation about out, so moving it outside the permutation
+ * changed nothing and lets it stay a turn about the wall normal once a tilt is
+ * in between.
+ *
+ * **The quarter turns are built, not evaluated.** `Math.cos(Math.PI / 2)` is
+ * 6.1e-17 rather than 0, and this matrix multiplies every vertex of somebody's
+ * model — so a part turned a clean 90° would come out imperceptibly skewed, and
+ * `meshIsClosed` compares vertices EXACTLY elsewhere in this codebase for
+ * exactly that reason. A whole number of quarter turns takes the permutation.
  */
-export function turnMatrix(quarterTurns: number): Mat3 {
-  const t = ((quarterTurns % 4) + 4) % 4;
-  let m: Mat3 = IDENTITY3;
-  const one: Mat3 = [1, 0, 0, 0, 0, -1, 0, 1, 0];
-  for (let i = 0; i < t; i++) m = mat3Mul(one, m);
-  return m;
+export function turnMatrix(deg: number): Mat3 {
+  const spin = normaliseSpin(deg);
+  const quarter: Mat3 = [1, 0, 0, 0, 0, -1, 0, 1, 0];
+  if (Math.abs(spin / 90 - Math.round(spin / 90)) < 1e-9) {
+    let m: Mat3 = IDENTITY3;
+    for (let i = 0; i < Math.round(spin / 90) % 4; i++) m = mat3Mul(quarter, m);
+    return m;
+  }
+  const a = (spin * Math.PI) / 180;
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  // Out is the first component, so this turns (across, up) and leaves it alone.
+  return [1, 0, 0, 0, c, -s, 0, s, c];
 }
 
 /** File to oriented, in one matrix: the turn, then the tilt, then the axis. */
 export function orientationMatrix(o: Orientation): Mat3 {
   const base = permutationFor(o.wallFaceAxis, o.matingEnd);
   const tilted = o.tilt === undefined ? base : mat3Mul(o.tilt, base);
-  return mat3Mul(turnMatrix(o.quarterTurns), tilted);
+  return mat3Mul(turnMatrix(o.spinDeg), tilted);
 }
 
 /**
@@ -357,7 +388,7 @@ export function faceTowardWall(
   o: Orientation,
   normal: readonly [number, number, number],
 ): Orientation {
-  const turn = turnMatrix(o.quarterTurns);
+  const turn = turnMatrix(o.spinDeg);
   const q = shortestArc(normal, [-1, 0, 0]);
   const tilt = mat3Mul(
     mat3Mul(mat3Transpose(turn), q),
@@ -373,16 +404,16 @@ export function faceTowardWall(
  * that looks broken on its first screen. Six rasters is cheap, and the answer is
  * the same thing the person would have found by pressing all six buttons.
  *
- * The quarter turn is NOT searched. It does change which cells land on the part
- * — a hex lattice has no 90° symmetry — but it is the one part of the
- * orientation that is a human judgement: which way up the part reads.
+ * The spin is NOT searched. It does change which cells land on the part — a hex
+ * lattice has no 90° symmetry — but it is the one part of the orientation that
+ * is a human judgement: which way up the part reads.
  */
 export function bestFace(mesh: MeshData): Orientation {
   let best = DEFAULT_ORIENTATION;
   let most = -1;
   for (const wallFaceAxis of ['x', 'y', 'z'] as const) {
     for (const matingEnd of ['low', 'high'] as const) {
-      const o: Orientation = { wallFaceAxis, matingEnd, quarterTurns: 0 };
+      const o: Orientation = { wallFaceAxis, matingEnd, spinDeg: 0 };
       const part = orientForPegs(mesh, o);
       const offset = { x: 0, y: part.sizeMm[2] / 2 };
       const count = candidateCells(part, offset).filter((c) => c.backing === 'solid').length;

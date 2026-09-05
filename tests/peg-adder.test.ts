@@ -30,6 +30,7 @@ import {
   DEFAULT_ORIENTATION,
   faceTowardWall,
   mat3Apply,
+  normaliseSpin,
   orientationMatrix,
   turnMatrix,
   orientForPegs,
@@ -93,8 +94,8 @@ function signedVolume(positions: ArrayLike<number>, triangles: number): number {
 const ORIENTATIONS: Orientation[] = [];
 for (const wallFaceAxis of ['x', 'y', 'z'] as const) {
   for (const matingEnd of ['low', 'high'] as const) {
-    for (const quarterTurns of [0, 1, 2, 3]) {
-      ORIENTATIONS.push({ wallFaceAxis, matingEnd, quarterTurns });
+    for (const spinDeg of [0, 90, 180, 270]) {
+      ORIENTATIONS.push({ wallFaceAxis, matingEnd, spinDeg });
     }
   }
 }
@@ -136,12 +137,12 @@ describe('turning the upload', () => {
   });
 
   it('reports the size in the order it is drawn: out, across, up', () => {
-    const flat = orientForPegs(PLATE, { wallFaceAxis: 'z', matingEnd: 'low', quarterTurns: 0 });
+    const flat = orientForPegs(PLATE, { wallFaceAxis: 'z', matingEnd: 'low', spinDeg: 0 });
     expect(flat.sizeMm[0]).toBeCloseTo(6, 6);
     expect(flat.sizeMm[1]).toBeCloseTo(120, 6);
     expect(flat.sizeMm[2]).toBeCloseTo(90, 6);
     // A quarter turn swaps across and up, and leaves the depth alone.
-    const turned = orientForPegs(PLATE, { wallFaceAxis: 'z', matingEnd: 'low', quarterTurns: 1 });
+    const turned = orientForPegs(PLATE, { wallFaceAxis: 'z', matingEnd: 'low', spinDeg: 90 });
     expect(turned.sizeMm[0]).toBeCloseTo(6, 6);
     expect(turned.sizeMm[1]).toBeCloseTo(90, 6);
     expect(turned.sizeMm[2]).toBeCloseTo(120, 6);
@@ -172,7 +173,7 @@ describe('the lattice under the part', () => {
 
 describe('how well a cell is backed', () => {
   const offset = { x: 0, y: 45 };
-  const plate = orientForPegs(PLATE, { wallFaceAxis: 'z', matingEnd: 'low', quarterTurns: 0 });
+  const plate = orientForPegs(PLATE, { wallFaceAxis: 'z', matingEnd: 'low', spinDeg: 0 });
 
   it('grades a cell wholly on the part as solid', () => {
     const found = candidateCells(plate, offset);
@@ -210,7 +211,7 @@ describe('how well a cell is backed', () => {
   });
 
   it('grades a cell over a hole as anything but solid', () => {
-    const split = orientForPegs(SPLIT, { wallFaceAxis: 'z', matingEnd: 'low', quarterTurns: 0 });
+    const split = orientForPegs(SPLIT, { wallFaceAxis: 'z', matingEnd: 'low', spinDeg: 0 });
     const found = candidateCells(split, offset);
     // The gap runs from −20 to +20 across the middle, so anything whose hexagon
     // reaches into it has less than solid material to weld to.
@@ -229,7 +230,7 @@ describe('how well a cell is backed', () => {
     // the wall face would call this solid and the peg would come off.
     const skin = orientForPegs(
       mesh(box(-60, 60, -45, 45, 0, 1)),
-      { wallFaceAxis: 'z', matingEnd: 'low', quarterTurns: 0 },
+      { wallFaceAxis: 'z', matingEnd: 'low', spinDeg: 0 },
     );
     const over = candidateCells(skin, offset).filter((c) => c.coverage > 0.99);
     expect(over.length).toBeGreaterThan(0);
@@ -319,7 +320,7 @@ describe('the face it opens on', () => {
   it('is a real search and not a guess: it beats the default', () => {
     const standing = mesh(box(-60, 60, 0, 6, -45, 45));
     const chosen = orientForPegs(standing, bestFace(standing));
-    const fallback = orientForPegs(standing, { wallFaceAxis: 'z', matingEnd: 'low', quarterTurns: 0 });
+    const fallback = orientForPegs(standing, { wallFaceAxis: 'z', matingEnd: 'low', spinDeg: 0 });
     const count = (p: ReturnType<typeof orientForPegs>): number =>
       candidateCells(p, { x: 0, y: p.sizeMm[2] / 2 })
         .filter((c) => c.backing === 'solid').length;
@@ -357,11 +358,11 @@ describe('the peg itself', () => {
 });
 
 describe('the file that comes out', () => {
-  const plate = orientForPegs(PLATE, { wallFaceAxis: 'z', matingEnd: 'low', quarterTurns: 0 });
+  const plate = orientForPegs(PLATE, { wallFaceAxis: 'z', matingEnd: 'low', spinDeg: 0 });
   const plan: PegPlan = {
     wallFaceAxis: 'z',
     matingEnd: 'low',
-    quarterTurns: 0,
+    spinDeg: 0,
     latticeOffset: { x: 0, y: 45 },
     cells: [{ q: 0, r: 0 }, { q: 2, r: -1 }, { q: 0, r: 1 }, { q: 2, r: 0 }],
   };
@@ -546,8 +547,8 @@ describe('turning a face toward the wall', () => {
     // turn: the click arrives in whatever frame the view happens to be showing,
     // so the answer has to be right from all of them.
     for (const from of FACE_LIST) {
-      for (const quarterTurns of [0, 1, 2, 3]) {
-        const start: Orientation = { ...from, quarterTurns };
+      for (const spinDeg of [0, 90, 180, 270]) {
+        const start: Orientation = { ...from, spinDeg };
         const shown = orientForPegs(mesh, start);
 
         for (const [label, face] of Object.entries(FACE_TRIS)) {
@@ -564,7 +565,7 @@ describe('turning a face toward the wall', () => {
             for (let k = 0; k < 3; k++) {
               const corner = CORNERS[TRIS[t]![k]!]!;
               const out = part.positions[t * 9 + k * 3]!;
-              expect(out < 1e-9, `${label} from ${from.wallFaceAxis}${from.matingEnd}+${quarterTurns}`)
+              expect(out < 1e-9, `${label} from ${from.wallFaceAxis}${from.matingEnd}+${spinDeg}`)
                 .toBe(face.onFace(corner));
             }
           }
@@ -609,7 +610,7 @@ describe('turning a face toward the wall', () => {
     for (const make of [box, wedge]) {
       const mesh = make();
       for (const from of FACE_LIST) {
-        const start: Orientation = { ...from, quarterTurns: 1 };
+        const start: Orientation = { ...from, spinDeg: 90 };
         const shown = orientForPegs(mesh, start);
         for (let t = 0; t < mesh.triangleCount; t++) {
           const next = faceTowardWall(start, faceNormal(shown, t));
@@ -642,17 +643,40 @@ describe('turning a face toward the wall', () => {
     }
   });
 
+  it('turns to any angle, and exactly at the quarters', () => {
+    /*
+     * The slider's whole point: a part that reads straight at 37° could not be
+     * turned there at all before. And the four quarter turns stay EXACT —
+     * `Math.cos(Math.PI / 2)` is 6.1e-17, and this matrix multiplies every
+     * vertex of somebody's model, so a clean 90° must not skew it.
+     */
+    for (const deg of [0, 90, 180, 270, 360, -90, 450]) {
+      for (const x of turnMatrix(deg)) expect(Number.isInteger(x)).toBe(true);
+    }
+    const at37 = turnMatrix(37);
+    expect(at37[4]).toBeCloseTo(Math.cos((37 * Math.PI) / 180), 12);
+    expect(at37[5]).toBeCloseTo(-Math.sin((37 * Math.PI) / 180), 12);
+    // ...and it is still a rotation about the wall normal: out is untouched.
+    expect(mat3Apply(at37, [1, 0, 0])).toEqual([1, 0, 0]);
+  });
+
+  it('normalises an angle to one turn', () => {
+    expect(normaliseSpin(370)).toBeCloseTo(10, 9);
+    expect(normaliseSpin(-90)).toBeCloseTo(270, 9);
+    expect(normaliseSpin(Number.NaN)).toBe(0);
+  });
+
   it('turns the way it always turned', () => {
     /*
      * The quarter turn moved out of the axis permutation and into the matrix,
      * and it had to come through unchanged: it was `(a, v) -> (−v, a)`, so
      * across goes to up. Nothing else pins the DIRECTION — both ways are
-     * perfectly good rotations — and reversing it would quietly send the button
-     * the other way round.
+     * perfectly good rotations — and reversing it would quietly send the slider
+     * and the button the other way round.
      */
     const across: [number, number, number] = [0, 1, 0];
-    expect(mat3Apply(turnMatrix(1), across).map((x) => Math.round(x))).toEqual([0, 0, 1]);
-    expect(mat3Apply(turnMatrix(4), across).map((x) => Math.round(x))).toEqual([0, 1, 0]);
+    expect(mat3Apply(turnMatrix(90), across).map((x) => Math.round(x))).toEqual([0, 0, 1]);
+    expect(mat3Apply(turnMatrix(360), across).map((x) => Math.round(x))).toEqual([0, 1, 0]);
   });
 
   it('leaves the six exact, so a square model is untouched by floating point', () => {
@@ -660,9 +684,27 @@ describe('turning a face toward the wall', () => {
     // tilt every entry of the matrix is 0 or ±1, so the arithmetic is the same
     // to the bit and a plate's cells cannot drift.
     for (const from of FACE_LIST) {
-      for (const quarterTurns of [0, 1, 2, 3]) {
-        const m = orientationMatrix({ ...from, quarterTurns });
+      for (const spinDeg of [0, 90, 180, 270]) {
+        const m = orientationMatrix({ ...from, spinDeg });
         for (const x of m) expect(Number.isInteger(x)).toBe(true);
+      }
+    }
+  });
+
+  it('spins about the wall normal, whatever the face and the tilt', () => {
+    /*
+     * The turn is OUTERMOST for a reason (D114): it has to stay a turn about
+     * the wall normal after a tilt has moved which direction that is. Measured
+     * as the property that actually matters — a spin cannot change how deep the
+     * part is, because depth is measured along the wall normal.
+     */
+    const mesh = wedge();
+    const shown = orientForPegs(mesh, DEFAULT_ORIENTATION);
+    const tilted = faceTowardWall(DEFAULT_ORIENTATION, faceNormal(shown, 4));
+    for (const base of [DEFAULT_ORIENTATION, tilted]) {
+      const depth = orientForPegs(mesh, base).sizeMm[0];
+      for (const spinDeg of [0, 37, 90, 214.5, 300]) {
+        expect(orientForPegs(mesh, { ...base, spinDeg }).sizeMm[0]).toBeCloseTo(depth, 9);
       }
     }
   });
@@ -670,8 +712,8 @@ describe('turning a face toward the wall', () => {
   it('is the identity when you point at the face already on the wall', () => {
     // The commonest accidental click has to be a no-op rather than a spin.
     for (const from of FACE_LIST) {
-      for (const quarterTurns of [0, 1, 2, 3]) {
-        const start: Orientation = { ...from, quarterTurns };
+      for (const spinDeg of [0, 90, 180, 270]) {
+        const start: Orientation = { ...from, spinDeg };
         expect(faceTowardWall(start, [-1, 0, 0])).toEqual(start);
       }
     }
@@ -679,8 +721,11 @@ describe('turning a face toward the wall', () => {
 
   it('carries the quarter turn, as the six buttons do', () => {
     // It is a separate judgement — which way up the part reads — and clearing
-    // it would undo a choice somebody made on purpose.
-    const start: Orientation = { wallFaceAxis: 'z', matingEnd: 'low', quarterTurns: 3 };
-    expect(faceTowardWall(start, [0, 1, 0]).quarterTurns).toBe(3);
+    // it would undo a choice somebody made on purpose. Any angle now, not just
+    // the four the button reaches.
+    for (const spinDeg of [270, 37.5]) {
+      const start: Orientation = { wallFaceAxis: 'z', matingEnd: 'low', spinDeg };
+      expect(faceTowardWall(start, [0, 1, 0]).spinDeg).toBe(spinDeg);
+    }
   });
 });
