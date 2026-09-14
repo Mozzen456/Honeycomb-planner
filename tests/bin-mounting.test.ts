@@ -108,6 +108,9 @@ function clusters(points: { x: number; y: number }[], gap: number): { x: number;
 /** Inside measurements, like the spec. */
 const SPECS: BinSpec[] = [
   normaliseBinSpec({
+    pegs: 1, innerWidthMm: minWidthMm(1, 2.4), innerHeightMm: 14, innerDepthMm: 10, wallMm: 2.4,
+  }),
+  normaliseBinSpec({
     pegs: 2, innerWidthMm: 80, innerHeightMm: 70, innerDepthMm: 55, wallMm: 2.4,
   }),
   normaliseBinSpec({

@@ -19,6 +19,7 @@ import {
   MAX_PEGS,
   MIN_PEGS,
   MAX_WIDTH_MM,
+  maxHeightMm,
   MIN_PEG_MARGIN_MM,
   bridgingPegs,
   cellPointMm,
@@ -63,7 +64,7 @@ const spec = (over: Partial<BinSpec> = {}): BinSpec =>
  * A sweep of only the first would never exercise the spreading at all.
  */
 const SHAPES: BinSpec[] = [];
-for (const pegs of [2, 3, 5, 8]) {
+for (const pegs of [1, 2, 3, 5, 8]) {
   for (const innerHeightMm of [14, 28, 35, 38, 59, 78, 119, 300]) {
     for (const innerDepthMm of [10, 55, 250]) {
       const narrow = minWidthMm(pegs, WALL);
@@ -89,6 +90,27 @@ function signedVolume(mesh: SolidMesh): number {
 }
 
 describe('the pegs are on the lattice', () => {
+  it('builds one compact peg and one insert at the minimum size', () => {
+    const s = spec({ pegs: 1, innerWidthMm: 0, innerHeightMm: 0, innerDepthMm: 0 });
+    const model = buildBinMesh(s);
+    expect(model.cells).toEqual([{ q: 0, r: 0 }]);
+    expect(model.bridgeMm).toBe(0);
+    expect(outerMm(s).widthMm).toBeLessThanOrEqual(27.25);
+    expect(backPanelCells(s).some((c) => c.cell.q === 0 && c.cell.r === 0 && c.whole)).toBe(true);
+    expect(meshIsClosed(model.mesh).closed).toBe(true);
+    expect(signedVolume(model.mesh)).toBeGreaterThan(0);
+  });
+
+  it('keeps a tall one-peg bin on one mount', () => {
+    const s = spec({ pegs: 1, innerHeightMm: 120 });
+    expect(s.innerHeightMm).toBe(maxHeightMm(1));
+    expect(cellsFor(s)).toEqual([{ q: 0, r: 0 }]);
+    expect(buildBinMesh(s).cells).toHaveLength(1);
+    expect(Math.abs(drawOffsetYMm(s))).toBeLessThan(40);
+    const thick = spec({ pegs: 1, wallMm: 5, innerHeightMm: 300 });
+    expect(Math.abs(drawOffsetYMm(thick))).toBeLessThan(40);
+  });
+
   it('places every peg on a cell centre, measured through hexToMm', () => {
     for (const s of SHAPES) {
       const cells = cellsFor(s);
@@ -661,7 +683,7 @@ describe('how it is drawn on the wall', () => {
     for (const s of SHAPES) {
       // MAX_OFFSET_MM is 40. Anything approaching it means `topPegRow` has
       // stopped keeping the top row near the top of the bin.
-      expect(Math.abs(drawOffsetYMm(s))).toBeLessThan(13);
+      expect(Math.abs(drawOffsetYMm(s))).toBeLessThan(s.pegs === 1 ? 40 : 13);
     }
   });
 

@@ -30,12 +30,12 @@ import {
   backPanelCells,
   type BinCell,
   MAX_DEPTH_MM,
-  MAX_HEIGHT_MM,
   MAX_PEGS,
   MAX_WIDTH_MM,
   MIN_DEPTH_MM,
   MIN_PEGS,
   minHeightMm,
+  maxHeightMm,
   minWidthMm,
   normaliseBinSpec,
   outerMm,
@@ -242,7 +242,7 @@ export function BinBuilder({ onAddToProject, say }: BinBuilderProps): JSX.Elemen
             label="Height"
             value={spec.innerHeightMm}
             min={minHeightMm()}
-            max={MAX_HEIGHT_MM}
+            max={maxHeightMm(spec.pegs)}
             onChange={(innerHeightMm) => set({ innerHeightMm })}
           />
         </div>

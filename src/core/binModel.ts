@@ -68,7 +68,7 @@
  * stretch that is not a plain wall, because it carries the peg holes. So
  * `backHalf = halfW − r` and NOT `halfW` bounds every peg, hole and split in
  * this file: past that line the panel is curving away and there is nothing there
- * to hold a peg. `minWidthMm` carries `2 × CORNER_RADIUS_MM` for the same
+ * to hold a peg. `minWidthMm` carries the chosen corner radius for the same
  * reason.
  *
  * ---------------------------------------------------------------------------
@@ -111,7 +111,7 @@ import type { Hex } from './types';
  * it — the failure mode this repo keeps paying for (D50, D52, D66, D71).
  */
 export interface BinSpec {
-  /** Pegs across, ≥ 2. One peg is a pivot, not a mounting. */
+  /** Pegs across, ≥ 1. One peg is intended for a small, lightly loaded bin. */
   pegs: number;
   /** Usable width INSIDE. Free millimetres — only the PEGS hit the lattice. */
   innerWidthMm: number;
@@ -143,7 +143,7 @@ export interface BinSpec {
   latticeOffset?: { x: number; y: number };
 }
 
-export const MIN_PEGS = 2;
+export const MIN_PEGS = 1;
 export const MAX_PEGS = 8;
 
 /** Material each side of the outermost peg, so the corner is not a knife edge. */
@@ -166,6 +166,8 @@ export const PEG_TOP_MARGIN_MM = 2;
  * back panel, which is why `minWidthMm` carries it.
  */
 export const CORNER_RADIUS_MM = 8;
+/** A single-cell bin needs a shorter corner to leave room for its peg. */
+export const SINGLE_PEG_CORNER_RADIUS_MM = 1.8;
 
 /** Straight segments per 90° of corner. Six reads as a curve at any size. */
 const ARC_STEPS = 6;
@@ -175,6 +177,8 @@ export const MIN_DEPTH_MM = 10;
 export const MAX_DEPTH_MM = 250;
 export const MAX_WIDTH_MM = 400;
 export const MAX_HEIGHT_MM = 300;
+/** The saved mounting offset is capped at 40 mm, even with a 5 mm floor. */
+export const maxHeightMm = (pegs: number): number => pegs === 1 ? 85 : MAX_HEIGHT_MM;
 
 export const MIN_WALL_MM = 1.6;
 export const MAX_WALL_MM = 5;
@@ -190,9 +194,9 @@ export const DEFAULT_WALL_MM = 2.4;
  * that translates it.
  */
 export const minWidthMm = (pegs: number, wallMm: number): number =>
-  (pegs - 1) * SAME_ROW_STEP +
+  (Math.max(1, pegs) - 1) * SAME_ROW_STEP +
   PEG.acrossCorners +
-  2 * (MIN_PEG_MARGIN_MM + CORNER_RADIUS_MM) -
+  2 * (MIN_PEG_MARGIN_MM + (pegs <= 1 ? SINGLE_PEG_CORNER_RADIUS_MM : CORNER_RADIUS_MM)) -
   2 * wallMm;
 
 /**
@@ -240,7 +244,8 @@ export function cornerRadii(spec: BinSpec): { outer: number; inner: number } {
   // A THIRD of the smaller side, not a half: at a half a shallow bin comes out a
   // lozenge with a millimetre of flat front, which is not what a rounded corner
   // is meant to look like. A third leaves the flat a third of the side.
-  const outer = Math.max(0.6, Math.min(CORNER_RADIUS_MM, Math.min(box.widthMm, box.depthMm) / 3));
+  const radius = s.pegs === 1 ? SINGLE_PEG_CORNER_RADIUS_MM : CORNER_RADIUS_MM;
+  const outer = Math.max(0.6, Math.min(radius, Math.min(box.widthMm, box.depthMm) / 3));
   const room = Math.min(s.innerWidthMm, s.innerDepthMm) / 2 - 0.6;
   const inner = Math.max(0.6, Math.min(outer - s.wallMm, room));
   return { outer, inner };
@@ -263,7 +268,7 @@ export function normaliseBinSpec(spec: BinSpec): BinSpec {
   const pegs = Math.round(clamp(spec.pegs, MIN_PEGS, MAX_PEGS));
   const wallMm = clamp(spec.wallMm, MIN_WALL_MM, MAX_WALL_MM);
   const innerWidthMm = clamp(spec.innerWidthMm, minWidthMm(pegs, wallMm), MAX_WIDTH_MM);
-  const innerHeightMm = clamp(spec.innerHeightMm, minHeightMm(), MAX_HEIGHT_MM);
+  const innerHeightMm = clamp(spec.innerHeightMm, minHeightMm(), maxHeightMm(pegs));
   const innerDepthMm = clamp(spec.innerDepthMm, MIN_DEPTH_MM, MAX_DEPTH_MM);
   const out: BinSpec = { pegs, innerWidthMm, innerHeightMm, innerDepthMm, wallMm };
   // Carried through untouched: a hand-placed cell is a decision, and clamping a
@@ -293,6 +298,7 @@ export function normaliseBinSpec(spec: BinSpec): BinSpec {
  * It is also what keeps `drawOffsetYMm` small — see there.
  */
 export function topPegRow(spec: BinSpec): number {
+  if (normaliseBinSpec(spec).pegs === 1) return 0;
   // The OUTSIDE height: the back panel runs the full height of the box, and the
   // peg has to be covered by the panel, not by the cavity. Taking a spec rather
   // than a number is what stops the inside being passed to it by mistake.
@@ -840,4 +846,3 @@ export function pegSpacingNote(spec: BinSpec): string {
     (rows === 2 ? `, in 2 rows ${h.toFixed(1)} mm apart` : ', in 1 row')
   );
 }
-
