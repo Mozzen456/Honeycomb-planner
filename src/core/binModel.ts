@@ -278,6 +278,17 @@ export function normaliseBinSpec(spec: BinSpec): BinSpec {
   return out;
 }
 
+/** Change the automatic peg count without hiding a newly available smaller size. */
+export function changePegCount(spec: BinSpec, delta: number): BinSpec {
+  const current = normaliseBinSpec(spec);
+  const next = normaliseBinSpec({ ...current, pegs: current.pegs + delta });
+  const wasAtMinimum =
+    Math.abs(current.innerWidthMm - minWidthMm(current.pegs, current.wallMm)) < 0.11;
+  return delta < 0 && wasAtMinimum
+    ? normaliseBinSpec({ ...next, innerWidthMm: minWidthMm(next.pegs, next.wallMm) })
+    : next;
+}
+
 // ---------------------------------------------------------------------------
 // Where the pegs go
 // ---------------------------------------------------------------------------
