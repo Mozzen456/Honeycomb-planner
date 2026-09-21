@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildBinMesh,
+  changePegCount,
   cellsFor,
   cornerRadii,
   CORNER_RADIUS_MM,
@@ -90,6 +91,16 @@ function signedVolume(mesh: SolidMesh): number {
 }
 
 describe('the pegs are on the lattice', () => {
+  it('reveals the smaller width when stepping down to one peg', () => {
+    const two = spec({ pegs: 2, innerWidthMm: minWidthMm(2, WALL) });
+    const one = changePegCount(two, -1);
+    expect(one.pegs).toBe(1);
+    expect(one.innerWidthMm).toBeCloseTo(minWidthMm(1, WALL), 12);
+
+    const wide = spec({ pegs: 2, innerWidthMm: 120 });
+    expect(changePegCount(wide, -1).innerWidthMm).toBe(120);
+  });
+
   it('builds one compact peg and one insert at the minimum size', () => {
     const s = spec({ pegs: 1, innerWidthMm: 0, innerHeightMm: 0, innerDepthMm: 0 });
     const model = buildBinMesh(s);

@@ -24,6 +24,7 @@ import * as THREE from 'three';
 
 import {
   buildBinMesh,
+  changePegCount,
   cellsFor,
   DEFAULT_WALL_MM,
   latticeOffsetMm,
@@ -125,7 +126,7 @@ export function BinBuilder({ onAddToProject, say }: BinBuilderProps): JSX.Elemen
    * so `+ +` from 2 gave 3. The functional updater is the whole fix.
    */
   const bumpPegs = useCallback((delta: number) => {
-    setSpec((prev) => normaliseBinSpec({ ...prev, pegs: prev.pegs + delta }));
+    setSpec((prev) => changePegCount(prev, delta));
   }, []);
 
   /*
