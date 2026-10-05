@@ -34,9 +34,49 @@ function copyModels(): Plugin {
   };
 }
 
+/**
+ * Let the built app open straight from disk.
+ *
+ * Vite emits `<script type="module" crossorigin>` and a `crossorigin`
+ * stylesheet. A page opened as `file://` has the origin `null`, and a browser
+ * refuses both under CORS — so an unzipped download double-clicked showed an
+ * empty page in the browser's own background, which is BLACK in dark mode,
+ * with the reason only in the console. A classic script has no such rule. The
+ * bundle is one chunk built as an IIFE (below), so nothing in it needs module
+ * semantics; `defer` keeps the module tag's timing, so `#root` exists when it
+ * runs. Served over http nothing changes.
+ *
+ * What a `file://` page still cannot do is `fetch` — the placed parts' meshes
+ * fall back to their measured boxes there (`meshLibrary`). Everything else,
+ * plates included, is generated in the page.
+ */
+function classicScripts(): Plugin {
+  return {
+    name: 'hsw-classic-scripts',
+    apply: 'build',
+    enforce: 'post',
+    transformIndexHtml: {
+      order: 'post',
+      handler: (html) =>
+        html
+          .replace(/<script type="module" crossorigin src=/g, '<script defer src=')
+          .replace(/<link rel="stylesheet" crossorigin href=/g, '<link rel="stylesheet" href='),
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), copyModels()],
+  plugins: [react(), copyModels(), classicScripts()],
   base: './',
+  build: {
+    // One chunk, no module syntax: see `classicScripts`. There is no dynamic
+    // import in the app, so `inlineDynamicImports` changes nothing but stops a
+    // future one from silently splitting a bundle an IIFE cannot load.
+    modulePreload: false,
+    rollupOptions: {
+      output: { format: 'iife', inlineDynamicImports: true },
+    },
+  },
   test: {
     globals: true,
     environment: 'node',

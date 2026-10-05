@@ -4272,3 +4272,19 @@ border" is now spelled `null`.
 Also from that check: Draw zone now clears the selection whenever one appears
 while it is up, not only on the way in — Ctrl+A and Ctrl+Z both put one back,
 and the next Backspace deleted those parts.
+
+## D112 — The build opens from disk
+
+The downloaded build, unzipped and double-clicked, drew an empty page in the
+browser's own background — black in dark mode. Vite emits
+`<script type="module" crossorigin>` and a `crossorigin` stylesheet, and a page
+opened as `file://` has the origin `null`, so the browser refused both under
+CORS. Nothing in the app was wrong; the reason was only in the console.
+
+The bundle is one chunk with no dynamic import, so it is now built as an IIFE
+and loaded by a classic `defer` script (`classicScripts` in `vite.config.ts`),
+with the CSS carried in the bundle. Served over http nothing changes. What a
+`file://` page still cannot do is `fetch`, so there the placed parts' meshes
+fall back to their measured boxes; plates are generated in the page and are
+unaffected. Checked in a browser from disk and over http, fresh and with a wall
+saved by the previous version.

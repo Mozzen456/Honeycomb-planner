@@ -871,6 +871,13 @@ fixing when one is picked and nothing is — never by which `window` listener ru
 pointer on `pointerdown`, which swallows the click of any button inside it. This made `Fit` and
 `Front` dead to a mouse while working when called from code — see the guard in `WallView3D.tsx`.
 
+**The build must open from `file://`, so it is NOT a module script** (D112). Vite's
+`<script type="module" crossorigin>` is refused by CORS on a page opened from disk, and the result is
+an empty page in the browser's background colour — black in dark mode — with the reason only in the
+console. `classicScripts` in `vite.config.ts` rewrites the tag to a classic `defer` script over an
+IIFE bundle. A dynamic `import()` would split the bundle and break that; `inlineDynamicImports`
+stops it. From disk the part meshes cannot be fetched and draw as boxes; plates are unaffected.
+
 **A scrolling panel inside the `100dvh` shell must `contain: layout paint`.** Without it the panel's
 overflow propagates to the viewport, `documentElement.scrollHeight` grows past the window, and
 focusing a catalogue tile scrolls the top bar off screen. `layout paint`, not `strict`: `strict`
