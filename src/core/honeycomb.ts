@@ -861,6 +861,30 @@ interface PlateRings {
   levels: { z: number; acrossFlats: number }[];
   outerRings: Map<string, Point[]>;
   innerRings: Map<string, Point[][]>;
+  /** Small groups of cut cells loose in this plate but flush against another's. */
+  held: HeldFragment[];
+}
+
+/**
+ * Cut cells that come out loose in their own plate and flush against a whole
+ * cell of another — `holder` — which is the plate that should print them.
+ */
+export interface HeldFragment {
+  cells: string[];
+  holder: string;
+}
+
+/**
+ * The fragments of this plate that another plate holds (D111).
+ *
+ * The cut is a function of the zones and the edge alone, so a cell moved to the
+ * holder's `clipped` list is cut there into exactly the same pieces — and there
+ * they share an edge with the holder's own cell instead of being a loose fleck
+ * in this plate's file.
+ */
+export function heldFragments(spec: HoneycombSpec): HeldFragment[] {
+  if (spec.cells.length === 0) return [];
+  return plateRings(spec).held;
 }
 
 function plateRings(spec: HoneycombSpec): PlateRings {
@@ -1319,20 +1343,31 @@ function plateRings(spec: HoneycombSpec): PlateRings {
    * and the plate above is what it leans on. The neighbours that count are the
    * cells the next plate prints whole.
    */
-  const own = new Set(cells.map(hexKey));
+  /*
+   * ...and only a cell another plate prints WHOLE holds anything: not one of
+   * this plate's own (cut or not), and not one a zone reaches, which is cut
+   * and may not be there at all. Counting a plate's own edge-ring cell, cut away
+   * by the zone, kept a fleck nothing was holding.
+   */
+  const own = new Set([...cells, ...(spec.clipped ?? [])].map(hexKey));
   const occupied = spec.border?.occupied;
-  dropShards(outerRings, innerRings, (key) => {
+  const zoneReaches = (n: Hex): boolean => {
+    const m = hexToMm(n);
+    return zoneRects.some((z) =>
+      !zoneEdges(z).some((e) => e.nx * m.x + e.ny * m.y - hexReach(e.nx, e.ny) >= e.d - SAME));
+  };
+  const held = dropShards(outerRings, innerRings, (key) => {
     if (occupied === undefined) return [];
     const at = keyToHex(key.split('#')[0]!);
-    const out: Point[][] = [];
+    const out: { key: string; ring: Point[] }[] = [];
     for (const d of DIRS) {
       const n = { q: at.q + d.q, r: at.r + d.r };
       const nk = hexKey(n);
-      if (occupied.has(nk) && !own.has(nk)) out.push(corners.ringOf(n));
+      if (occupied.has(nk) && !own.has(nk) && !zoneReaches(n)) out.push({ key: nk, ring: corners.ringOf(n) });
     }
     return out;
   });
-  return { levels, outerRings, innerRings };
+  return { levels, outerRings, innerRings, held };
 }
 
 /**
@@ -1377,9 +1412,9 @@ function dropShards(
   outer: Map<string, Point[]>,
   inner: Map<string, Point[][]>,
   /** Whole cells of OTHER plates beside a piece, which hold it in the interlock. */
-  neighbours: (pieceKey: string) => Point[][],
-): void {
-  if (outer.size < 2) return;
+  neighbours: (pieceKey: string) => { key: string; ring: Point[] }[],
+): HeldFragment[] {
+  if (outer.size < 2) return [];
   const keys = [...outer.keys()];
   const index = new Map(keys.map((k, i) => [k, i]));
   const parent = keys.map((_, i) => i);
@@ -1443,17 +1478,17 @@ function dropShards(
 
   // Held by the next plate: any piece of the group sharing a stretch of edge
   // with a cell that plate prints whole.
-  const held = new Set<number>();
+  const held = new Map<number, string>();
   keys.forEach((k, i) => {
     const root = find(i);
     if (root === main || held.has(root) || plastic.get(root)! >= SHARD_AREA_MM2) return;
     const ring = outer.get(k)!;
-    for (const other of neighbours(k)) {
+    for (const { key: nk, ring: other } of neighbours(k)) {
       for (let a = 0; a < ring.length && !held.has(root); a++) {
         const e: Edge = { piece: i, a: ring[a]!, b: ring[(a + 1) % ring.length]! };
         for (let b = 0; b < other.length; b++) {
           if (shareStretch(e, { piece: -1, a: other[b]!, b: other[(b + 1) % other.length]! })) {
-            held.add(root);
+            held.set(root, nk);
             break;
           }
         }
@@ -1467,6 +1502,24 @@ function dropShards(
     outer.delete(k);
     inner.delete(k);
   });
+
+  /*
+   * Each held group as the CELLS it is made of — only where every piece of
+   * every one of those cells is in the group, and none is a border phantom.
+   * A cell split between the plate and a fragment cannot move as a whole, so
+   * it stays where it is, loose piece and all.
+   */
+  const cellOf = (k: string) => k.split('#')[0]!;
+  const out: HeldFragment[] = [];
+  for (const [root, holder] of held) {
+    const members = keys.filter((_, i) => find(i) === root);
+    if (members.some((k) => k.includes('#b'))) continue;
+    const cells = [...new Set(members.map(cellOf))];
+    const whole = cells.every((c) =>
+      keys.every((k, i) => cellOf(k) !== c || find(i) === root));
+    if (whole) out.push({ cells, holder });
+  }
+  return out;
 }
 
 /**

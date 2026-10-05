@@ -176,6 +176,82 @@ function hexMeetsRegion(centre: { x: number; y: number }, r: ZoneRegion): boolea
   return Math.abs(area2) / 2 > 0.01;
 }
 
+/** A rectangle region's four edges, outward normals, as a drawn piece has them. */
+function edgesOfRegion(r: ZoneRegion): readonly ZoneEdge[] {
+  return r.edges ?? [
+    { nx: -1, ny: 0, d: -r.minX }, { nx: 0, ny: -1, d: -r.minY },
+    { nx: 1, ny: 0, d: r.maxX }, { nx: 0, ny: 1, d: r.maxY },
+  ];
+}
+
+function hexagonAt(centre: { x: number; y: number }): Pt[] {
+  const out: Pt[] = [];
+  for (let k = 0; k < 6; k++) {
+    const a = (Math.PI / 3) * k;
+    out.push({ x: centre.x + MARGIN_X * Math.cos(a), y: centre.y + MARGIN_X * Math.sin(a) });
+  }
+  return out;
+}
+
+/** `poly` kept where `nx·x + ny·y >= d` — outside one zone edge. */
+function keepOutside(poly: readonly Pt[], e: ZoneEdge): Pt[] {
+  const out: Pt[] = [];
+  for (let i = 0; i < poly.length; i++) {
+    const cur = poly[i]!;
+    const prev = poly[(i + poly.length - 1) % poly.length]!;
+    const dc = e.d - (e.nx * cur.x + e.ny * cur.y);
+    const dp = e.d - (e.nx * prev.x + e.ny * prev.y);
+    if ((dc <= 0) !== (dp <= 0)) {
+      const t = dp / (dp - dc);
+      out.push({ x: prev.x + t * (cur.x - prev.x), y: prev.y + t * (cur.y - prev.y) });
+    }
+    if (dc <= 0) out.push(cur);
+  }
+  return out;
+}
+
+/**
+ * A box certain to hold whatever of a cell lies outside every zone — or null
+ * when nothing does.
+ *
+ * Not the exact remainder, which outside a convex piece is not convex. Each
+ * piece on its own leaves the hexagon minus that piece, the union of the
+ * hexagon cut outside each of its edges; its box bounds the true remainder,
+ * because the true remainder lies inside it. The tightest of those boxes is the
+ * answer. Used to ask whether a plate taking a stranded cell still fits the
+ * printer (D110): a full hexagon there charged a whole row for what is usually a
+ * sliver a few millimetres deep.
+ */
+export function cellRemainderBox(
+  cell: Hex,
+  obstacles: readonly Obstacle[] | undefined,
+): { minX: number; minY: number; maxX: number; maxY: number } | null {
+  const centre = hexToMm(cell);
+  const hex = hexagonAt(centre);
+  let best = {
+    minX: centre.x - MARGIN_X, maxX: centre.x + MARGIN_X,
+    minY: centre.y - MARGIN_Y, maxY: centre.y + MARGIN_Y,
+  };
+  for (const o of obstacles ?? []) {
+    for (const r of obstacleRegions(o)) {
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const e of edgesOfRegion(r)) {
+        for (const p of keepOutside(hex, e)) {
+          minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+          minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
+        }
+      }
+      if (!Number.isFinite(minX)) return null;
+      best = {
+        minX: Math.max(best.minX, minX), maxX: Math.min(best.maxX, maxX),
+        minY: Math.max(best.minY, minY), maxY: Math.min(best.maxY, maxY),
+      };
+      if (best.minX > best.maxX || best.minY > best.maxY) return null;
+    }
+  }
+  return best;
+}
+
 /**
  * The zone's overall extent, grown by its clearance.
  *

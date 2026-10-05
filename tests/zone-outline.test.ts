@@ -15,7 +15,7 @@ import { describe, expect, it } from 'vitest';
 
 import { WALL_AT_MOUTH } from '../src/core/constants';
 import { hexToMm, mmToHex } from '../src/core/hex';
-import { buildHoneycombMesh, meshIsClosed, type SolidMesh } from '../src/core/honeycomb';
+import { buildHoneycombMesh, meshBoundsMm, meshIsClosed, type SolidMesh } from '../src/core/honeycomb';
 import {
   editZone, moveZone, resizeZone, zoneFromOutline, zoneHit,
 } from '../src/core/measure';
@@ -31,6 +31,7 @@ import {
 } from '../src/core/zonePolygon';
 
 import catalogJson from '../src/catalog/catalog.json';
+import SUPAHWALL from './fixtures/supahwall.json';
 
 const catalog = catalogJson as unknown as Catalog;
 
@@ -74,15 +75,20 @@ function wallWith(
 const plate = (p: PlacedPanel, doc: LayoutDoc): SolidMesh =>
   buildHoneycombMesh({ ...panelModelSpecFor(p, doc), originAtZero: false });
 
-/** Triangles whose centre lies inside the outline by more than 0.05 mm every way. */
+/**
+ * Triangles with their centre, or any corner, inside the outline by more than
+ * 0.05 mm every way. Corners as well as centres: a sliver of plastic poking
+ * into the zone can have its centre outside it.
+ */
 function plasticInside(mesh: SolidMesh, outline: readonly Pt[]): number {
   const pos = mesh.positions;
+  const deep = (x: number, y: number) => [[0.05, 0], [-0.05, 0], [0, 0.05], [0, -0.05]]
+    .every(([dx, dy]) => pointInOutline(outline, { x: x + dx!, y: y + dy! }));
   let n = 0;
   for (let i = 0; i < pos.length; i += 9) {
     const x = (pos[i]! + pos[i + 3]! + pos[i + 6]!) / 3;
     const y = (pos[i + 1]! + pos[i + 4]! + pos[i + 7]!) / 3;
-    if ([[0.05, 0], [-0.05, 0], [0, 0.05], [0, -0.05]]
-      .every(([dx, dy]) => pointInOutline(outline, { x: x + dx!, y: y + dy! }))) n++;
+    if (deep(x, y) || [0, 3, 6].some((o) => deep(pos[i + o]!, pos[i + o + 1]!))) n++;
   }
   return n;
 }
@@ -342,7 +348,7 @@ describe('a wall under a sloping roof', () => {
 
   it('does not cut the wall at all without a border, and steps whole cells instead', () => {
     const plain = wallWith(WALL, [outlineZone(roofPts)], undefined);
-    for (const p of plain.panels.slice(0, 12)) {
+    for (const p of plain.panels) {
       expect(plasticInside(plate(p, plain), roof)).toBe(0);
     }
   });
@@ -423,5 +429,51 @@ describe('drawn outlines anywhere, on a bordered wall', () => {
     }
     expect(plates).toBeGreaterThan(150);
     expect(wrong).toEqual([]);
+  });
+});
+
+describe('what a plate file carries', () => {
+  /**
+   * The solids in ONE plate's file, biggest first. A second small one is a
+   * fleck that prints loose, whatever it sits against on the wall.
+   */
+  const fileParts = (mesh: SolidMesh) => solids([mesh]);
+
+  /*
+   * A cut cell loose in its own plate but flush against the next plate's whole
+   * cell — the top row of a plate a zone ate from below, the arm of a cell at a
+   * concave corner — is printed BY the next plate, where it is joined on
+   * (D111). Before that, the 3-zone fixture's plates carried such flecks in
+   * their files, and the concave outline below left a 438 mm³ one.
+   */
+  it('has no loose fleck on the 3-zone wall or at a concave corner', () => {
+    const concave = wallWith({ widthMm: 2400, heightMm: 1200 }, [outlineZone([
+      [1112.199, 760.363], [798.623, 936.987], [517.002, 1174.443], [385.351, 880.251],
+      [207.899, 647.53], [515.505, 493.228], [728.745, 251.492], [810.126, 573.506],
+    ])], { ...FRAME, thicknessMm: 3.6516 });
+    const fixture = deserialize(JSON.stringify(SUPAHWALL)).doc!;
+    for (const doc of [concave, fixture]) {
+      const loose = doc.panels.flatMap((p) =>
+        fileParts(plate(p, doc)).slice(1).filter((v) => v < 1500).map((v) => `${p.id}: ${Math.round(v)}`));
+      expect(loose).toEqual([]);
+    }
+  });
+
+  /*
+   * Taking cells from another plate — stranded (D110) or held (D111) — must
+   * never make a plate the printer cannot print. On a 3000 × 2000 wall of
+   * shipped plates under a long roof, the first version grew one 211 × 248
+   * plate to 211 × 259.6 on a 256 bed.
+   */
+  it('never grows a plate past the printer bed', () => {
+    const doc = wallWith({ widthMm: 3000, heightMm: 2000 },
+      [outlineZone([[-50, 885], [3050, 1815], [3050, 2200], [-50, 2200]])]);
+    const big: string[] = [];
+    for (const p of doc.panels) {
+      const s = meshBoundsMm(plate(p, doc)).size;
+      const [w, h] = [Math.max(s[0]!, s[1]!), Math.min(s[0]!, s[1]!)];
+      if (w > 256 + 1e-6 || h > 256 + 1e-6) big.push(`${p.id}: ${w.toFixed(1)} × ${h.toFixed(1)}`);
+    }
+    expect(big).toEqual([]);
   });
 });

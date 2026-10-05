@@ -251,9 +251,21 @@ export function WallCanvas(props: WallCanvasProps) {
   // Leaving the tool abandons a half-drawn outline, however it was left —
   // a toolbar button, a key, or finishing it.
   useEffect(() => {
-    if (tool === 'shape') return;
-    clearShape();
-    setShapeProblem(null);
+    if (tool !== 'shape') {
+      clearShape();
+      setShapeProblem(null);
+      return;
+    }
+    /*
+     * Drawing starts with nothing selected. Backspace takes a corner back here,
+     * and the shell deletes the selected parts on the same key whenever
+     * anything is selected — so a part left selected from before was deleted
+     * by the keystroke meant for a corner. With the selection empty, the
+     * shell's handler has nothing to do, which is the condition D88 sets for
+     * every key two handlers share.
+     */
+    if (selection.length > 0) onSelect([], false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tool, clearShape]);
 
   // --- the wall photograph -------------------------------------------------
@@ -1623,8 +1635,20 @@ export function WallCanvas(props: WallCanvasProps) {
    * a zone is, and Escape there clears the item selection without knowing a
    * tool exists. Two handlers, each minding its own selection.
    */
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
+  /*
+   * The listener is attached ONCE and calls whatever handler the latest render
+   * left in the ref — never re-subscribed per render (D109).
+   *
+   * It used to be an effect keyed on the selection, among other things, and the
+   * shell's own Escape handler clears the selection. When the shell's handler
+   * ran first, the selection change re-ran this effect mid-dispatch, the
+   * listener that was about to receive the very same Escape was removed, and the
+   * plan never saw it: Escape had to be pressed twice to leave a tool. Reading
+   * through a ref there is nothing to remove, and no closure to go stale either.
+   */
+  const onKeyRef = useRef<(e: KeyboardEvent) => void>(() => {});
+  onKeyRef.current = (e: KeyboardEvent) => {
+    {
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -1649,6 +1673,7 @@ export function WallCanvas(props: WallCanvasProps) {
       if (tool === 'shape' && e.key === 'Enter') {
         e.preventDefault();
         if (shapeRef.current.points.length >= 3) finishShapeRef.current(shapeRef.current.points);
+        else if (shapeRef.current.points.length > 0) setShapeProblem('A shape needs at least three corners.');
         return;
       }
       if (tool === 'shape' && (e.key === 'Delete' || e.key === 'Backspace')) {
@@ -1703,15 +1728,13 @@ export function WallCanvas(props: WallCanvasProps) {
         setSketch(null);
         if (next !== 'select') setZoneSel(null);
       }
-    };
+    }
+  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => onKeyRef.current(e);
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-    // `tool` and `selection` are read by the photo branch, so a stale closure
-    // here would delete the picture from the wrong mode — or refuse to from the
-    // right one.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [zoneSel, tool, selection, doc.obstacles, doc.frame, doc.photo,
-      onObstaclesChange, onFrameChange, onPhotoChange]);
+  }, []);
 
   const onWheel = (ev: React.WheelEvent<HTMLCanvasElement>) => {
     const rect = canvasRef.current?.getBoundingClientRect();
@@ -1922,7 +1945,9 @@ export function WallCanvas(props: WallCanvasProps) {
                 <kbd>⌫</kbd>
               </button>
             )}
-            {!(doc.frame?.holes) && (
+            {/* Any border cuts, holes or not: it is what hands the zones to the
+                generator at all. Only with none is the line stepped. */}
+            {!frameIsOn(doc.frame) && (
               <span className="wall-canvas__scale-hint">
                 Border off: cells the line crosses are left out whole. Turn the border on to cut the plates along it.
               </span>

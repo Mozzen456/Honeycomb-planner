@@ -4191,3 +4191,63 @@ which is the floor every cut has: less than one wall of plate is not printed.
 `panelGeometryKeys` takes `covered` as a REQUIRED argument, because a plate's
 geometry now includes what it adopts and a key computed without it called two
 different plates the same — which the grouping test caught.
+
+### D110, amended: never past the bed
+
+Found by an independent check: on a 3000 × 2000 wall of shipped plates under a
+long roof, a 211 × 248 plate took a row from the set-aside plate above and came
+out 211 × 259.6 — on a 256 bed. A plate now takes a stranded cell only if it
+still fits the bed either way round, measured by what the cell really adds:
+the part of it outside the zones (`obstacles.cellRemainderBox`, a box certain
+to hold it), not the whole hexagon, which refused nearly every sliver a plate
+near its bed was offered. If no neighbour can take it, it stays stranded: a
+notch in the cut is a blemish, a plate that does not fit the printer is not a
+part. Measured on that wall, one notch remains — 27 mm deep, where the plate
+below is a 247.8 mm block on a 256 bed and the stranded cell is nearly a whole
+hexagon. With no known bed nothing is adopted. `panelGeometryKeys` takes the bed
+as a required argument for the same reason it takes `covered`.
+
+## D111 — A fragment held by another plate is printed by that plate
+
+D109's shard rule keeps a small piece that is loose in its own plate when it
+lies flush along a whole cell of ANOTHER plate — the top row of a plate a zone
+ate from below, which is the aperture's wall, and the arm of a cut cell at a
+concave corner. Kept was right, since the wall needs it; kept THERE was not. It
+was a separate body in its own plate's STL — on the 3-zone fixture several such
+flecks, at a concave outline corner one of 438 mm³ — which prints as a loose bit
+and is held in the wall by nothing but friction. That predates this work: the
+old cutter printed the same flecks.
+
+The generator now reports these groups (`heldFragments`) as the cells they are
+made of, and the cell they lie against. `panelModel.heldTransfers` hands each to
+the plate that prints that cell, if that plate still fits its bed with it (the
+D110 check), by moving the cells from one plate's `clipped` list to the
+other's. The cut is a function of the zones and the edge alone, so the cells
+come out as exactly the same pieces in the new plate — where they now share an
+edge with its own cell and are welded on. A cell split between a plate and a
+fragment cannot move whole and stays; so does a group containing a border
+phantom. Only cells another plate prints WHOLE count as holding anything: not
+the plate's own (cut or not), and not one any zone reaches.
+
+What is left: a fragment whose holder is already at the bed limit stays where
+it was, loose — one in a 24-wall sweep. And the edge-only rail strip on a
+bordered wall with no zone at all, which predates all of this and is not a
+zone's doing.
+
+### Also, from the same check
+
+- Escape had to be pressed twice in the Plan: the shell's handler cleared the
+  selection, which re-subscribed the plan's key listener mid-dispatch, removing
+  it before it saw the key. The plan's listener is now attached once and reads
+  its handler through a ref.
+- Backspace in Draw zone also deleted any part left selected, through the
+  shell's handler. Entering the tool now clears the selection, the condition
+  D88 sets for every key two handlers share.
+- The strip's "border off" note now shows only when no border is on at all;
+  any border hands the zones to the generator.
+- A zone drag on a big wall re-keyed every plate by generating it. A plate
+  nothing reaches is now keyed on its cells alone, and only plates a zone cuts
+  are searched for fragments: 1.5 s → about 1.0 s a frame on 4000 × 2400
+  (213 plates), 0.3–0.4 s on 2400 × 1200, most of what remains being the parts
+  list's fixing plan, which this did not touch. The base before D107 measured
+  10.8 s on the same wall.

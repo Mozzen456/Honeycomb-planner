@@ -20,7 +20,7 @@ better guide to where the work actually got to.
 
 ```bash
 npm run dev          # Vite dev server
-npm test             # vitest run — 55 files, 1195 tests
+npm test             # vitest run — 55 files, 1197 tests
 npm run typecheck    # tsc --noEmit
 npm run build        # typecheck + vite build (also copies models/ into dist/)
 
@@ -329,11 +329,22 @@ plate's largest group of edge-joined pieces and any group over two cells of plas
 goes unless it lies flush against another plate's whole cell. That exception is the top row of a
 plate a zone ate from below — part of the aperture's wall — and without it `zone-apron` notches.
 
+**A fragment loose in its plate but flush against another's whole cell is printed BY that plate**
+(D111). `heldFragments` names them, `heldTransfers` moves their cells between `clipped` lists. Every
+cell a plate takes from another — stranded or held — must leave it inside the BED, measured by what
+the cell adds outside the zones (`cellRemainderBox`), never by its hexagon and never unchecked: the
+first version grew a 211 × 248 plate to 259.6 on a 256 bed.
+
+**The plan's key listener is attached ONCE and reads its handler through a ref.** Re-subscribed per
+render, the shell's Escape (which clears the selection) re-ran it mid-dispatch and removed it before
+it saw the key — every tool needed Escape twice.
+
 **A plate set aside under a slope keeps its edge: the neighbour prints it** (D110). Every cell
 touched is not every cell covered; `adoptedCells` hands a set-aside plate's cut cells to the
 standing plate holding most of their neighbours. Anything computing a plate's geometry needs
 `doc.covered` for this — `panelModelSpecFor` and `panelGeometryKeysFor` pass it; `panelGeometryKeys`
-takes it as a required argument because leaving it out once made two different plates share a key.
+takes it — and the bed — as required arguments because leaving `covered` out once made two different
+plates share a key.
 
 **The aperture wall is the CUT CELL's, and it takes two cut lines** (D83, superseding D82). The
 outline is cut at the zone rectangle — so the aperture is that rectangle exactly — and the four bore

@@ -32,7 +32,7 @@ import { editZone, MIN_ZONE_MM } from '../core/measure';
 import { OBSTACLE_PRESETS } from '../core/obstacles';
 import { MAX_WALL_MM } from '../core/store';
 import {
-  frameIsOn, NO_WALL_FRAME, panelFrameKey, panelFrameSides, panelGeometryKeys, panelModelSpec,
+  frameIsOn, NO_WALL_FRAME, panelFrameKey, panelFrameSides, panelGeometryKeysFor, panelModelSpec, panelModelSpecFor,
 } from '../core/panelModel';
 import type { LayoutDoc, Obstacle, PlacedPanel, WallFrame } from '../core/types';
 import { NumberField } from './NumberField';
@@ -63,14 +63,14 @@ export function ObstaclePanel({ doc, onChange, onFrameChange, onCopy, onDownload
     () => {
       // The same split the parts list makes (D107): plates cut differently are
       // different downloads, whatever their omitted cells say.
-      const shapes = panelGeometryKeys(doc.panels, doc.frame, doc.obstacles, doc.covered);
+      const shapes = panelGeometryKeysFor(doc);
       return customPanelGroups(
         doc.panels,
         (p) => panelFrameKey(p, doc.panels, doc.frame),
         (p) => shapes.get(p.id) ?? '',
       );
     },
-    [doc.panels, doc.frame, doc.obstacles, doc.covered],
+    [doc.panels, doc.frame, doc.obstacles, doc.covered, doc.bedId, doc.customBed],
   );
 
   /**
@@ -89,7 +89,7 @@ export function ObstaclePanel({ doc, onChange, onFrameChange, onCopy, onDownload
         try {
           // The download's own spec — zones and cut cells included — or this
           // measures a plate nobody prints.
-          const spec = panelModelSpec(first, doc.panels, doc.frame, doc.obstacles, doc.covered);
+          const spec = panelModelSpecFor(first, doc);
           const mesh = buildHoneycombMesh({
             cells: spec.cells, clipped: spec.clipped, border: spec.border,
           });
@@ -109,7 +109,7 @@ export function ObstaclePanel({ doc, onChange, onFrameChange, onCopy, onDownload
           };
         }
       }),
-    [groups, doc.panels, doc.frame, doc.obstacles, doc.covered],
+    [groups, doc.panels, doc.frame, doc.obstacles, doc.covered, doc.bedId, doc.customBed],
   );
 
   const bed = bedFor(doc.bedId, doc.customBed);

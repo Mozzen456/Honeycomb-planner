@@ -109,21 +109,29 @@ describe('one parts-list line is one plate', () => {
     }
   }
 
-  it('the geometry key tells apart exactly the plates that differ', () => {
+  it('the geometry key never calls two different plates the same', () => {
+    // One way only. Two keys for one solid costs a second 3D batch; one key for
+    // two solids prints the wrong plate. A plate nothing reaches is keyed on its
+    // cells without being generated, so it and an identical plate that was
+    // generated can carry different keys — the harmless direction.
     const doc = wallWith(ZONES[0]!, FRAME);
     const keys = panelGeometryKeysFor(doc);
     const solids = new Map(doc.panels.map((p) => [p.id, solid(p, doc)]));
     let pairs = 0;
+    let sameKey = 0;
     for (let i = 0; i < doc.panels.length; i++) {
       for (let j = i + 1; j < doc.panels.length; j++) {
         const a = doc.panels[i]!, b = doc.panels[j]!;
         if (a.partId !== b.partId) continue;
         pairs++;
-        expect(keys.get(a.id) === keys.get(b.id), `${a.id} / ${b.id}`)
-          .toBe(solids.get(a.id) === solids.get(b.id));
+        if (keys.get(a.id) !== keys.get(b.id)) continue;
+        sameKey++;
+        expect(solids.get(a.id), `${a.id} / ${b.id}`).toBe(solids.get(b.id));
       }
     }
     expect(pairs).toBeGreaterThan(100);
+    // ...and the keys still group: most same-part plates on this wall are alike.
+    expect(sameKey).toBeGreaterThan(pairs / 4);
   });
 
   it('a zone moved without changing which cells it omits re-keys the plates it cut', () => {
