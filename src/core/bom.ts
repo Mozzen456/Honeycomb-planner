@@ -39,7 +39,7 @@ import { colorOfLine as lineColor } from './colors';
 import { customPanelGroups, isCustomPanel } from './customiser';
 import { fastenerCells, fixingsFor, JUNCTION_FIXING_ID, type FixingPlan } from './fixings';
 import { fastenersNeedReview, socketProvidesOf, socketsOf } from './overrides';
-import { hexKey, hexSub, keyToHex, placedPanelCells, placeFootprint } from './hex';
+import { hexKey, hexSub, hexToMm, keyToHex, placedPanelCells, placeFootprint } from './hex';
 import {
   bedOfDoc, borderCutCells, isGeneratedSize, panelFrameKey, panelFrameSides, panelGeometryKeys,
 } from './panelModel';
@@ -723,6 +723,38 @@ export function validate(doc: LayoutDoc, catalog: Catalog): Issue[] {
       }). It contributes nothing to the BOM.`,
       itemIds: ids,
     });
+  }
+
+  // --- panel-off-wall -----------------------------------------------------
+  // A wall made smaller after it was solved keeps its plates, and every one
+  // still counts in the list — plates ordered for wall that is not there. The
+  // plan is not re-solved behind anyone's back (that would discard a layout
+  // mid-keystroke); it is SAID, with the fix (D128).
+  const wallW = doc?.wall?.widthMm;
+  const wallH = doc?.wall?.heightMm;
+  if (Number.isFinite(wallW) && Number.isFinite(wallH)) {
+    // A cell whose CENTRE is off the wall: more than half of it stands past
+    // the edge. Not its rim — a plate placed by hand at the lattice origin has
+    // its bottom half cells below y = 0, which is how the lattice is anchored
+    // (D63) and not a wall that shrank.
+    const outside: string[] = [];
+    for (const panel of panels) {
+      for (const c of placedPanelCells(panel)) {
+        const m = hexToMm(c);
+        if (m.x < 0 || m.x > wallW || m.y < 0 || m.y > wallH) {
+          outside.push(panel.id);
+          break;
+        }
+      }
+    }
+    if (outside.length > 0) {
+      issues.push({
+        level: 'error',
+        code: 'panel-off-wall',
+        message: `${outside.length} plate${outside.length === 1 ? ' reaches' : 's reach'} past the edge of the ${wallW} × ${wallH} mm wall.`,
+        itemIds: outside,
+      });
+    }
   }
 
   // --- panel-overlap ------------------------------------------------------

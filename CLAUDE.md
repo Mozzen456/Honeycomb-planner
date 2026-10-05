@@ -21,7 +21,7 @@ better guide to where the work actually got to.
 
 ```bash
 npm run dev          # Vite dev server
-npm test             # vitest run — 63 files, 1337 tests
+npm test             # vitest run — 64 files, 1349 tests
 npm run typecheck    # tsc --noEmit
 npm run build        # typecheck + vite build (also copies models/ into dist/)
 npm run build:standalone  # one self-contained HTML file in dist-standalone/ (D122)
@@ -177,6 +177,12 @@ width. And `generatedPlateSizes` used to keep only its 120 largest, which is the
 economise on: a band's WIDTH is chosen once, but its heights must STACK to the top exactly, so
 dropping the short plates left a band 165 mm low. Offer the whole grid — it is 19 × 16 at the very
 biggest.
+
+**The shipped plates are FINISHED by the bed's own sizes** (D128). Seven fixed plates cannot stack
+to every height, so with "Fit to printer" off a band came out short and the top stepped — 24 of 54
+printer and wall pairs. `solveTiling`'s `fillers` are used only where no `available` size reaches:
+the top of a band, and a strip too narrow for any shipped width. Pass the bed's generated sizes
+there whenever you tile with the shipped plates, or the step comes back.
 
 **A fudge factor in an assertion is a defect report.** `tiling.test.ts` added `MARGIN_X` to the
 bounds before checking panels were inside the wall, under a comment stating the anchor as if it
@@ -483,8 +489,8 @@ scores 19.79 mm on the distance metric and means nothing.
 **A plate a zone covers COMPLETELY goes to `doc.covered`, never just out of the document** (D117).
 `recutPanels` takes `panels` and `covered` together on every cut and sorts them again, so moving or
 shrinking a zone gives the plate back — the same reason `omit` is rebuilt from the block rather than
-accumulated. A zone's move commits every frame, so a cutter that forgets plates eats every plate a
-dragged zone passes over. Only the cutter reads `covered`; `setPanels` (a new solve) clears it.
+accumulated. A zone's move commits once per drag now (D128), but typed sizes and nudges commit per
+edit, so a cutter that forgets plates still eats every plate a zone is stepped over. Only the cutter reads `covered`; `setPanels` (a new solve) clears it.
 
 **A blocked zone is NOT drawn in 3D** (D78). It was a red slab standing off the wall, and being the
 biggest opaque object there it hid what it pointed at — the cut plates and the edge round them. The
@@ -1024,9 +1030,12 @@ with the opening painted ON TOP, so leaving the opening unpainted leaves plate t
 be taken OUT: plate and openings in one even-odd fill. `showThrough` joins the static layer's cache
 key, or the layer keeps its opaque cells from before the photo arrived.
 
-**The photo drag commits ONCE, on release** — a zone gets away with per-frame commits because it
-moves centimetres; a photo is dragged the width of the wall and would fill `HISTORY_LIMIT` with one
-gesture. Which means the live position is local, which means it must live in a REF: held in state it
+**A zone's drag commits ONCE too, on release** (D128). It used to commit per frame, and a commit
+re-cuts every plate: 1.2–1.9 s a frame and an undo step per pointer move. `zonePreview` is drawn
+in the document's place while the gesture lives in `zoneDragRef` — the ref, for D58's reason.
+
+**The photo drag commits ONCE, on release** — a photo is dragged the width of the wall and would
+fill `HISTORY_LIMIT` with one gesture (and a zone's drag now does the same, D128). Which means the live position is local, which means it must live in a REF: held in state it
 is invisible to the release handler, and every quick flick moved nothing at all. That is D58 exactly,
 made again directly beneath the comment warning about it, and found by driving the app.
 

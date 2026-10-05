@@ -474,7 +474,9 @@ export interface Issue {
     /** Accessories have taken the cells the panel's own wall mounts need. */
     | 'no-room-for-mounts'
     /** Its fixing was removed by hand, so nothing holds this plate to the wall. */
-    | 'panel-unfixed';
+    | 'panel-unfixed'
+    /** The wall was made smaller after it was solved; these plates stand past it. */
+    | 'panel-off-wall';
   message: string;
   itemIds: string[];
   cells?: Hex[];

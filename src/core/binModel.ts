@@ -279,13 +279,31 @@ export function normaliseBinSpec(spec: BinSpec): BinSpec {
 }
 
 /** Change the automatic peg count without hiding a newly available smaller size. */
-export function changePegCount(spec: BinSpec, delta: number): BinSpec {
+export function changePegCount(
+  spec: BinSpec,
+  delta: number,
+  /**
+   * The size somebody last ASKED for. The peg count bounds the height and the
+   * width, so stepping it clamps them — and without this, stepping back again
+   * kept the clamped value: 300 mm high, one peg fewer, one more, and the bin
+   * was 85 mm high for good. The clamp still applies; it just starts from what
+   * was asked rather than from what the last clamp left.
+   */
+  wanted?: { innerWidthMm: number; innerHeightMm: number },
+): BinSpec {
   const current = normaliseBinSpec(spec);
-  const next = normaliseBinSpec({ ...current, pegs: current.pegs + delta });
+  const next = normaliseBinSpec({
+    ...current,
+    pegs: current.pegs + delta,
+    ...(wanted ? { innerWidthMm: wanted.innerWidthMm, innerHeightMm: wanted.innerHeightMm } : {}),
+  });
   const wasAtMinimum =
     Math.abs(current.innerWidthMm - minWidthMm(current.pegs, current.wallMm)) < 0.11;
   return delta < 0 && wasAtMinimum
-    ? normaliseBinSpec({ ...next, innerWidthMm: minWidthMm(next.pegs, next.wallMm) })
+    ? normaliseBinSpec({
+        ...next,
+        innerWidthMm: wanted ? wanted.innerWidthMm : minWidthMm(next.pegs, next.wallMm),
+      })
     : next;
 }
 

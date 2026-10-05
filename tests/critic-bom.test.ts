@@ -293,7 +293,10 @@ const L1_ITEMS: PlacedItem[] = [
 
 const L1 = doc({
   name: 'L1 small',
-  wall: { widthMm: 400, heightMm: 250 },
+  // 300, not 250: pB starts on an odd column, so its cells sit half a pitch up
+  // and the top row's centres are at 259.6 — past a 250 mm wall, which the
+  // parts list now reports (D128). The layout is the subject; the wall fits it.
+  wall: { widthMm: 400, heightMm: 300 },
   panels: L1_PANELS,
   items: L1_ITEMS,
 });
@@ -494,7 +497,7 @@ describe('2 — FULL GARAGE WALL: 1200 x 2400, bed256, 64 panels + 30 accessorie
     rows: p.rows,
   }));
   const items = garageItems();
-  const L2 = doc({ name: 'L2 garage', panels, items });
+  const L2 = doc({ name: 'L2 garage', wall: { widthMm: 1200, heightMm: 2400 }, panels, items });
   const bom = computeBom(L2, catalog);
 
   it('the solver gives the panel mix the hand arithmetic assumes', () => {

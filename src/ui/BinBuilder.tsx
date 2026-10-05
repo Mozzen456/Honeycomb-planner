@@ -72,6 +72,8 @@ const DEFAULT_SPEC: BinSpec = normaliseBinSpec({
 export function BinBuilder({ onAddToProject, say }: BinBuilderProps): JSX.Element {
   const [spec, setSpec] = useState<BinSpec>(DEFAULT_SPEC);
   const model = useMemo(() => buildBinMesh(spec), [spec]);
+  /** The width and height last set on the sliders — see `changePegCount`. */
+  const wantedRef = useRef({ innerWidthMm: spec.innerWidthMm, innerHeightMm: spec.innerHeightMm });
 
   /**
    * Change one field and re-clamp the rest.
@@ -81,6 +83,8 @@ export function BinBuilder({ onAddToProject, say }: BinBuilderProps): JSX.Elemen
    * one function and this is not allowed a second opinion.
    */
   const set = useCallback((patch: Partial<BinSpec>) => {
+    if (patch.innerWidthMm !== undefined) wantedRef.current.innerWidthMm = patch.innerWidthMm;
+    if (patch.innerHeightMm !== undefined) wantedRef.current.innerHeightMm = patch.innerHeightMm;
     setSpec((prev) => normaliseBinSpec({ ...prev, ...patch }));
   }, []);
 
@@ -126,7 +130,7 @@ export function BinBuilder({ onAddToProject, say }: BinBuilderProps): JSX.Elemen
    * so `+ +` from 2 gave 3. The functional updater is the whole fix.
    */
   const bumpPegs = useCallback((delta: number) => {
-    setSpec((prev) => changePegCount(prev, delta));
+    setSpec((prev) => changePegCount(prev, delta, wantedRef.current));
   }, []);
 
   /*

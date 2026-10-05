@@ -225,8 +225,28 @@ export function WallCanvas(props: WallCanvasProps) {
    * accumulating drifts, and a resize that drifts changes size when you pause.
    */
   const zoneDragRef = useRef<
-    { id: string; origin: Obstacle; grab: Point; handle: { hx: number; hy: number } | null } | null
+    {
+      id: string; origin: Obstacle; grab: Point; handle: { hx: number; hy: number } | null;
+      /** Where the zone is now; committed once, on release (D128). */
+      moved?: Obstacle;
+    } | null
   >(null);
+  /**
+   * The zone mid-drag, drawn in place of the document's.
+   *
+   * A zone's move used to commit every frame, and every commit re-cuts every
+   * plate on the wall, re-plans the fixings and rebuilds the parts list — 1.2 to
+   * 1.9 s a frame on a 2400 × 1200 wall, measured, so a drag froze the page and
+   * left one undo step per pointer move. The photograph's rule now: the gesture
+   * is local, and one commit at the end is one re-cut and one undo step.
+   */
+  const [zonePreview, setZonePreview] = useState<Obstacle | null>(null);
+  const shownZones = useMemo(
+    () => (zonePreview
+      ? (doc.obstacles ?? []).map((o) => (o.id === zonePreview.id ? zonePreview : o))
+      : (doc.obstacles ?? [])),
+    [doc.obstacles, zonePreview],
+  );
   /**
    * The outline being drawn with the Draw zone tool.
    *
@@ -531,13 +551,19 @@ export function WallCanvas(props: WallCanvasProps) {
   /** Fit the wall in view. Called on mount and by the Fit button. */
   const fit = useCallback(() => {
     const pad = 40;
+    // The tool strip floats over the top of the canvas, so the wall is fitted
+    // into the space BELOW it — a tall wall used to put its top rows under the
+    // strip, which is exactly where you look to check the top is straight.
+    const padTop = 76;
     const sx = doc.wall.widthMm / Math.max(1, size.w - pad * 2);
-    const sy = doc.wall.heightMm / Math.max(1, size.h - pad * 2);
+    const sy = doc.wall.heightMm / Math.max(1, size.h - pad - padTop);
     const scale = clamp(Math.max(sx, sy), MIN_SCALE, MAX_SCALE);
+    // Y-up (D70): `originY` is the wall y at the canvas's BOTTOM edge.
+    const centreFromBottom = (size.h - padTop + pad) / 2;
     setView({
       scale,
       originX: doc.wall.widthMm / 2 - (size.w / 2) * scale,
-      originY: doc.wall.heightMm / 2 - (size.h / 2) * scale,
+      originY: doc.wall.heightMm / 2 - centreFromBottom * scale,
     });
   }, [doc.wall.widthMm, doc.wall.heightMm, size.w, size.h]);
 
@@ -998,7 +1024,7 @@ export function WallCanvas(props: WallCanvasProps) {
     // have been cut out, so the zone shows through the gap it made, and seeing
     // the two together is the whole point — a zone whose rectangle does not
     // line up with the missing hexagons is a zone in the wrong place.
-    drawZones(ctx, doc, toScreen, C, zoneSel, tool);
+    drawZones(ctx, shownZones, toScreen, C, zoneSel, tool);
     drawBorder(ctx, plateEdge, toScreen, C);
 
     // 5c. The photograph, when it goes IN FRONT — over the plate, under the
@@ -1148,7 +1174,7 @@ export function WallCanvas(props: WallCanvasProps) {
   }, [
     doc, catalog, selection, drag, hover, marquee, invalidCells, placementValid,
     size, view, toScreen, toWall, panelIndex, partOf, seamEdges, themeTick,
-    tool, tape, sketch, zoneSel, cursor, plateEdge, shapeDraft,
+    tool, tape, sketch, zoneSel, cursor, plateEdge, shapeDraft, shownZones,
     shownPhoto, photoImg, scalePair,
     // The lit plates. A prop the draw effect READS has to be a dependency of it
     // — left out, clicking a parts-list line changed the row and repainted
@@ -1390,13 +1416,13 @@ export function WallCanvas(props: WallCanvasProps) {
     // a rectangle that drifts changes size whenever the pointer pauses.
     const zd = zoneDragRef.current;
     if (zd) {
-      const zones = doc.obstacles ?? [];
       const next = zd.handle
         ? resizeZone(zd.origin, zd.handle.hx, zd.handle.hy, snapAt(at, ev.shiftKey))
         // Through `moveZone`: a zone with a shape has to move its rectangles
         // with its box, or it blocks somewhere it is not drawn.
         : moveZone(zd.origin, at.x - zd.grab.x, at.y - zd.grab.y);
-      onObstaclesChange(zones.map((o) => (o.id === zd.id ? next : o)));
+      zd.moved = next;
+      setZonePreview(next);
       return;
     }
 
@@ -1478,8 +1504,14 @@ export function WallCanvas(props: WallCanvasProps) {
       return;
     }
 
-    if (zoneDragRef.current) {
+    const zd = zoneDragRef.current;
+    if (zd) {
       zoneDragRef.current = null;
+      setZonePreview(null);
+      // `zd.moved`, never `zonePreview`: the release can land before the
+      // render that would make the state visible (D58).
+      const moved = zd.moved;
+      if (moved) onObstaclesChange((doc.obstacles ?? []).map((o) => (o.id === zd.id ? moved : o)));
       return;
     }
 
@@ -2160,7 +2192,7 @@ export function WallCanvas(props: WallCanvasProps) {
         body of the zone stays free to grab and drag.
       */}
       <div className="wall-canvas__zonetags" aria-label="Blocked zones">
-        {(doc.obstacles ?? []).map((o) => {
+        {shownZones.map((o) => {
           const a = toScreen({ x: o.xMm, y: o.yMm });
           const b = toScreen({ x: o.xMm + o.widthMm, y: o.yMm + o.heightMm });
           const left = Math.min(a.x, b.x);
@@ -2614,13 +2646,13 @@ const HANDLE_PX = 7;
 
 function drawZones(
   ctx: CanvasRenderingContext2D,
-  doc: LayoutDoc,
+  zones: readonly Obstacle[],
   toScreen: (p: Point) => Point,
   C: Palette,
   selectedId: string | null,
   tool: PlanTool,
 ): void {
-  for (const o of doc.obstacles ?? []) {
+  for (const o of zones) {
     const selected = o.id === selectedId;
     /*
      * Every rectangle of the shape, not the bounding box.

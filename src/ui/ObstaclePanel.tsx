@@ -140,11 +140,17 @@ export function ObstaclePanel({
     const chosen = OBSTACLE_PRESETS[preset] ?? OBSTACLE_PRESETS[0]!;
     // Dropped in the middle of the wall, where it is visible and easy to drag
     // to the right place, rather than at the origin where it may be off screen.
+    // Each further one steps down and right, or three presets added in a row
+    // land exactly on top of each other and read as one zone.
+    const step = 40 * obstacles.length;
+    const x = doc.wall.widthMm / 2 - chosen.widthMm / 2 + step;
+    const y = doc.wall.heightMm / 2 - chosen.heightMm / 2 - step;
     const next: Obstacle = {
-      id: `obs${Date.now().toString(36)}`,
+      // Random as well as timed: two clicks inside one millisecond were one id.
+      id: `obs${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
       label: chosen.label,
-      xMm: Math.round(doc.wall.widthMm / 2 - chosen.widthMm / 2),
-      yMm: Math.round(doc.wall.heightMm / 2 - chosen.heightMm / 2),
+      xMm: Math.round(Math.min(Math.max(0, x), Math.max(0, doc.wall.widthMm - chosen.widthMm))),
+      yMm: Math.round(Math.min(Math.max(0, y), Math.max(0, doc.wall.heightMm - chosen.heightMm))),
       widthMm: chosen.widthMm,
       heightMm: chosen.heightMm,
       clearanceMm: 5,

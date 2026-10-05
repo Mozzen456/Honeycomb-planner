@@ -723,14 +723,17 @@ export function App() {
     const border = state.doc.frame
       ? Math.max(0, state.doc.frame.thicknessMm)
       : 0;
-    const available: PanelSize[] = sizeToPrinter
-      ? generatedPlateSizes(state.doc.bedId, border, state.doc.customBed)
-      : shipped;
+    const generated = generatedPlateSizes(state.doc.bedId, border, state.doc.customBed);
+    const available: PanelSize[] = sizeToPrinter ? generated : shipped;
     const res = solveTiling({
       wall: state.doc.wall,
       bedId: state.doc.bedId,
       ...(state.doc.customBed ? { customBed: state.doc.customBed } : {}),
       available,
+      // With the shipped plates, the bed's own sizes finish what they cannot
+      // reach — a band's top, the strip at the right — instead of leaving the
+      // wall stepped and bare there (D128).
+      ...(sizeToPrinter ? {} : { fillers: generated }),
       // MUST stay false. "Rotation" here swaps columns with rows, and 90° is
       // not a symmetry of a hex lattice — spinning a panel's measured cell
       // centres by 90° puts them 15.14 mm off the wall grid. With it enabled a

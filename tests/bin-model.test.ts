@@ -101,6 +101,16 @@ describe('the pegs are on the lattice', () => {
     expect(changePegCount(wide, -1).innerWidthMm).toBe(120);
   });
 
+  it('gives back the size that was asked for when the peg count comes back', () => {
+    const wanted = { innerWidthMm: 120, innerHeightMm: 300 };
+    const start = normaliseBinSpec(spec({ pegs: 4, ...wanted }));
+    const down = changePegCount(start, -3, wanted);
+    expect(down.innerHeightMm).toBeLessThan(300);       // one peg cannot hold it
+    const up = changePegCount(down, +3, wanted);
+    expect(up.innerHeightMm).toBe(normaliseBinSpec({ ...start }).innerHeightMm);
+    expect(up.innerWidthMm).toBe(start.innerWidthMm);
+  });
+
   it('builds one compact peg and one insert at the minimum size', () => {
     const s = spec({ pegs: 1, innerWidthMm: 0, innerHeightMm: 0, innerDepthMm: 0 });
     const model = buildBinMesh(s);

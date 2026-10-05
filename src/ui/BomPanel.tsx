@@ -167,6 +167,11 @@ const ISSUE_COPY: Record<Issue['code'], IssueCopy> = {
     title: 'Two panels cover the same cells',
     advice: 'Panels butt up against each other; slide one aside so they only touch.',
   },
+  'panel-off-wall': {
+    title: 'Plates stand past the edge of the wall',
+    advice:
+      'The wall was made smaller after its plates were planned, and they are all still counted. Press Solve panels to plan them again for this size.',
+  },
   'panel-unfixed': {
     title: 'A panel has no wall fixing left',
     advice:
@@ -645,7 +650,7 @@ export function BomPanel(props: BomPanelProps): JSX.Element {
           <div className="bom-empty">
             <h3 className="bom-empty__title">Nothing to print yet</h3>
             <p className="bom-empty__body">
-              Drag a wall panel from the catalogue onto the wall, then drop hooks, shelves and
+              Press Solve panels to plan the plates for this wall, then drop hooks, shelves and
               bins into its cells. Everything you place is counted here — and as each batch comes
               off the printer you tick it off, so the list always says what is left to print.
             </p>

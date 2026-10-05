@@ -899,7 +899,8 @@
 
 .app__toast {
   position: absolute;
-  inset-block-start: var(--space-4);
+  /* Below the plan's floating tool strip, which it used to sit on top of. */
+  inset-block-start: calc(var(--space-4) * 4);
   inset-inline-start: 50%;
   transform: translateX(-50%);
   max-inline-size: 44ch;

@@ -5224,3 +5224,42 @@ toward white until it stands off by a fixed step — on a dark background only,
 and in the DRAWING only. The file you print and the swatch keep the colour
 that was chosen. Both views call the one function; the 3D view had its own
 copy for an hour and the two disagreed by a shade.
+
+## D128 — What a tester found walking the whole app, and what changed
+
+An adversarial pass through the running app — every printer, six wall sizes,
+both plate sources, zones, parts, saving, exports, the Build tab — found no
+crash and no black page, and these:
+
+- **Shipped plates left the top stepped.** With "Fit to printer" off — the
+  default — 24 of 54 printer and wall combinations came out with one band short
+  of the rest: 82 mm at 800 × 2600 on the default bed, 200 mm on a 400 bed at
+  4000 × 2500, and a 500 × 400 wall on a 300 bed half bare. D124 only brought
+  TALL bands down; these are short ones, and seven fixed plates cannot stack to
+  every height. `solveTiling` now takes `fillers`, which the app fills with the
+  bed's own generated sizes: used only where no shipped plate reaches — the top
+  of a band, a strip at the right too narrow for any of them — so a wall the
+  shipped plates can cross is still made of them and the edge is finished.
+  Generated fill-ins are ordinary `generated/` plates (D61): counted, costed
+  per cell and downloadable.
+- **A wall made smaller kept its plates.** 2166 cells past the edge of an
+  1800 × 1000 wall, all still on the parts list. Re-solving behind the
+  person's back is not on — the size field commits per keystroke — so it is
+  SAID: `panel-off-wall`, an error naming how many plates, with "Solve panels"
+  as the fix. Tested on cell CENTRES, because a plate at the lattice origin
+  has its bottom half-cells below y = 0 by construction (D63).
+- **Dragging a zone took 1.2–1.9 s a frame and one undo step a frame.** Every
+  frame committed, and every commit re-cut every plate. The drag is the
+  photograph's now: local while it moves, one commit on release.
+- **3D Fit cropped a wide wall**, including the default, because it assumed a
+  1.6 : 1 window. It frames from the camera's field of view and the view's real
+  aspect.
+- **The plan's tool strip covered the top of a tall wall** and the solve
+  message covered the tools. Fit leaves room under the strip; the message sits
+  below it.
+- **The bin builder forgot the size you set** when the peg count clamped it.
+  `changePegCount` starts from the size last asked for.
+- Smaller: preset zones added in a row stack visibly instead of exactly on top
+  of each other (and no longer share an id when added in one millisecond), and
+  the empty parts list points at Solve panels rather than at a panel in the
+  catalogue that has not been there since D98.

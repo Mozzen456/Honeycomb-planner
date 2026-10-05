@@ -716,9 +716,20 @@ export function WallView3D(props: WallView3DProps) {
     return new THREE.Vector3((minX + maxX) / 2, (minY + maxY) / 2, 0);
   }, [doc.panels, doc.wall.widthMm, doc.wall.heightMm]);
 
+  /*
+   * Far enough back that the whole wall is in the frame, worked out from the
+   * camera's own field of view and the view's real shape. It used to assume a
+   * 1.6 : 1 window, so a wide wall in an ordinary window lost both ends —
+   * including the default 2400 × 1200, measured at 1600 × 1000.
+   */
   const fit = useCallback(() => {
-    const span = Math.max(doc.wall.widthMm, doc.wall.heightMm * 1.6, 400);
-    orbitRef.current = { theta: -0.22, phi: 1.42, dist: span * 1.05, tx: 0, ty: 0 };
+    const r = hostRef.current?.getBoundingClientRect();
+    const aspect = r && r.width > 0 && r.height > 0 ? r.width / r.height : 1.6;
+    const tanHalf = Math.tan(((stateRef.current?.camera.fov ?? 38) * Math.PI) / 360);
+    const forHeight = doc.wall.heightMm / 2 / tanHalf;
+    const forWidth = doc.wall.widthMm / 2 / (tanHalf * aspect);
+    const dist = Math.max(forHeight, forWidth, 400) * 1.12;
+    orbitRef.current = { theta: -0.22, phi: 1.42, dist, tx: 0, ty: 0 };
   }, [doc.wall.widthMm, doc.wall.heightMm]);
 
   useEffect(() => { fit(); }, [fit]);
