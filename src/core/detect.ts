@@ -390,7 +390,7 @@ function hexagonality(
 }
 
 /** Fraction of a hexagonal probe that the raster covers. */
-function hexCoverage(
+export function hexCoverage(
   r: Raster, cu: number, cv: number, acrossFlats: number, drawn: 'pointy' | 'flat',
 ): number {
   const phase = phaseOf(drawn);

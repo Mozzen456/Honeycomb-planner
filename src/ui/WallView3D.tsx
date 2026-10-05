@@ -389,7 +389,7 @@ function generatedPanelGeometry(
 const hoverPlates = new Map<string, THREE.BufferGeometry | null>();
 
 /*
- * The plate's GEOMETRY, not a description of its inputs (D107).
+ * The plate's GEOMETRY, not a description of its inputs (D116).
  *
  * This used to be part, block, `omit` and the edge letters — and the cache is
  * never cleared, so a zone dragged a few millimetres, re-cutting a plate
@@ -738,7 +738,7 @@ export function WallView3D(props: WallView3DProps) {
       const colour = colorOfPanel(doc.colors, panelLines.get(p.id));
       /*
        * ...and the SHAPE is what the generator builds, never a description of
-       * what it was built from (D107). Part, block, cut and edge letters agree
+       * what it was built from (D116). Part, block, cut and edge letters agree
        * for every plate along a zone's edge, while the one under the zone's
        * corner keeps a sliver up the zone's side the others do not — keyed on
        * the description, that plate was the group's sample and its sliver was

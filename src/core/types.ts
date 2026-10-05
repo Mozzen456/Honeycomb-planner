@@ -168,7 +168,7 @@ export interface Obstacle {
    * generator clips convex pieces with half-planes and has no polygon boolean
    * anywhere by design (D59), and a rectangle gives four half-planes directly.
    * A zone that is not made of rectangles at all is `outline` below, which is
-   * decomposed into convex pieces for the same cutter (D109).
+   * decomposed into convex pieces for the same cutter (D118).
    *
    * Absent means the zone is just the rectangle above, which is what every zone
    * drawn before this existed is — and what it must still serialise as.
@@ -176,7 +176,7 @@ export interface Obstacle {
   shape?: ZoneRect[];
   /**
    * A zone drawn as a POLYGON — the slope of a roof, a stair, a pipe at an
-   * angle (D109). Counter-clockwise corners in wall millimetres, the blocked
+   * angle (D118). Counter-clockwise corners in wall millimetres, the blocked
    * area itself before clearance.
    *
    * Takes precedence over `shape`, and the two are never both written. The
@@ -389,7 +389,7 @@ export interface LayoutDoc {
   /**
    * Plates a blocked zone covers COMPLETELY — not on the wall, and not printed.
    *
-   * Kept so the next cut can give them back (D108). Only the cutter in
+   * Kept so the next cut can give them back (D117). Only the cutter in
    * `store.ts` reads it; everything else reads `panels`, which is the wall. A
    * plate in neither list was never planned. Absent means none, which is what
    * every layout saved before this existed is.

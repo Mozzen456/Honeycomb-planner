@@ -343,7 +343,7 @@ export function borderSpecFor(
   // against its bounding box would wall off the inside of the L, which is
   // honeycomb the user kept.
   // ...and a drawn outline as its convex pieces, edges and all, so the plate is
-  // cut along the line that was drawn rather than stepped round it (D109).
+  // cut along the line that was drawn rather than stepped round it (D118).
   const keepClear = (obstacles ?? []).flatMap(obstacleRegions);
   return {
     thicknessMm: frame.thicknessMm > 0 ? frame.thicknessMm : DEFAULT_BORDER_MM,
@@ -369,7 +369,7 @@ export function panelModelSpec(
   obstacles?: readonly Obstacle[],
   /** The plates a zone set aside (`LayoutDoc.covered`), for their stranded edge. */
   covered?: readonly PlacedPanel[],
-  /** The printer bed, which a plate taking a stranded cell must still fit (D110). */
+  /** The printer bed, which a plate taking a stranded cell must still fit (D119). */
   bed?: PlateBed,
 ): { cells: Hex[]; clipped: Hex[]; border: BorderSpec | undefined } {
   const cells = placedPanelCells(panel);
@@ -391,7 +391,7 @@ export function panelModelSpec(
   const base = baseModelSpec(panel, panels, frame, obstacles, covered, bed);
   /*
    * ...less the fragments another plate holds, plus the ones it holds of its
-   * neighbours' (D111). A cut cell that comes out loose in its own plate but
+   * neighbours' (D120). A cut cell that comes out loose in its own plate but
    * flush against another plate's whole cell is printed BY that plate, where it
    * is joined on.
    */
@@ -417,7 +417,7 @@ function baseModelSpec(
   const kept = new Set(cells.map(hexKey));
   const clipped = panelCells(panel.origin, panel.columns, panel.rows)
     .filter((c) => !kept.has(hexKey(c)));
-  // ...and the stranded edge of any plate the zone set aside next to it (D110).
+  // ...and the stranded edge of any plate the zone set aside next to it (D119).
   if (frameIsOn(frame)) clipped.push(...(adoptedCells(panels, covered, obstacles, bed).get(panel.id) ?? []));
   return {
     cells,
@@ -427,7 +427,7 @@ function baseModelSpec(
 }
 
 /**
- * Which cut cells change plates, and between which (D111).
+ * Which cut cells change plates, and between which (D120).
  *
  * A cut can leave a fragment that is joined to nothing in its own plate yet
  * lies flush along a whole cell of the next: the top row of a plate a zone has
@@ -435,7 +435,7 @@ function baseModelSpec(
  * was planned it is a separate fleck in that plate's file — loose in the wall,
  * held by nothing. The generator names them (`heldFragments`); here each is
  * handed to the plate that prints the cell it is flush against, if that plate
- * still fits the bed with it (the same check as D110), and otherwise left
+ * still fits the bed with it (the same check as D119), and otherwise left
  * where it was.
  *
  * Memoised like everything else here: one pass over the plates a zone or the
@@ -527,9 +527,9 @@ export function bedOfDoc(doc: Pick<LayoutDoc, 'bedId' | 'customBed'>): PlateBed 
 
 /**
  * The cut cells a SET-ASIDE plate leaves stranded, each handed to the standing
- * plate it touches most (D110).
+ * plate it touches most (D119).
  *
- * A plate whose every cell a zone touches is set aside whole (D108) — nothing
+ * A plate whose every cell a zone touches is set aside whole (D117) — nothing
  * of it can take a part. But "touches" is not "covers": along a sloping zone a
  * plate's bottom row can sit mostly below the line, and setting the plate aside
  * took that strip with it. Measured on a 2400 × 1200 wall under a roof sloping
@@ -678,7 +678,7 @@ const adoptCache = new WeakMap<
 >();
 
 /**
- * Which plates are the SAME plate, by what the generator would build (D107).
+ * Which plates are the SAME plate, by what the generator would build (D116).
  *
  * Every place that counts, draws or downloads "n of these" has to agree on what
  * "these" are, and the only honest answer is the geometry. Part, block, `omit`
@@ -699,7 +699,7 @@ export function panelGeometryKeys(
   obstacles: readonly Obstacle[] | undefined,
   /**
    * Required, even when undefined: a plate's geometry includes the stranded
-   * cells it adopts from these (D110), and a key computed without them says two
+   * cells it adopts from these (D119), and a key computed without them says two
    * plates are the same when one of them is not.
    */
   covered: readonly PlacedPanel[] | undefined,

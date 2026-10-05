@@ -157,7 +157,7 @@ function canonicalDoc(doc: LayoutDoc): Record<string, unknown> {
       : {}),
     panels: doc.panels.map(panelOut),
     // Only when a zone has set a plate aside: an absent key must round-trip to
-    // an absent key (D108).
+    // an absent key (D117).
     ...(doc.covered && doc.covered.length > 0 ? { covered: doc.covered.map(panelOut) } : {}),
     items: doc.items.map((it) => {
       const out: Record<string, unknown> = {
@@ -221,7 +221,7 @@ function canonicalDoc(doc: LayoutDoc): Record<string, unknown> {
             // Same absent-key rule as everywhere else: a plain rectangular zone
             // must serialise to the bytes it always did.
             // A drawn outline wins over a shape and is written INSTEAD of one,
-            // so a reader never has to decide between two (D109).
+            // so a reader never has to decide between two (D118).
             if (o.outline && o.outline.length >= 3) {
               out['outline'] = o.outline.map((p) => ({ xMm: p.xMm, yMm: p.yMm }));
             } else if (o.shape && o.shape.length > 0) {
@@ -678,7 +678,7 @@ export function migrate(raw: unknown): LoadResult {
   const usedIds = new Set<string>();
 
   // --- panels -------------------------------------------------------------
-  // Twice: the wall's plates, and the ones a zone has set aside (D108). One
+  // Twice: the wall's plates, and the ones a zone has set aside (D117). One
   // reader, one id namespace — a covered plate comes back onto the wall with
   // its id, so the two lists must never share one.
   const readPanels = (field: 'panels' | 'covered'): PlacedPanel[] => {
@@ -860,7 +860,7 @@ export function migrate(raw: unknown): LoadResult {
         }
       }
       /*
-       * A drawn outline (D109). Every corner is a measurement out of user
+       * A drawn outline (D118). Every corner is a measurement out of user
        * input, so each goes through the coordinate reader, and the whole is held
        * to `outlineProblem` — a self-crossing or oversized outline would reach
        * the cutter otherwise. One that fails keeps its zone as the bounding

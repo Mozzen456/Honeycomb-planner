@@ -291,6 +291,48 @@ wall-facing side, at lattice spacings, stable across depth. Measured across the 
 come out at **15.6 mm across corners** — the 13.4 mm socket (15.47 across corners) of §5's standard
 insert, on every shelf. That is the number the parts list orders.
 
+### The peg itself, measured off the shelves
+
+Sliced from `models/shelves/*.stl`, and the numbers agree across all four to better than 0.001 mm.
+`PEG` and `PEG_PROFILE` in `src/core/constants.ts` are these, and `src/core/binModel.ts` builds
+from them (D108).
+
+| | value | note |
+|---|---|---|
+| across flats | **13.45 mm** | the round number; the socket's narrowest is 13.40, so it is a press fit |
+| across corners | 15.53075 | derived; measured 15.53072 |
+| length | **8.0 mm** | of which the first 4.0 are the full section |
+| orientation | **flat-top** | flats up and down, corners left and right — like a wall cell, and like the socket |
+| centre height | 6.725 above the part's own base | i.e. the bottom flat is ON the bed |
+
+The taper is per-FACE and not a scaling, which is the interesting bit:
+
+| along the peg | five faces drawn in | the bottom face |
+|---|---|---|
+| 0.0 – 4.0 mm | 0 | 0 |
+| 7.7 mm | 0.2775 | **0** |
+| 8.0 mm (tip) | 0.6005 | 0.3005 |
+
+The bottom flat does not move until the last 0.3 mm because that is the face the part is PRINTED
+on: the shelves are drawn lying down with the peg's bottom flat at z = 0, and drafting it would
+have lifted it off the bed. So the profile is a print-orientation fact as much as a fitting one.
+
+### How far apart a row of pegs goes
+
+Only `2·ROW_STEP` = 40.876 mm and its multiples: the columns stagger by half a pitch, so the
+nearest cell at the same height is two columns away. Every shipped shelf puts its pegs as far apart
+as its own width allows, in whole multiples of that:
+
+| part | tray width | pegs | gap | gap / ROW_STEP |
+|---|---|---|---|---|
+| `shelf-1` | 56.4072 | 2 | 40.876 | 2 |
+| `shelf-2` | 97.2833 | 2 | 81.752 | 4 |
+| `shelf-3` | 138.1598 | 2 | 122.626 | 6 |
+| `shelf-4` | 179.0352 | 3 | 81.752 | 4 |
+
+The widths themselves differ by exactly `2·ROW_STEP` each. `binModel.pegStep` is that rule, and
+`tests/bin-model.test.ts` holds it against this table.
+
 | part | pegs measured | the catalogue used to order |
 |---|---|---|
 | `shelf-1` | 2 | 3 |

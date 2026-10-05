@@ -75,7 +75,7 @@ import './WallCanvas.css';
 export type PlanTool = 'select' | 'measure' | 'zone' | 'shape' | 'photo';
 
 /**
- * A zone being DRAWN as an outline (D109): the corners placed so far, the
+ * A zone being DRAWN as an outline (D118): the corners placed so far, the
  * freehand stretch under the pointer if one is live, and the press that may
  * become either.
  */
@@ -1639,7 +1639,7 @@ export function WallCanvas(props: WallCanvasProps) {
    */
   /*
    * The listener is attached ONCE and calls whatever handler the latest render
-   * left in the ref — never re-subscribed per render (D109).
+   * left in the ref — never re-subscribed per render (D118).
    *
    * It used to be an effect keyed on the selection, among other things, and the
    * shell's own Escape handler clears the selection. When the shell's handler
@@ -2644,7 +2644,7 @@ function drawZones(
      * A DRAWN zone is its outline, and its clearance is the convex pieces the
      * cutter is handed, each grown — drawn from `obstacleRegions`, the same
      * list the plate is cut against, so the dashed line is where the honeycomb
-     * really stops (D109).
+     * really stops (D118).
      */
     const outline = zoneOutlinePoints(o);
     if (outline) {

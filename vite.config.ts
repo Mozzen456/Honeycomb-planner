@@ -75,7 +75,7 @@ function filesUnder(dir: string): string[] {
 }
 
 /**
- * The single-file build: `npm run build:standalone` (D113).
+ * The single-file build: `npm run build:standalone` (D122).
  *
  * One HTML file holding the bundle, its pictures and every shipped mesh, so
  * it works double-clicked from anywhere — including straight out of a zip,
@@ -141,6 +141,20 @@ export default defineConfig(({ mode }) => ({
     rollupOptions: {
       output: { format: 'iife', inlineDynamicImports: true },
     },
+  },
+  server: {
+    /*
+     * The port comes from the ENVIRONMENT when a launcher assigns one, and is
+     * 5173 otherwise.
+     *
+     * Vite does not read `PORT` itself — it has its own default and steps
+     * forward to the next free port when that is taken — so a launcher that
+     * hands a port over and then watches it (an agent harness, a container,
+     * a dev container's forwarded port) waits on a server that started
+     * somewhere else. One line here is the whole fix, and a bare `npm run dev`
+     * is unaffected.
+     */
+    port: Number(process.env.PORT) || 5173,
   },
   test: {
     globals: true,

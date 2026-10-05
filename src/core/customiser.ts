@@ -264,7 +264,7 @@ export function customPanelGroups(
    */
   extraKey?: (panel: PlacedPanel) => string,
   /**
-   * What the plate really IS — `panelModel.panelGeometryKeys` (D107).
+   * What the plate really IS — `panelModel.panelGeometryKeys` (D116).
    *
    * The key above describes the INPUTS, and two plates can agree on every one
    * of them and still be cut differently: a zone edge landing at a different

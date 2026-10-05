@@ -8,6 +8,13 @@
 # `name` is the Pages PROJECT, not the domain. The custom domain is attached to
 # the project in the dashboard and outlives any individual deploy — renaming
 # this would create a second project and leave the domain pointing at the first.
+#
+# THE BRANCH IS NOT OPTIONAL. Pages decides production-vs-preview from the git
+# branch it finds in the working directory, so `wrangler pages deploy` run from
+# a feature branch uploads a PREVIEW and says "Deployment complete!" exactly as
+# if it had gone live — honeycombplanner.com does not move, and nothing tells
+# you. `npm run deploy` therefore passes `--branch main` explicitly; that is
+# what the script is for, and `deploy:preview` is the other one.
 
 name = "honeycomb-planner"
 pages_build_output_dir = "dist"

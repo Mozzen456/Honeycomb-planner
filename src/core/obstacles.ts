@@ -63,7 +63,7 @@ export function obstacleRects(o: Obstacle): {
  * `edges` absent means the box IS the piece, an axis-aligned rectangle, which
  * is every zone that is not a drawn outline. The generator reads both the same
  * way (`BorderSpec.keepClear`), turning a bare box into its four edges, so a
- * rectangle and a polygon are cut by one piece of code (D109).
+ * rectangle and a polygon are cut by one piece of code (D118).
  */
 export interface ZoneRegion {
   minX: number;
@@ -219,7 +219,7 @@ function keepOutside(poly: readonly Pt[], e: ZoneEdge): Pt[] {
  * hexagon cut outside each of its edges; its box bounds the true remainder,
  * because the true remainder lies inside it. The tightest of those boxes is the
  * answer. Used to ask whether a plate taking a stranded cell still fits the
- * printer (D110): a full hexagon there charged a whole row for what is usually a
+ * printer (D119): a full hexagon there charged a whole row for what is usually a
  * sliver a few millimetres deep.
  */
 export function cellRemainderBox(

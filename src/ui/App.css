@@ -246,6 +246,95 @@
   border-block-end: var(--border-width-hair) solid var(--border-subtle);
 }
 
+/* The Build tab's own toolbar: which thing you are making. It borrows
+   `.app__toolbar`'s metrics so the header does not change height between tabs,
+   and its buttons are the view switch's, at the same weight — this is a choice
+   between two halves of a tab, not an action. */
+.buildbar {
+  border-block-end: var(--border-width-hair) solid var(--border-subtle);
+}
+
+.buildbar__tool {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  block-size: calc(var(--control-height-lg) - var(--space-1));
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-none);
+  white-space: nowrap;
+  transition: background var(--duration-fast) var(--ease-standard),
+              color var(--duration-fast) var(--ease-standard);
+}
+
+.buildbar__tool:hover { background: var(--surface-1); color: var(--text-primary); }
+
+.buildbar__tool[aria-pressed='true'] {
+  background: var(--surface-2);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.buildbar__tool[aria-pressed='true'] .icon { color: var(--accent); opacity: 1; }
+
+.buildbar__tool:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* The top-level tabs.
+   A segmented control like the view switch, but at the title bar's weight and
+   with the active half carried by the ACCENT rather than a raised surface: this
+   one says which half of the product you are in, and the view switch below says
+   how you are looking at it. Two identical-looking segmented controls in one
+   header would read as one control drawn twice. */
+.app__tabs {
+  display: inline-flex;
+  gap: var(--space-0-5);
+  flex: 0 0 auto;
+  padding: var(--space-0-5);
+  border: var(--border-width-hair) solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+}
+
+.app__tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  block-size: calc(var(--control-height-lg) - var(--space-1));
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  /* SECONDARY, never tertiary — see the note on the view switch below. The
+     inactive tab is not disabled, it is the other half of the product. */
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-none);
+  white-space: nowrap;
+  transition: background var(--duration-fast) var(--ease-standard),
+              color var(--duration-fast) var(--ease-standard);
+}
+
+.app__tabs button:hover { background: var(--surface-1); color: var(--text-primary); }
+
+.app__tabs button[aria-selected='true'] {
+  background: var(--accent);
+  color: var(--accent-on);
+}
+
+.app__tabs button[aria-selected='true'] .icon { opacity: 1; }
+
+.app__tabs button:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
 /* `0 1 auto`, not `1 1 auto`. The brand used to absorb every spare pixel in the
    bar, which left the wordmark below nothing to centre itself in. */
 .app__brand {

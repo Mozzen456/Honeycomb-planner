@@ -509,7 +509,7 @@ export class Store {
   setObstacles(obstacles: LayoutDoc['obstacles'], label = 'Change obstacles'): void {
     const doc = this.current.doc;
     // With the plates an earlier cut set aside, or a zone moved off a plate it
-    // had covered would leave the hole behind it (D108).
+    // had covered would leave the hole behind it (D117).
     this.commit(label, {
       doc: withRecut({ ...doc, obstacles }, doc.panels, doc.covered),
       selection: this.current.selection,
@@ -1293,7 +1293,7 @@ function withPrinted(doc: LayoutDoc, counts: Record<string, number>): LayoutDoc 
  * an obstacle had ever occupied.
  *
  * The plates it drops are returned as `covered`, and handed back in on the next
- * cut (D108). Dropping them outright was exactly the accumulation the sentence
+ * cut (D117). Dropping them outright was exactly the accumulation the sentence
  * above rules out, one level up: a plate a zone covered completely left the
  * document, so moving or shrinking the zone afterwards — and a zone is dragged
  * with a commit per frame, so merely dragging one ACROSS the wall did it —

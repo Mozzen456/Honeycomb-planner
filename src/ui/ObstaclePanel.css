@@ -116,6 +116,15 @@
   background-color: var(--warning-bg);
 }
 
+/* The plates this row means are lit on the wall — while the pointer is over it,
+   or for good once it has been clicked or downloaded. The row already sits on
+   --accent-bg, so the mark is the same accent bar down the leading edge a
+   parts-list row gets: one vocabulary for "this is the one you asked about",
+   whichever list you are pointing at. */
+.custom-panel[data-lit='true'] {
+  box-shadow: inset var(--border-width-thick) 0 0 0 var(--accent);
+}
+
 .custom-panel__name {
   display: flex;
   align-items: baseline;
@@ -123,6 +132,29 @@
   color: var(--text-primary);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
+}
+
+/* The name is the switch for the highlight, exactly as it is in the parts list:
+   base.css strips the button, so this is the label with a hover colour and the
+   room a coarse pointer needs. */
+.custom-panel__light {
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  border-radius: var(--radius-sm);
+  transition: color var(--duration-fast) var(--ease-standard);
+}
+
+.custom-panel__light:hover {
+  color: var(--accent);
+}
+
+@media (pointer: coarse) {
+  .custom-panel__light {
+    display: inline-flex;
+    align-items: center;
+    min-block-size: var(--tap-target-min);
+  }
 }
 
 .custom-panel__qty { margin-inline-start: auto; color: var(--text-secondary); }

@@ -1,6 +1,6 @@
 /**
  * A plate a zone covers completely comes back when the zone stops covering it
- * (D108).
+ * (D117).
  *
  * `cutAroundObstacles` has always recomputed `omit` from scratch so that moving
  * a switch back restores the cells it took. A plate whose EVERY cell was taken

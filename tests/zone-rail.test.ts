@@ -1,5 +1,5 @@
 /**
- * Every opening stays a full rail away from every blocked zone (D114).
+ * Every opening stays a full rail away from every blocked zone (D123).
  *
  * The frame round an aperture is the plate between the zone and the nearest
  * bore, and with a border on it is meant to be the border's thickness all the

@@ -222,7 +222,7 @@ export interface BorderSpec {
 
 /**
  * One convex piece of a blocked zone: its bounding box, and — when it is not
- * simply that box — the straight edges that bound it (D109).
+ * simply that box — the straight edges that bound it (D118).
  *
  * A bare box is a rectangle and is cut by its four sides; `edges` is a convex
  * piece of a drawn outline, cut by every one of its sides at whatever angle it
@@ -752,7 +752,7 @@ export function plateEdgeShapes(
    * A cell a ZONE reaches is cut by the zone as well, and the plan draws no
    * zone-cut cell — so it draws none of these either. Drawn on the edge planes
    * alone, the top row under a roof that runs off the wall showed as a line of
-   * half-hexagons inside the zone, plate the file does not have (D109).
+   * half-hexagons inside the zone, plate the file does not have (D118).
    */
   const zones = border.keepClear ?? [];
   const inZone = (c: Hex): boolean => {
@@ -855,7 +855,7 @@ export class HoneycombModelError extends Error {}
  * by which zone and which edge, which border pieces grow. What follows is
  * welding and triangulating, both a pure function of these rings. That is what
  * lets `plateGeometryKey` say whether two plates are the same plate without
- * building either of them (D107).
+ * building either of them (D116).
  */
 export interface PlateRings {
   levels: { z: number; acrossFlats: number }[];
@@ -875,7 +875,7 @@ export interface HeldFragment {
 }
 
 /**
- * The fragments of this plate that another plate holds (D111).
+ * The fragments of this plate that another plate holds (D120).
  *
  * The cut is a function of the zones and the edge alone, so a cell moved to the
  * holder's `clipped` list is cut there into exactly the same pieces — and there
@@ -948,7 +948,7 @@ export function plateRings(spec: HoneycombSpec): PlateRings {
   const zoneEdgeLists = zoneRects.map(zoneEdges);
 
   /*
-   * The rail round a zone for a cell the zone does NOT reach (D114).
+   * The rail round a zone for a cell the zone does NOT reach (D123).
    *
    * Only a cell the zone overlaps reaches `clipPlanesFor`, so only those had
    * their bores cut a rail short of the aperture. A cell stopping just short of
@@ -1408,7 +1408,7 @@ export function plateRings(spec: HoneycombSpec): PlateRings {
    * holding one is never a shard, however small: with no border a zone can
    * leave a plate as a few separate cells, each well under the shard size, and
    * every one of them is a real cell somebody may hang a hook in. Dropping them
-   * printed one cell of five (D111, found by the independent check).
+   * printed one cell of five (D120, found by the independent check).
    */
   const own_ = new Set(cells.map(hexKey));
   const occupied = spec.border?.occupied;
@@ -1448,7 +1448,7 @@ function ringArea(r: readonly Point[]): number {
 
 /**
  * Take out every small piece that is joined to the rest of the plate by no
- * edge at all (D109).
+ * edge at all (D118).
  *
  * A cut can leave a sliver of a cell, or a few, connected to the plate only at
  * a point or not at all: past a zone's sharp corner, between two zones, where a
@@ -1591,7 +1591,7 @@ function dropShards(
 
 /**
  * What this plate IS, as a short string: equal for two specs exactly when they
- * build the same plate, moved by `origin` (D107).
+ * build the same plate, moved by `origin` (D116).
  *
  * Grouping plates by a description of their inputs — part, block, which cells
  * are omitted, which sides carry an edge — is a proxy, and it failed: with a
@@ -1677,7 +1677,7 @@ export function buildHoneycombMesh(spec: HoneycombSpec): SolidMesh {
 
   /*
    * Line each bore level's corners up with the level above before the inner
-   * skin pairs them BY INDEX (D109).
+   * skin pairs them BY INDEX (D118).
    *
    * Two levels with the same number of corners are joined corner k to corner k,
    * which assumes both rings START at the same corner. `clipConvex` starts its
@@ -1994,7 +1994,7 @@ export function clipConvex(poly: readonly Point[], planes: readonly HalfPlane[])
        * ON the plane counts as INSIDE, to within `SAME` (D84).
        *
        * Every plane here has a unit normal — axis-aligned for a rectangle and the
-       * plate's edge, at the drawn angle for an outline (D109) — so `d` is a signed
+       * plate's edge, at the drawn angle for an outline (D118) — so `d` is a signed
        * distance in millimetres and the tolerance is a real one. It is not
        * fussiness: a rail's line is `cellCentre ± MARGIN`, recomputed, while the
        * corners it lands on come from `cornerPositions`, which averages three
@@ -2466,6 +2466,67 @@ export function meshIsClosed(mesh: SolidMesh): {
   for (const n of balance.values()) if (n !== 0) unmatched++;
   return { closed: unmatched === 0, unmatchedEdges: unmatched, degenerate };
 }
+
+/**
+ * The gap between two stacked plates.
+ *
+ * One layer at the 0.2 mm this app's estimator profile assumes, and that is the
+ * whole trick: a stack printed with a single layer of air between the parts
+ * bridges across the gap instead of fusing, so the copies come apart in the
+ * hand and every one of them keeps a flat first layer. Any less and they weld;
+ * much more and the bridge sags into the part below.
+ *
+ * It is not a tolerance and it does not scale with the plate — it is a layer.
+ */
+export const STACK_GAP_MM = 0.2;
+
+/** How many copies a stack may hold. A bound on a typed number, not a printer. */
+export const MAX_STACK = 25;
+
+/** A typed count, made into a real one. The one place the bounds are applied. */
+export const clampStack = (copies: number): number =>
+  Math.max(1, Math.min(MAX_STACK, Math.floor(copies) || 1));
+
+/**
+ * `copies` of a mesh, one above the next, `STACK_GAP_MM` apart.
+ *
+ * The step is the mesh's own HEIGHT plus the gap, measured rather than assumed:
+ * a bordered plate and a plain one are both 8 mm tall today, and hard-coding
+ * `PANEL_DEPTH` here would silently stack them wrong the day one is not.
+ *
+ * The copies are separate closed shells, which is what a stack IS — they are
+ * meant to come apart. `meshIsClosed` still passes, and nothing here should try
+ * to join them.
+ */
+export function stackMesh(mesh: SolidMesh, copies: number, gapMm = STACK_GAP_MM): SolidMesh {
+  const n = clampStack(copies);
+  if (n === 1) return mesh;
+
+  const step = meshBoundsMm(mesh).size[2] + gapMm;
+  const per = mesh.positions.length;
+  const positions = new Float64Array(per * n);
+  for (let c = 0; c < n; c++) {
+    const lift = c * step;
+    for (let i = 0; i < per; i += 3) {
+      positions[c * per + i] = mesh.positions[i]!;
+      positions[c * per + i + 1] = mesh.positions[i + 1]!;
+      positions[c * per + i + 2] = mesh.positions[i + 2]! + lift;
+    }
+  }
+  return { positions, triangleCount: mesh.triangleCount * n };
+}
+
+/**
+ * How tall a stack of `copies` comes out.
+ *
+ * Takes the height of ONE rather than the mesh, because the control offering the
+ * stack has a plate's depth and no mesh — it is being asked before anything is
+ * generated. Same arithmetic either way, stated once.
+ */
+export const stackHeightMm = (oneMm: number, copies: number): number => {
+  const n = clampStack(copies);
+  return oneMm * n + STACK_GAP_MM * (n - 1);
+};
 
 /**
  * A binary STL.

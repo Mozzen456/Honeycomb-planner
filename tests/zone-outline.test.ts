@@ -1,5 +1,5 @@
 /**
- * A blocked zone DRAWN as an outline — a sloping ceiling, a stair (D109).
+ * A blocked zone DRAWN as an outline — a sloping ceiling, a stair (D118).
  *
  * The plate is cut along the drawn line rather than stepped round it, by the
  * same cutter that cuts a rectangle: an outline is handed over as convex pieces
@@ -345,7 +345,7 @@ describe('a wall under a sloping roof', () => {
     // Nothing past the line, and never short of it by more than the thinnest
     // plate worth printing — a cut cell keeping less than one wall is dropped,
     // by the same rule as at a rectangle. Before stranded cells were adopted
-    // (D110) a set-aside plate's bottom row left notches up to 14.6 mm deep.
+    // (D119) a set-aside plate's bottom row left notches up to 14.6 mm deep.
     expect(over).toBeLessThan(1e-6);
     expect(worst).toBeLessThanOrEqual(WALL_AT_MOUTH + 1e-6);
   });
@@ -447,7 +447,7 @@ describe('what a plate file carries', () => {
    * A cut cell loose in its own plate but flush against the next plate's whole
    * cell — the top row of a plate a zone ate from below, the arm of a cell at a
    * concave corner — is printed BY the next plate, where it is joined on
-   * (D111). Before that, the 3-zone fixture's plates carried such flecks in
+   * (D120). Before that, the 3-zone fixture's plates carried such flecks in
    * their files, and the concave outline below left a 438 mm³ one.
    */
   it('has no loose fleck on the 3-zone wall or at a concave corner', () => {
@@ -464,7 +464,7 @@ describe('what a plate file carries', () => {
   });
 
   /*
-   * Taking cells from another plate — stranded (D110) or held (D111) — must
+   * Taking cells from another plate — stranded (D119) or held (D120) — must
    * never make a plate the printer cannot print. On a 3000 × 2000 wall of
    * shipped plates under a long roof, the first version grew one 211 × 248
    * plate to 211 × 259.6 on a 256 bed.

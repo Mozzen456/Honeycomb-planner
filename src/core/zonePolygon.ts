@@ -1,6 +1,6 @@
 /**
  * A blocked zone drawn as a POLYGON — the slope of a roof, a stair stringer, a
- * boxed-in pipe at an angle (D109).
+ * boxed-in pipe at an angle (D118).
  *
  * Everything here is pure plane geometry in wall millimetres. The generator
  * cuts with HALF-PLANES and has no polygon boolean by design, so a polygon is

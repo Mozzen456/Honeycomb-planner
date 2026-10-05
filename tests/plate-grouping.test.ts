@@ -1,5 +1,5 @@
 /**
- * Plates counted as "n of the same" really are the same plate (D107).
+ * Plates counted as "n of the same" really are the same plate (D116).
  *
  * The parts list, the STL download and the 3D view all group plates, and all of
  * them used to group by a description of what a plate was MADE from: part,
