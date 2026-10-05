@@ -97,8 +97,8 @@ describe('a plate a zone swallows is set aside, not forgotten', () => {
     const doc = store.getState().doc;
     const back = deserialize(serialize(doc));
     expect(back.errors).toEqual([]);
-    expect(back.doc.covered).toEqual(doc.covered);
-    const again = new Store(back.doc, catalog);
+    expect(back.doc!.covered).toEqual(doc.covered);
+    const again = new Store(back.doc!, catalog);
     again.setObstacles([]);
     expect(ids(again)).toEqual(solved().map((p) => p.id).sort());
   });
