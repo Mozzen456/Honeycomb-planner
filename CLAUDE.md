@@ -20,7 +20,7 @@ better guide to where the work actually got to.
 
 ```bash
 npm run dev          # Vite dev server
-npm test             # vitest run — 53 files, 1171 tests
+npm test             # vitest run — 54 files, 1177 tests
 npm run typecheck    # tsc --noEmit
 npm run build        # typecheck + vite build (also copies models/ into dist/)
 
@@ -416,6 +416,12 @@ cannot reach, and both were measured as "plate inside the switch" — 369 mm² i
 the right metric and was not the reason either of them failed. **Measure a hole's rim as an AREA
 inside the rectangle, never as a distance to its edge**: a legitimate rail lying along the boundary
 scores 19.79 mm on the distance metric and means nothing.
+
+**A plate a zone covers COMPLETELY goes to `doc.covered`, never just out of the document** (D108).
+`recutPanels` takes `panels` and `covered` together on every cut and sorts them again, so moving or
+shrinking a zone gives the plate back — the same reason `omit` is rebuilt from the block rather than
+accumulated. A zone's move commits every frame, so a cutter that forgets plates eats every plate a
+dragged zone passes over. Only the cutter reads `covered`; `setPanels` (a new solve) clears it.
 
 **A blocked zone is NOT drawn in 3D** (D78). It was a red slab standing off the wall, and being the
 biggest opaque object there it hid what it pointed at — the cut plates and the edge round them. The

@@ -370,6 +370,15 @@ export interface LayoutDoc {
    */
   customBed?: { widthMm: number; depthMm: number };
   panels: PlacedPanel[];
+  /**
+   * Plates a blocked zone covers COMPLETELY — not on the wall, and not printed.
+   *
+   * Kept so the next cut can give them back (D108). Only the cutter in
+   * `store.ts` reads it; everything else reads `panels`, which is the wall. A
+   * plate in neither list was never planned. Absent means none, which is what
+   * every layout saved before this existed is.
+   */
+  covered?: PlacedPanel[];
   items: PlacedItem[];
   groups: Group[];
   /** Switches, sockets and pipes the wall has to go round. */

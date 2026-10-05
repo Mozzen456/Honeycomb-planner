@@ -4049,3 +4049,42 @@ produces. It now uses the download's own spec.
 solids. It was confirmed to fail with the split disabled (4 of the bordered
 cases) — the first version of it passed either way, because the zones it used
 did not happen to produce a disagreeing group.
+
+## D108 — A plate a zone swallows is set aside, not forgotten
+
+Found while reproducing D107: a test wall that had had one zone on it still had
+a plate-sized hole where that zone used to be, with no zone there any more.
+
+`cutAroundObstacles` recomputes `omit` from the whole block on every cut,
+specifically so that "moving a switch back where it was restores the cells it
+had taken". It did not extend that to a plate whose every cell was taken — that
+plate was dropped from `doc.panels`, and nothing remembered it. Move or shrink
+the zone and the cells it had freed belonged to no plate. A zone's move and
+resize commit once per frame, so dragging a large zone across the wall left a
+trail of missing plates behind it, and only a fresh solve gave them back.
+
+### The fix
+
+`LayoutDoc.covered` holds the plates a cut set aside, and `recutPanels` takes
+them back in with the panels on every cut. Only the cutter reads it: the 76
+places that read `doc.panels` go on reading the wall, which is why the plates
+are kept in a second list rather than in `panels` with every cell omitted — a
+plate with no cells would have had to be filtered out of every one of them.
+
+`setPanels` (a new solve) starts the list empty; `setObstacles` and `setFrame`
+carry it forward. It serialises only when non-empty, through the same panel
+reader and the same id namespace as `panels`, so a plate comes back with its own
+id and an old layout round-trips byte for byte.
+
+### And the edge is measured without them
+
+The cut used to measure the border's outer line from every plate it was handed,
+including the ones it was about to drop — while the generator measures it from
+the plates on the wall. On the first cut after a zone ate a row at the top of the
+wall the two disagreed by a row; every later cut agreed, because by then the
+plate was gone. The plates a zone takes are now decided first and the edge is
+measured without them, so the first cut and every later one give the same wall.
+
+`tests/zone-covered.test.ts` moves a zone off, drags one across the wall a frame
+at a time, round-trips through a save, and re-solves; all six cases fail on the
+old cutter.

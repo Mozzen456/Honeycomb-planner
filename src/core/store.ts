@@ -29,6 +29,7 @@ import type {
   Issue,
   LayoutDoc,
   PlacedItem,
+  PlacedPanel,
   Rotation,
   WallColors,
   WallFrame,
@@ -492,8 +493,9 @@ export class Store {
 
   setPanels(panels: LayoutDoc['panels'], label = 'Lay out panels'): void {
     const doc = this.current.doc;
+    // A new layout: whatever the old one had set aside is not part of it.
     this.commit(label, {
-      doc: { ...doc, panels: cutAroundObstacles(panels, doc.obstacles, doc.frame) },
+      doc: withRecut(doc, panels, undefined),
       selection: this.current.selection,
     });
   }
@@ -506,12 +508,10 @@ export class Store {
    */
   setObstacles(obstacles: LayoutDoc['obstacles'], label = 'Change obstacles'): void {
     const doc = this.current.doc;
+    // With the plates an earlier cut set aside, or a zone moved off a plate it
+    // had covered would leave the hole behind it (D108).
     this.commit(label, {
-      doc: {
-        ...doc,
-        obstacles,
-        panels: cutAroundObstacles(doc.panels, obstacles, doc.frame),
-      },
+      doc: withRecut({ ...doc, obstacles }, doc.panels, doc.covered),
       selection: this.current.selection,
     });
   }
@@ -535,7 +535,7 @@ export class Store {
     // The edge CUTS (D86), so changing it changes which cells the wall has.
     // Re-cut here or the plates on screen keep a ring the plate no longer prints.
     this.commit(label, {
-      doc: { ...next, panels: cutAroundObstacles(next.panels, next.obstacles, next.frame) },
+      doc: withRecut(next, next.panels, next.covered),
       selection: this.current.selection,
     });
   }
@@ -1291,9 +1291,17 @@ function withPrinted(doc: LayoutDoc, counts: Record<string, number>): LayoutDoc 
  * moving a switch back where it was restores the cells it had taken — an
  * accumulated cut would leave the wall permanently pockmarked by every position
  * an obstacle had ever occupied.
+ *
+ * The plates it drops are returned as `covered`, and handed back in on the next
+ * cut (D108). Dropping them outright was exactly the accumulation the sentence
+ * above rules out, one level up: a plate a zone covered completely left the
+ * document, so moving or shrinking the zone afterwards — and a zone is dragged
+ * with a commit per frame, so merely dragging one ACROSS the wall did it —
+ * left a plate-sized hole that only a fresh solve would fill.
  */
-export function cutAroundObstacles(
-  panels: readonly LayoutDoc['panels'][number][],
+export function recutPanels(
+  panels: readonly PlacedPanel[],
+  covered: readonly PlacedPanel[] | undefined,
   obstacles: LayoutDoc['obstacles'],
   /**
    * The wall's border, because it CUTS now (D86).
@@ -1306,31 +1314,70 @@ export function cutAroundObstacles(
    * resized.
    */
   frame?: WallFrame,
-): LayoutDoc['panels'] {
-  const edge = borderCutCells(panels, frame);
-  const noObstacles = !obstacles || obstacles.length === 0;
-  if (noObstacles && edge.size === 0) {
-    return panels.map((p) => {
-      if (p.omit === undefined) return p;
-      const { omit: _drop, ...rest } = p;
-      return rest;
-    });
-  }
-  const out: LayoutDoc['panels'] = [];
-  for (const panel of panels) {
+): { panels: PlacedPanel[]; covered: PlacedPanel[] } {
+  const strip = (p: PlacedPanel): PlacedPanel => {
+    if (p.omit === undefined) return p;
+    const { omit: _drop, ...rest } = p;
+    return rest;
+  };
+  const all = [...panels, ...(covered ?? [])].map(strip);
+  const gone: PlacedPanel[] = [];
+  /*
+   * The plates a ZONE takes whole are decided first, and the edge is measured
+   * without them.
+   *
+   * `borderCutCells` cuts on the assembly's outermost cell centres, and the
+   * generator (`panelModelSpec`) measures those from the plates on the wall —
+   * so a plate the zone has taken must not count, or a zone running off the top
+   * of the wall puts the planner's ring on a row nobody prints while the plate
+   * is cut a row lower.
+   */
+  const standing: { panel: PlacedPanel; block: Hex[]; blocked: Set<string> }[] = [];
+  for (const panel of all) {
     const block = panelCells(panel.origin, panel.columns, panel.rows);
     const blocked = obstructedCells(obstacles, block);
+    if (block.length > 0 && blocked.size >= block.length) gone.push(panel);
+    else standing.push({ panel, block, blocked });
+  }
+  const edge = borderCutCells(standing.map((s) => s.panel), frame);
+  const out: PlacedPanel[] = [];
+  for (const { panel, block, blocked } of standing) {
     const cut = block.filter((c) => blocked.has(hexKey(c)) || edge.has(hexKey(c)));
     if (cut.length === 0) {
-      const { omit: _drop, ...rest } = panel;
-      out.push(rest);
+      out.push(panel);
       continue;
     }
-    // Every cell taken: there is no plate left to print here at all.
-    if (cut.length >= block.length) continue;
+    // Every cell taken: there is no plate left to print here at all. Kept
+    // aside rather than forgotten, so the next cut can give it back.
+    if (cut.length >= block.length) {
+      gone.push(panel);
+      continue;
+    }
     out.push({ ...panel, omit: cut });
   }
-  return out;
+  return { panels: out, covered: gone };
+}
+
+/** `recutPanels` for a caller with no plates set aside: the panels it keeps. */
+export function cutAroundObstacles(
+  panels: readonly PlacedPanel[],
+  obstacles: LayoutDoc['obstacles'],
+  frame?: WallFrame,
+): LayoutDoc['panels'] {
+  return recutPanels(panels, undefined, obstacles, frame).panels;
+}
+
+/**
+ * The document with its panels re-cut, and the plates the cut set aside stored
+ * with it — or the field GONE when there are none, so a wall nobody covered a
+ * plate on serialises exactly as it always did.
+ */
+function withRecut(doc: LayoutDoc, panels: readonly PlacedPanel[], covered: readonly PlacedPanel[] | undefined): LayoutDoc {
+  const cut = recutPanels(panels, covered, doc.obstacles, doc.frame);
+  const { covered: _drop, ...rest } = doc;
+  return cut.covered.length > 0
+    ? { ...rest, panels: cut.panels, covered: cut.covered }
+    : { ...rest, panels: cut.panels };
 }
 
 /** Cells of a placement that need a hole to themselves. */

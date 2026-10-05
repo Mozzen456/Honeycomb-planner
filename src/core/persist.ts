@@ -154,21 +154,10 @@ function canonicalDoc(doc: LayoutDoc): Record<string, unknown> {
     ...(doc.customBed
       ? { customBed: { widthMm: doc.customBed.widthMm, depthMm: doc.customBed.depthMm } }
       : {}),
-    panels: doc.panels.map((p) => {
-      const out: Record<string, unknown> = {
-        id: p.id,
-        partId: p.partId,
-        origin: { q: p.origin.q, r: p.origin.r },
-        columns: p.columns,
-        rows: p.rows,
-      };
-      // Only when the panel really is cut: a stock plate must round-trip to the
-      // same bytes it always did.
-      if (p.omit && p.omit.length > 0) {
-        out['omit'] = p.omit.map((c) => ({ q: c.q, r: c.r }));
-      }
-      return out;
-    }),
+    panels: doc.panels.map(panelOut),
+    // Only when a zone has set a plate aside: an absent key must round-trip to
+    // an absent key (D108).
+    ...(doc.covered && doc.covered.length > 0 ? { covered: doc.covered.map(panelOut) } : {}),
     items: doc.items.map((it) => {
       const out: Record<string, unknown> = {
         id: it.id,
@@ -266,6 +255,22 @@ function canonicalDoc(doc: LayoutDoc): Record<string, unknown> {
         }
       : {}),
   };
+}
+
+function panelOut(p: PlacedPanel): Record<string, unknown> {
+  const out: Record<string, unknown> = {
+    id: p.id,
+    partId: p.partId,
+    origin: { q: p.origin.q, r: p.origin.r },
+    columns: p.columns,
+    rows: p.rows,
+  };
+  // Only when the panel really is cut: a stock plate must round-trip to the
+  // same bytes it always did.
+  if (p.omit && p.omit.length > 0) {
+    out['omit'] = p.omit.map((c) => ({ q: c.q, r: c.r }));
+  }
+  return out;
 }
 
 /** Pretty, stable JSON with a trailing newline — a well-behaved text file. */
@@ -668,62 +673,72 @@ export function migrate(raw: unknown): LoadResult {
   const usedIds = new Set<string>();
 
   // --- panels -------------------------------------------------------------
-  const panels: PlacedPanel[] = [];
-  const rawPanels = readArray(value['panels'], 'panels', errors);
-  for (let i = 0; i < rawPanels.length; i++) {
-    const p = rawPanels[i];
-    const where = `panels[${i}]`;
-    if (!isPlainObject(p)) {
-      errors.push(`${where} is ${describe(p)}, not a panel; dropped.`);
-      continue;
-    }
-    const local: string[] = [];
-    const partId = readString(p['partId'], `${where}.partId`, local);
-    const origin = readHex(p['origin'], `${where}.origin`, local);
-    const columns = readPositiveInt(p['columns'], `${where}.columns`, local);
-    const rows = readPositiveInt(p['rows'], `${where}.rows`, local);
-    if (partId === null || partId === '' || origin === null || columns === null || rows === null) {
-      errors.push(...local);
-      errors.push(`${where} was dropped because it is not a usable panel.`);
-      continue;
-    }
-    // Bounding each factor is not enough: 10000 x 10000 passes both checks and
-    // is 100 million cells. `panelCells` costs ~70 ms per million and is called
-    // several times per render, so a single pasted share link could freeze or
-    // OOM the tab. The largest real panel is 288 cells; 20000 leaves enormous
-    // headroom while keeping the workload bounded.
-    if (columns * rows > MAX_PANEL_CELLS) {
-      errors.push(...local);
-      errors.push(
-        `${where} claims ${columns} × ${rows} = ${columns * rows} cells, far beyond the ` +
-          `${MAX_PANEL_CELLS} cell limit; dropped.`,
-      );
-      continue;
-    }
-    errors.push(...local);
-    let pid = typeof p['id'] === 'string' ? (p['id'] as string) : '';
-    if (pid === '') {
-      errors.push(`${where}.id is missing or empty; named it "panel-${i}".`);
-      pid = `panel-${i}`;
-    }
-    const finalId = uniqueId(pid, usedIds);
-    if (finalId !== pid) errors.push(`${where}.id "${pid}" is used twice; renamed this one to "${finalId}".`);
-    const panel: PlacedPanel = { id: finalId, partId, origin, columns, rows };
-    // Cut-outs for a light switch or a socket. A cell that is not a legal
-    // coordinate is dropped rather than taking the whole panel with it: the
-    // worst case is a plate with one hole too few, which is visible, against a
-    // plate that vanished, which is not.
-    const rawOmit = p['omit'];
-    if (Array.isArray(rawOmit)) {
-      const omit: Hex[] = [];
-      for (let k = 0; k < rawOmit.length; k++) {
-        const cell = readHex(rawOmit[k], `${where}.omit[${k}]`, errors);
-        if (cell !== null) omit.push(cell);
+  // Twice: the wall's plates, and the ones a zone has set aside (D108). One
+  // reader, one id namespace — a covered plate comes back onto the wall with
+  // its id, so the two lists must never share one.
+  const readPanels = (field: 'panels' | 'covered'): PlacedPanel[] => {
+    const panels: PlacedPanel[] = [];
+    const rawPanels = value[field] === undefined && field === 'covered'
+      ? []
+      : readArray(value[field], field, errors);
+    for (let i = 0; i < rawPanels.length; i++) {
+      const p = rawPanels[i];
+      const where = `${field}[${i}]`;
+      if (!isPlainObject(p)) {
+        errors.push(`${where} is ${describe(p)}, not a panel; dropped.`);
+        continue;
       }
-      if (omit.length > 0) panel.omit = omit;
+      const local: string[] = [];
+      const partId = readString(p['partId'], `${where}.partId`, local);
+      const origin = readHex(p['origin'], `${where}.origin`, local);
+      const columns = readPositiveInt(p['columns'], `${where}.columns`, local);
+      const rows = readPositiveInt(p['rows'], `${where}.rows`, local);
+      if (partId === null || partId === '' || origin === null || columns === null || rows === null) {
+        errors.push(...local);
+        errors.push(`${where} was dropped because it is not a usable panel.`);
+        continue;
+      }
+      // Bounding each factor is not enough: 10000 x 10000 passes both checks and
+      // is 100 million cells. `panelCells` costs ~70 ms per million and is called
+      // several times per render, so a single pasted share link could freeze or
+      // OOM the tab. The largest real panel is 288 cells; 20000 leaves enormous
+      // headroom while keeping the workload bounded.
+      if (columns * rows > MAX_PANEL_CELLS) {
+        errors.push(...local);
+        errors.push(
+          `${where} claims ${columns} × ${rows} = ${columns * rows} cells, far beyond the ` +
+            `${MAX_PANEL_CELLS} cell limit; dropped.`,
+        );
+        continue;
+      }
+      errors.push(...local);
+      let pid = typeof p['id'] === 'string' ? (p['id'] as string) : '';
+      if (pid === '') {
+        errors.push(`${where}.id is missing or empty; named it "panel-${i}".`);
+        pid = `panel-${i}`;
+      }
+      const finalId = uniqueId(pid, usedIds);
+      if (finalId !== pid) errors.push(`${where}.id "${pid}" is used twice; renamed this one to "${finalId}".`);
+      const panel: PlacedPanel = { id: finalId, partId, origin, columns, rows };
+      // Cut-outs for a light switch or a socket. A cell that is not a legal
+      // coordinate is dropped rather than taking the whole panel with it: the
+      // worst case is a plate with one hole too few, which is visible, against a
+      // plate that vanished, which is not.
+      const rawOmit = p['omit'];
+      if (Array.isArray(rawOmit)) {
+        const omit: Hex[] = [];
+        for (let k = 0; k < rawOmit.length; k++) {
+          const cell = readHex(rawOmit[k], `${where}.omit[${k}]`, errors);
+          if (cell !== null) omit.push(cell);
+        }
+        if (omit.length > 0) panel.omit = omit;
+      }
+      panels.push(panel);
     }
-    panels.push(panel);
-  }
+    return panels;
+  };
+  const panels = readPanels('panels');
+  const covered = readPanels('covered');
 
   // --- items --------------------------------------------------------------
   const items: PlacedItem[] = [];
@@ -1102,6 +1117,7 @@ export function migrate(raw: unknown): LoadResult {
     bedId,
     ...(customBed ? { customBed } : {}),
     panels,
+    ...(covered.length > 0 ? { covered } : {}),
     items,
     groups,
     ...(library.length > 0 ? { library } : {}),
