@@ -162,6 +162,13 @@ few" — the "few" is one band. `BandPlan.keepsPhase` ranks above cells covered 
 it costs one column of plate width on a bed whose widest plate is odd (11 → 10 on an MK3S) and is a
 PREFERENCE, so a plate set with only odd widths still tiles.
 
+**A band must not end ABOVE the wall's top** (D124). Each band is filled on its own, tallest plates
+first, so it reaches whatever its width's heights add up to — on a 300 bed the 14-wide bands make 44
+rows and a 4-wide band at the right-hand edge made 48, a column 94 mm proud, and the border then read
+every other band's top row as a step and paved it. `levelBands` refills any band taller than the
+height most of the wall's WIDTH reaches. Never level DOWN to the shortest band: an 18-wide band
+cannot make 45 rows out of 16s, so it falls to 32 and the whole wall loses a plate.
+
 **Two more ways an edge goes ragged, both fixed with it and both about the OTHER end of a band.**
 `bandBump` used to ask for `bandColumns >= 2`, reasoning about the odd columns that lean UP — so a
 ONE-column band, which has no odd column, kept its cells centred on y = 0 with half of each below the
@@ -262,6 +269,11 @@ and the plate runs past its own edge, only the edge's and there is plate inside 
 NEITHER a clipped cell is dropped, which is what stops a frame-less plate filling its own aperture.
 The parts list asks the same question to avoid saying "cut round an obstacle" about every bordered
 plate.
+
+**A plate's sides are named by its CUT cells too, not only by empty positions past it** (D124).
+`ownedBorder` walks for empty neighbours, and the cut ring is occupied, so a plate down the outermost
+column found none on that side and the parts list called it "generated" with no reason. Geometry was
+never affected — the edge planes come from the frame.
 
 **`assemblyIndex` takes BOUNDS from the whole block and `occupied` from what survives `omit`.** They
 answer different questions — "how far does the plate reach" against "is this position filled" — and

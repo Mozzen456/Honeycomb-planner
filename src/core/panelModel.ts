@@ -263,6 +263,23 @@ function ownedBorder(
       }
     }
   }
+  /*
+   * ...and the sides its own cells are CUT on (D124). The walk above only sees
+   * an edge where it finds an empty position past it, and the cut ring is
+   * `occupied`, so a plate in the outermost column reaches no empty position
+   * on that side at all: every left- and right-hand plate but the corners came
+   * out with no edge, and the parts list called them "generated" with no
+   * reason. The cut is the edge, so it says which side it is on.
+   */
+  const eps = 1e-6;
+  for (const c of panelCells(panel.origin, panel.columns, panel.rows)) {
+    const m = hexToMm(c);
+    const b = index.bounds;
+    if (frame.left && m.x <= b.minX + eps) sides.add('left');
+    if (frame.right && m.x >= b.maxX - eps) sides.add('right');
+    if (frame.bottom && m.y <= b.minY + eps) sides.add('bottom');
+    if (frame.top && m.y >= b.maxY - eps) sides.add('top');
+  }
   return { sides: [...sides], holes };
 }
 

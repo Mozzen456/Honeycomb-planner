@@ -5118,3 +5118,35 @@ fails 7 of its 13 cases with the cut taken out.
 What it costs is the same as at the edge: a cell whose mouth stood within the
 rail is shaved on that one side by at most the rail less 0.8 mm. It stays in the
 planner, as the edge's cells do.
+
+## D124 — A wall has one top, and a plate cut on its side says so
+
+Reported with a screenshot: a 2400 × 1200 wall on a 300 mm bed, stock plates,
+border on — one column at the right standing proud of the wall, and the top
+row of everything else "filled in".
+
+Bands are filled one at a time, tallest plates first, so each reaches whatever
+its own width's plate heights add up to. With the plates that fit a 300 bed the
+14-wide bands stack 14 × 11 four times, 44 rows, and the 4-wide band left at the
+right-hand edge stacks 4 × 4 twelve times, 48 — 94 mm higher. The border takes
+the assembly's top line from its highest cell, so every other band's top row
+was not on that line, read as a step, and was paved with border instead of cut.
+It was not one wall: with stock plates the same thing happened on every bed in
+the list for at least one ordinary wall size.
+
+`levelBands` takes the height most of the wall's WIDTH reaches and refills any
+band taller than that beneath it. Only taller bands move: pulling everything
+down to the SHORTEST band cascades — an 18-wide band cannot make 45 rows out of
+16s, so it falls to 32 and the wall loses a plate's height. A band that cannot
+reach the height stays lower; that is a band the plate set cannot fill, and is
+a notch rather than a tower. `tests/band-level.test.ts` holds it over every bed,
+both plate sources and six walls, and fails 8 of its 17 solver cases without it.
+
+The second fault was in the same picture's parts list: plates down the left and
+right edges listed as "143 cells, generated" — custom, for no stated reason.
+`ownedBorder` names a plate's sides by finding EMPTY positions past it, and the
+cut ring is occupied, so a plate in the outermost column found none on that
+side; only the corners, which reach past the end of a row, were named. The
+geometry was right all along — `plateEdgePlanes` cuts from the frame, not from
+this — so it was the label and the grouping key. A plate's own cut cells now
+name their side as well.

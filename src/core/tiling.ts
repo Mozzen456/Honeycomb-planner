@@ -363,12 +363,14 @@ function fillBand(
   bandColumns: number,
   byColumns: ReadonlyMap<number, readonly Variant[]>,
   wallHeightMm: number,
+  /** A lower ceiling than the wall's, in rows — see `levelBands`. */
+  capRows = Infinity,
 ): TiledPanel[] {
   const usable = byColumns.get(bandColumns);
   if (usable === undefined) return [];
 
   const rOrigin = -Math.floor(q0 / 2) + bandBump(q0);
-  const maxRows = maxRowsInBand(wallHeightMm, q0);
+  const maxRows = Math.min(maxRowsInBand(wallHeightMm, q0), capRows);
 
   const out: TiledPanel[] = [];
   let row = 0;
@@ -415,6 +417,70 @@ function isBetterBand(candidate: BandPlan, incumbent: BandPlan | null): boolean 
     return candidate.panels.length < incumbent.panels.length;
   }
   return candidate.columns > incumbent.columns;
+}
+
+interface Band {
+  q0: number;
+  columns: number;
+  panels: TiledPanel[];
+}
+
+/** Where a band's honeycomb stops at the top, in wall millimetres. */
+function bandTopMm(band: Band): number {
+  const cells: Hex[] = [];
+  for (const p of band.panels) for (const c of panelCells(p.origin, p.columns, p.rows)) cells.push(c);
+  return cellsBoundsMm(cells).maxY;
+}
+
+/**
+ * Bring every band down to the height most of the wall reaches (D124).
+ *
+ * Each band is filled on its own, tallest plates first, so how high it gets
+ * depends on which heights its WIDTH comes in. On a 300 mm bed with the shipped
+ * plates, the 14-wide bands stack 14 × 11 four times — 44 rows — while the
+ * 4-wide band left at the right-hand edge stacks 4 × 4 twelve times and reaches
+ * 48. The wall came out with one column standing 94 mm proud of the rest, and
+ * with the border on it was worse than a bump: the assembly's top line is taken
+ * from its highest cell, so every other band's top row read as a STEP and was
+ * paved over with border instead of being cut straight.
+ *
+ * So the height that most of the wall's WIDTH reaches is the wall's top, and a
+ * band taller than that is refilled under it. Only taller bands move. Pulling
+ * everything down to the shortest band instead cascades — on a 400 mm bed the
+ * 9-wide band reaches 45 rows, the 18-wide ones cannot make 45 from 16s, so
+ * they would fall to 32 and the whole wall would lose a plate's height.
+ */
+function levelBands(
+  bands: readonly Band[],
+  byColumns: ReadonlyMap<number, readonly Variant[]>,
+  wallHeightMm: number,
+): Band[] {
+  if (bands.length < 2) return [...bands];
+  const tops = bands.map(bandTopMm);
+  const widthAt = new Map<string, { top: number; columns: number }>();
+  bands.forEach((b, i) => {
+    const key = tops[i]!.toFixed(3);
+    const w = widthAt.get(key);
+    if (w) w.columns += b.columns;
+    else widthAt.set(key, { top: tops[i]!, columns: b.columns });
+  });
+  let level = -Infinity;
+  let most = -1;
+  for (const { top, columns } of widthAt.values()) {
+    // Ties go to the LOWER height: trimming is the only move available.
+    if (columns > most || (columns === most && top < level)) {
+      most = columns;
+      level = top;
+    }
+  }
+  return bands.map((band, i) => {
+    if (tops[i]! <= level + EPS) return band;
+    const rows = band.panels.reduce((n, p) => n + p.rows, 0);
+    const base = tops[i]! - rows * PITCH;
+    const cap = Math.floor((level - base) / PITCH + EPS);
+    const refilled = fillBand(band.q0, band.columns, byColumns, wallHeightMm, cap);
+    return refilled.length > 0 ? { ...band, panels: refilled } : band;
+  });
 }
 
 /** Is cell `c` inside `p`? The arithmetic inverse of `panelCells`, allocation-free. */
@@ -541,6 +607,7 @@ export function solveTiling(req: TilingRequest): TilingResult {
   // Bands run vertically since the wall turned flat-top (D35).
   const qMax = maxColumnIndex(wallWidthMm);
   const panels: TiledPanel[] = [];
+  const bands: Band[] = [];
   let q0 = 0;
 
   while (q0 <= qMax) {
@@ -566,8 +633,11 @@ export function solveTiling(req: TilingRequest): TilingResult {
     }
 
     if (best === null) break;
-    for (const p of best.panels) panels.push(p);
+    bands.push({ q0, columns: best.columns, panels: best.panels });
     q0 += best.columns;
+  }
+  for (const band of levelBands(bands, byColumns, wallHeightMm)) {
+    for (const p of band.panels) panels.push(p);
   }
 
   if (panels.length === 0) {
