@@ -251,22 +251,24 @@ export function WallCanvas(props: WallCanvasProps) {
   // Leaving the tool abandons a half-drawn outline, however it was left —
   // a toolbar button, a key, or finishing it.
   useEffect(() => {
-    if (tool !== 'shape') {
-      clearShape();
-      setShapeProblem(null);
-      return;
-    }
-    /*
-     * Drawing starts with nothing selected. Backspace takes a corner back here,
-     * and the shell deletes the selected parts on the same key whenever
-     * anything is selected — so a part left selected from before was deleted
-     * by the keystroke meant for a corner. With the selection empty, the
-     * shell's handler has nothing to do, which is the condition D88 sets for
-     * every key two handlers share.
-     */
-    if (selection.length > 0) onSelect([], false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (tool === 'shape') return;
+    clearShape();
+    setShapeProblem(null);
   }, [tool, clearShape]);
+  /*
+   * Drawing goes on with nothing selected. Backspace takes a corner back here,
+   * and the shell deletes the selected parts on the same key whenever anything
+   * is selected — so a part left selected from before was deleted by the
+   * keystroke meant for a corner. With the selection empty the shell's handler
+   * has nothing to do, which is the condition D88 sets for every key two
+   * handlers share. Not only on the way in: Ctrl+A and Ctrl+Z both put a
+   * selection back while the tool is up (found by the independent check), so
+   * whenever one appears, it goes.
+   */
+  useEffect(() => {
+    if (tool === 'shape' && selection.length > 0) onSelect([], false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tool, selection]);
 
   // --- the wall photograph -------------------------------------------------
 

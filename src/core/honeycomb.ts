@@ -1350,13 +1350,21 @@ function plateRings(spec: HoneycombSpec): PlateRings {
    * by the zone, kept a fleck nothing was holding.
    */
   const own = new Set([...cells, ...(spec.clipped ?? [])].map(hexKey));
+  /*
+   * The plate's WHOLE cells — the ones the planner mounts things in. A group
+   * holding one is never a shard, however small: with no border a zone can
+   * leave a plate as a few separate cells, each well under the shard size, and
+   * every one of them is a real cell somebody may hang a hook in. Dropping them
+   * printed one cell of five (D111, found by the independent check).
+   */
+  const own_ = new Set(cells.map(hexKey));
   const occupied = spec.border?.occupied;
   const zoneReaches = (n: Hex): boolean => {
     const m = hexToMm(n);
     return zoneRects.some((z) =>
       !zoneEdges(z).some((e) => e.nx * m.x + e.ny * m.y - hexReach(e.nx, e.ny) >= e.d - SAME));
   };
-  const held = dropShards(outerRings, innerRings, (key) => {
+  const held = dropShards(outerRings, innerRings, own_, (key) => {
     if (occupied === undefined) return [];
     const at = keyToHex(key.split('#')[0]!);
     const out: { key: string; ring: Point[] }[] = [];
@@ -1411,6 +1419,8 @@ function ringArea(r: readonly Point[]): number {
 function dropShards(
   outer: Map<string, Point[]>,
   inner: Map<string, Point[][]>,
+  /** Cell keys the plate keeps WHOLE; a group holding any of them stays. */
+  whole: ReadonlySet<string>,
   /** Whole cells of OTHER plates beside a piece, which hold it in the interlock. */
   neighbours: (pieceKey: string) => { key: string; ring: Point[] }[],
 ): HeldFragment[] {
@@ -1476,12 +1486,16 @@ function dropShards(
   let main = -1;
   for (const [root, area] of plastic) if (main < 0 || area > plastic.get(main)!) main = root;
 
+  // A group with a whole cell in it is part of the plate, not a fragment.
+  const keep = new Set<number>([main]);
+  keys.forEach((k, i) => { if (whole.has(k)) keep.add(find(i)); });
+
   // Held by the next plate: any piece of the group sharing a stretch of edge
   // with a cell that plate prints whole.
   const held = new Map<number, string>();
   keys.forEach((k, i) => {
     const root = find(i);
-    if (root === main || held.has(root) || plastic.get(root)! >= SHARD_AREA_MM2) return;
+    if (keep.has(root) || held.has(root) || plastic.get(root)! >= SHARD_AREA_MM2) return;
     const ring = outer.get(k)!;
     for (const { key: nk, ring: other } of neighbours(k)) {
       for (let a = 0; a < ring.length && !held.has(root); a++) {
@@ -1498,7 +1512,7 @@ function dropShards(
 
   keys.forEach((k, i) => {
     const root = find(i);
-    if (root === main || held.has(root) || plastic.get(root)! >= SHARD_AREA_MM2) return;
+    if (keep.has(root) || held.has(root) || plastic.get(root)! >= SHARD_AREA_MM2) return;
     outer.delete(k);
     inner.delete(k);
   });

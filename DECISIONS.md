@@ -4251,3 +4251,24 @@ zone's doing.
   (213 plates), 0.3–0.4 s on 2400 × 1200, most of what remains being the parts
   list's fixing plan, which this did not touch. The base before D107 measured
   10.8 s on the same wall.
+
+### D111, amended: a whole cell is never a shard
+
+The second independent check found the shard rule (D109) dropping real cells.
+With NO border a zone takes cells out whole rather than cutting them, and can
+leave a plate as a few separate cells. Each is under the shard size — one
+cell's plastic is about 136 mm² against the 300 mm² floor — so all but the
+largest were dropped: a plate the planner offered five cells of printed one
+(903 mm³ of 4513). Worse, the no-border geometry key is the cell set alone, so
+two such plates shared a parts-list line while printing different cells.
+
+`dropShards` now keeps any group holding one of the plate's WHOLE cells; only
+groups made entirely of cut pieces can be shards. The test that should have
+caught it did not, for a reason worth keeping: `wallWith(…, undefined)` in
+`zone-outline.test.ts` took the parameter's DEFAULT, which is the bordered
+frame, so both "no border" tests there were measuring a bordered wall. "No
+border" is now spelled `null`.
+
+Also from that check: Draw zone now clears the selection whenever one appears
+while it is up, not only on the way in — Ctrl+A and Ctrl+Z both put one back,
+and the next Backspace deleted those parts.

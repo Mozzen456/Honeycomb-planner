@@ -64,7 +64,11 @@ const outlineZone = (pts: [number, number][], clearanceMm = 0, id = 'z'): Obstac
 function wallWith(
   wall: { widthMm: number; heightMm: number },
   zones: Obstacle[],
-  frame: WallFrame | undefined = FRAME,
+  /**
+   * `null` for no border. Not `undefined`: that takes the default, and two
+   * "no border" tests here were quietly measuring a bordered wall that way.
+   */
+  frame: WallFrame | null = FRAME,
 ): LayoutDoc {
   const store = new Store({ ...emptyDoc(), wall, bedId: 'bed256', panels: solved(wall) }, catalog);
   if (frame) store.setFrame(frame);
@@ -347,7 +351,7 @@ describe('a wall under a sloping roof', () => {
   });
 
   it('does not cut the wall at all without a border, and steps whole cells instead', () => {
-    const plain = wallWith(WALL, [outlineZone(roofPts)], undefined);
+    const plain = wallWith(WALL, [outlineZone(roofPts)], null);
     for (const p of plain.panels) {
       expect(plasticInside(plate(p, plain), roof)).toBe(0);
     }
@@ -475,5 +479,49 @@ describe('what a plate file carries', () => {
       if (w > 256 + 1e-6 || h > 256 + 1e-6) big.push(`${p.id}: ${w.toFixed(1)} × ${h.toFixed(1)}`);
     }
     expect(big).toEqual([]);
+  });
+
+  /*
+   * With no border a zone does not cut a plate — it takes cells out whole — and
+   * can leave a plate as a few separate cells. Each is a real cell the planner
+   * offers for mounting, and each is under the shard size, so the first shard
+   * rule printed one of them and dropped the rest: 903 mm³ of a 4513 mm³ plate
+   * (found by the independent check). A group with a whole cell in it is never
+   * a shard. Measured as solids per file against groups of planner cells.
+   */
+  it('prints every cell of a plate a zone breaks into pieces', () => {
+    const doc = wallWith({ widthMm: 1600, heightMm: 900 }, [{
+      id: 'z', label: 'z', xMm: 242.77, yMm: 278.06, widthMm: 882.35, heightMm: 718.47, clearanceMm: 0,
+    }], null);
+    const groupsOf = (cells: readonly { q: number; r: number }[]) => {
+      const left = new Set(cells.map((c) => `${c.q},${c.r}`));
+      let n = 0;
+      for (const start of [...left]) {
+        if (!left.has(start)) continue;
+        n++;
+        const stack = [start];
+        left.delete(start);
+        while (stack.length) {
+          const [q, r] = stack.pop()!.split(',').map(Number) as [number, number];
+          for (const [dq, dr] of [[1, 0], [0, 1], [-1, 1], [-1, 0], [0, -1], [1, -1]]) {
+            const k = `${q + dq!},${r + dr!}`;
+            if (left.delete(k)) stack.push(k);
+          }
+        }
+      }
+      return n;
+    };
+    let broken = 0;
+    const short: string[] = [];
+    for (const p of doc.panels) {
+      const spec = panelModelSpecFor(p, doc);
+      const groups = groupsOf(spec.cells);
+      if (groups > 1) broken++;
+      const pieces = solids([plate(p, doc)]).length;
+      if (pieces < groups) short.push(`${p.id}: ${pieces} solids for ${groups} groups of cells`);
+    }
+    // The fixture has to be able to fail: some plate really is in pieces.
+    expect(broken).toBeGreaterThan(0);
+    expect(short).toEqual([]);
   });
 });
