@@ -857,7 +857,7 @@ export class HoneycombModelError extends Error {}
  * lets `plateGeometryKey` say whether two plates are the same plate without
  * building either of them (D107).
  */
-interface PlateRings {
+export interface PlateRings {
   levels: { z: number; acrossFlats: number }[];
   outerRings: Map<string, Point[]>;
   innerRings: Map<string, Point[][]>;
@@ -887,7 +887,7 @@ export function heldFragments(spec: HoneycombSpec): HeldFragment[] {
   return plateRings(spec).held;
 }
 
-function plateRings(spec: HoneycombSpec): PlateRings {
+export function plateRings(spec: HoneycombSpec): PlateRings {
   assertProfile();
   const depth = spec.depthMm ?? PANEL_DEPTH;
   const cells = dedupe(spec.cells);
@@ -946,6 +946,55 @@ function plateRings(spec: HoneycombSpec): PlateRings {
   const zoneRects = spec.border?.keepClear ?? [];
   const railMm = Math.max(0, spec.border?.thicknessMm ?? 0);
   const zoneEdgeLists = zoneRects.map(zoneEdges);
+
+  /*
+   * The rail round a zone for a cell the zone does NOT reach (D114).
+   *
+   * Only a cell the zone overlaps reaches `clipPlanesFor`, so only those had
+   * their bores cut a rail short of the aperture. A cell stopping just short of
+   * the zone kept its whole bore, and the wall between that bore and the
+   * aperture was whatever the lattice happened to leave: measured on a
+   * rectangle across a 2400 x 1200 wall, 3.60 mm on both sides and down to
+   * 0.80 on the top and bottom, a third of the way along — a hexagon's flat
+   * stands 0.8 mm outside its mouth, so a cell whose flat lands within the rail
+   * of the zone's edge leaves a wall that thin. Reported as a frame that "is
+   * not consistent".
+   *
+   * So any bore that comes within the rail of a zone is cut back to it, which
+   * is the same rule the plate's own edge has always applied to every cell
+   * (`edgeBore` below). The bore is tested at its widest level; a bore inside
+   * every grown edge of a convex piece is inside the grown piece, and it is cut
+   * on the one edge it overreaches least — the edge it faces. A tenth of a
+   * millimetre is not worth a cut: shaving a bore corner by less leaves a
+   * sliver of a facet and no visible wall.
+   */
+  const widestBore = Math.max(...levels.map((lv) => lv.acrossFlats));
+  const boreScale = widestBore / (2 * MARGIN_Y);
+  const RAIL_MIN_CUT = 0.1;
+  const railBorePlanes = (m: Point, only?: number): HalfPlane[] => {
+    if (railMm <= 0) return [];
+    const out: HalfPlane[] = [];
+    for (let i = 0; i < zoneRects.length; i++) {
+      if (only !== undefined && i !== only) continue;
+      const z = zoneRects[i]!;
+      const reach = widestBore + railMm;
+      if (m.x + reach <= z.minX || m.x - reach >= z.maxX ||
+          m.y + reach <= z.minY || m.y - reach >= z.maxY) continue;
+      // How far the bore's NEAREST point lies inside each edge grown by the
+      // rail. Outside any one of them means outside the grown piece.
+      let best = -1;
+      let bestOver = Infinity;
+      const edges = zoneEdgeLists[i]!;
+      for (let k = 0; k < edges.length; k++) {
+        const e = edges[k]!;
+        const over = e.d + railMm - (e.nx * m.x + e.ny * m.y - boreScale * hexReach(e.nx, e.ny));
+        if (over <= RAIL_MIN_CUT) { best = -1; break; }
+        if (over < bestOver) { bestOver = over; best = k; }
+      }
+      if (best >= 0) out.push(outsideOf(edges[best]!, railMm));
+    }
+    return out;
+  };
 
   /*
    * The plate's EDGE, cut the way `inner box.jpeg` shows it (D86).
@@ -1079,7 +1128,10 @@ function plateRings(spec: HoneycombSpec): PlateRings {
        */
       const removesNothing = (p: HalfPlane) =>
         p.nx * m.x + p.ny * m.y + hexReach(p.nx, p.ny) <= p.d + SAME;
-      if (edges.some((e) => removesNothing(outsideOf(e)))) continue;
+      if (edges.some((e) => removesNothing(outsideOf(e)))) {
+        bore.push(...railBorePlanes(m, i));
+        continue;
+      }
 
       /*
        * Which edges this cell has MATERIAL outside of — never which side its
@@ -1324,9 +1376,10 @@ function plateRings(spec: HoneycombSpec): PlateRings {
   const innerRings = new Map<string, Point[][]>();
   for (const c of cells) {
     if (!outerRings.has(hexKey(c))) continue;
+    const cut = [...edgeBore, ...railBorePlanes(hexToMm(c))];
     const bores = levels.map((lv) => {
       const ring = hexCorners(c, lv.acrossFlats);
-      return edgeBore.length > 0 ? clipConvex(ring, edgeBore) : ring;
+      return cut.length > 0 ? clipConvex(ring, cut) : ring;
     });
     // A bore the edge has cut to nothing is not a hole: that cell is entirely
     // in the band and prints solid.

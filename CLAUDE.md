@@ -20,7 +20,7 @@ better guide to where the work actually got to.
 
 ```bash
 npm run dev          # Vite dev server
-npm test             # vitest run — 55 files, 1198 tests
+npm test             # vitest run — 56 files, 1211 tests
 npm run typecheck    # tsc --noEmit
 npm run build        # typecheck + vite build (also copies models/ into dist/)
 npm run build:standalone  # one self-contained HTML file in dist-standalone/ (D113)
@@ -346,6 +346,13 @@ standing plate holding most of their neighbours. Anything computing a plate's ge
 `doc.covered` for this — `panelModelSpecFor` and `panelGeometryKeysFor` pass it; `panelGeometryKeys`
 takes it — and the bed — as required arguments because leaving `covered` out once made two different
 plates share a key.
+
+**...and the rail reaches EVERY bore near a zone, not only the cut cells'** (D114). Only a cell the
+zone overlaps goes through `clipPlanesFor`, so a whole cell stopping just short of the zone kept its
+full bore — and the plan snaps zone edges onto flats, which sit 0.8 mm outside the mouth, so a third
+of every top and bottom wall came out 0.8 mm against 3.6 elsewhere. `railBorePlanes` cuts any bore
+within the rail, the same way `edgeBore` always has at the plate's own edge. `tests/zone-rail.test.ts`
+holds it as a property of the rings: no bore point within the rail of any zone.
 
 **The aperture wall is the CUT CELL's, and it takes two cut lines** (D83, superseding D82). The
 outline is cut at the zone rectangle — so the aperture is that rectangle exactly — and the four bore

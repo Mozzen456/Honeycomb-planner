@@ -4307,3 +4307,33 @@ And the page can no longer be blank without saying why. `#root` holds a
 message in system colours until React replaces it, naming which file to open;
 and a plain script in `<head>` writes the error into the page when one leaves
 `#root` empty — tested by refusing WebGL, which takes the whole app down.
+
+## D114 — The rail round a zone is cut into every bore it reaches, not only the cut cells'
+
+Reported with a screenshot as a border round a blocked zone that "is not
+consistent", with the border on. Two things were behind what the picture
+showed. The larger was already fixed on this branch (D107): the version the
+report came from still grouped plates by a description of their inputs, so the
+3D view drew one plate's cut column onto its neighbours as fins and steps along
+the aperture. The other was real and is fixed here.
+
+Only cells the zone OVERLAPS reach `clipPlanesFor`, so only their bores were
+cut a rail short of the aperture. A cell stopping just short of the zone kept
+its whole bore, and the wall between that bore and the aperture was whatever
+the lattice left. The plan snaps a zone's edges onto cell centres and flats,
+and a flat stands only 0.8 mm outside its mouth, so on a rectangle drawn in the
+app the top and bottom walls measured 0.80 mm (1.48 on the room face) for a
+third of their length and 3.60 everywhere else.
+
+Every bore — whole cells included — is now cut back to the rail wherever it
+comes within the rail of a zone, on the zone edge it faces. That is the rule the
+plate's own edge has always applied to every cell (`edgeBore`), so the two
+frames are now built the same way. Measured on that wall: 3.60 mm minimum on all
+four sides, at the mouth and at the room face. `tests/zone-rail.test.ts` states
+it as a property — no bore point of any plate within the rail of any zone, every
+plate closed — over snapped and unsnapped rectangles and a drawn outline, and
+fails 7 of its 13 cases with the cut taken out.
+
+What it costs is the same as at the edge: a cell whose mouth stood within the
+rail is shaved on that one side by at most the rail less 0.8 mm. It stays in the
+planner, as the edge's cells do.
