@@ -13,7 +13,7 @@ import catalogJson from '../catalog/catalog.json';
 import overridesJson from '../catalog/overrides.json';
 import { BEDS, bedFor, CUSTOM_BED_ID, MAX_BED_MM, MIN_BED_MM, PEG } from '../core/constants';
 import { computeBom, panelsForLine } from '../core/bom';
-import { normaliseColor } from '../core/colors';
+import { DEFAULT_PANEL_COLOR, DEFAULT_PART_COLOR, normaliseColor } from '../core/colors';
 import { toCsv, toMarkdownChecklist, toPrintableHtml, downloadName } from '../core/exporters';
 import {
   buildHoneycombMesh, clampStack, meshBoundsMm, stackHeightMm, stackMesh, toBinaryStl,
@@ -1729,7 +1729,7 @@ export function App() {
             <ColorSwatch
               label="Colour for the panels"
               value={state.doc.colors?.panels}
-              fallback={themeColor('--canvas-panel-tint', '#c8ced6')}
+              fallback={DEFAULT_PANEL_COLOR}
               onChange={(c) => store.setDefaultColor('panels', c, 'Colour the panels')}
               onClear={() => store.setDefaultColor('panels', undefined, 'Clear the panel colour')}
             />
@@ -1737,7 +1737,7 @@ export function App() {
             <ColorSwatch
               label="Colour for the accessories and fasteners"
               value={state.doc.colors?.parts}
-              fallback={themeColor('--accent', '#3d7ea6')}
+              fallback={DEFAULT_PART_COLOR}
               onChange={(c) => store.setDefaultColor('parts', c, 'Colour the parts')}
               onClear={() => store.setDefaultColor('parts', undefined, 'Clear the part colour')}
             />

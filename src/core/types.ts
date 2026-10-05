@@ -259,6 +259,19 @@ export interface WallColors {
 export interface FixingEdits {
   removed?: Hex[];
   added?: Hex[];
+  /**
+   * Multi-cell fixings a person put somewhere themselves — the two- or
+   * four-cell part, anchored and turned (D125). `added` is single cells only,
+   * and stays so: a layout written before this field existed reads the same.
+   */
+  placed?: PlacedFixing[];
+}
+
+/** A multi-cell wall fixing placed by hand. */
+export interface PlacedFixing {
+  partId: string;
+  at: Hex;
+  rotation: Rotation;
 }
 
 /**
@@ -538,6 +551,8 @@ export interface WallFixings {
    * wall, which is what the single-cell ones cannot do (HSW-SPEC §4).
    */
   junctions: number;
+  /** Two-cell fixings round the outside of the wall (D125). */
+  edgeFixings: number;
   spacingMm: number;
   perSquareMetre: number;
   /** Panels with no free cell left for a fixing. */

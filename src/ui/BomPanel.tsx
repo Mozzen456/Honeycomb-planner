@@ -22,7 +22,7 @@
 
 import { useMemo } from 'react';
 
-import { colorsInUse } from '../core/colors';
+import { colorsInUse, DEFAULT_PANEL_COLOR, DEFAULT_PART_COLOR, hasColors } from '../core/colors';
 import { ColorSwatch } from './ColorSwatch';
 import { Icon } from './Icon';
 import { NumberField } from './NumberField';
@@ -376,7 +376,7 @@ function BomSection(
                           className="bom-line__swatch"
                           label={`Colour for ${label}`}
                           value={colors?.lines?.[line.partId]}
-                          fallback={line.type === 'panel' ? colors?.panels : colors?.parts}
+                          fallback={line.type === 'panel' ? colors?.panels ?? DEFAULT_PANEL_COLOR : colors?.parts ?? DEFAULT_PART_COLOR}
                           onChange={(c) => onSetLineColor(line.partId, c)}
                           onClear={() => onSetLineColor(line.partId, undefined)}
                         />
@@ -690,10 +690,19 @@ export function BomPanel(props: BomPanelProps): JSX.Element {
                 {bom.fixings.perSquareMetre > 0
                   ? ` (${bom.fixings.perSquareMetre.toFixed(0)} per m²)`
                   : ''}
-                {bom.fixings.junctions > 0
-                  ? `, of which ${formatCount(bom.fixings.junctions)} ${
-                      bom.fixings.junctions === 1 ? 'is a four-cell insert' : 'are four-cell inserts'
-                    } bridging where panels meet`
+                {bom.fixings.junctions > 0 || bom.fixings.edgeFixings > 0
+                  ? `, of which ${[
+                      bom.fixings.junctions > 0
+                        ? `${formatCount(bom.fixings.junctions)} ${
+                            bom.fixings.junctions === 1 ? 'is a four-cell insert' : 'are four-cell inserts'
+                          }`
+                        : '',
+                      bom.fixings.edgeFixings > 0
+                        ? `${formatCount(bom.fixings.edgeFixings)} ${
+                            bom.fixings.edgeFixings === 1 ? 'is a two-cell insert' : 'are two-cell inserts'
+                          } round the edge`
+                        : '',
+                    ].filter(Boolean).join(' and ')}`
                   : ''}
                 .
                 {/* Said out loud, because a spacing figure stops being the whole
@@ -776,7 +785,7 @@ export function BomPanel(props: BomPanelProps): JSX.Element {
                 <span className="visually-hidden">{colour}</span>
               </span>
             ))}
-            {onClearColors !== undefined && (
+            {onClearColors !== undefined && hasColors(doc?.colors) && (
               <button
                 type="button"
                 className="bom-totals__reset"

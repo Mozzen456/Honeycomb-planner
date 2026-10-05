@@ -21,7 +21,7 @@ better guide to where the work actually got to.
 
 ```bash
 npm run dev          # Vite dev server
-npm test             # vitest run — 60 files, 1294 tests
+npm test             # vitest run — 63 files, 1337 tests
 npm run typecheck    # tsc --noEmit
 npm run build        # typecheck + vite build (also copies models/ into dist/)
 npm run build:standalone  # one self-contained HTML file in dist-standalone/ (D122)
@@ -580,6 +580,15 @@ straddle the corner where the plates meet, and anywhere else it is the wrong par
 fixing on a plate warns as `panel-unfixed`, which is NOT `no-room-for-mounts` — that one says "clear
 a cell", and here the cells are clear and the fixing is gone.
 
+**Wall fixings are multi-cell wherever they fit** (D125): the four-cell insert inside the wall, the
+two-cell `hexagon-countersung-and-hole` on the grid points round the outside, single only where neither
+fits. The COUNT is the spacing's and must not move. Every multi-cell fixing carries its `partId`; anything
+reading `plan.junctions` must not assume the four-cell part or three-plus plates. Only a fixing tying
+3+ plates at a corner is immovable; others move through `fixingEdits.placed`. And only SEAM junctions
+cover grid points — a grid-placed multi-cell fixing counting as one starves small walls.
+
+**`fixingPlanFor` is cached per document** (D126) — never mutate a plan you were handed.
+
 **A junction fixing REPLACES nearby fixings; it does not add to them.** Planned independently, the
 seam rule and the spacing grid gave 56 four-cell inserts on top of 74 single ones — 128 holes in a
 wall needing about 80. Same class of error as the original 370.
@@ -1079,10 +1088,14 @@ first: the placed item, its parts-list line, the default for its kind (`colors.p
 painting one wall two ways. A plate's colour is keyed by the LINE it is counted on
 (`bom.panelLineKeys`), so a cut or bordered plate takes the colour of the generated plate it is.
 
-**"No colour" is an answer and it is not black.** An absent key means "as the theme draws it": a
-native colour input handed nothing shows `#000000`, which reads as a decision nobody made. An
-untouched layout still serialises with no `colors` key at all, and a swatch hatches rather than
-showing black.
+**"No colour" is a decision nobody made, and it is answered by the DEFAULTS** (D127): black plates
+(`DEFAULT_PANEL_COLOR`, `#262626` — true black loses the bore's shading) and orange parts and
+fixings (`DEFAULT_PART_COLOR`). They are the last of the four levels, never written into the
+document: an untouched layout still serialises with no `colors` key, `hasColors` stays false and
+`Clear colours` stays hidden. A near-black plate on the dark theme vanishes, so both views draw a
+plate through `standOffColor`, which lifts a colour darker than a DARK background toward white.
+Drawing only — the swatch, the list and the file keep the colour chosen. One function for both
+views; do not give either its own copy.
 
 **`normaliseColor` is the gate, and a TOKEN IS NOT A HEX COLOUR.** A colour ends up in a canvas
 `fillStyle` and a `THREE.Color`, which accept anything and mis-handle what they cannot parse, so only

@@ -5150,3 +5150,77 @@ side; only the corners, which reach past the end of a row, were named. The
 geometry was right all along — `plateEdgePlanes` cuts from the frame, not from
 this — so it was the label and the grouping key. A plate's own cut cells now
 name their side as well.
+
+## D125 — The four-cell fixing wherever it fits, the two-cell one round the edge
+
+Asked for directly: "use 4 where you can, and the 2 part in the border around".
+The planner put the four-cell countersunk insert only where three or four
+plates meet, and a single-cell insert at every other grid point.
+
+Now each grid point the seam junctions do not already cover gets a MULTI-cell
+part where one fits on free cells: `insert-for-countersunk-hole-3` inside the
+wall, `hexagon-countersung-and-hole` (two cells, one wall screw — HSW-SPEC §4,
+the counterpart of the four-cell one; `insert-countersung-m3` is the M3
+variant) on the grid points along the wall's outside, where the four-cell
+diamond so often has no room once the border has cut the last ring. A single
+cell only where neither fits. Placed where the PART's middle lands nearest the
+grid point, so the fixing sits on the grid rather than merely touching it.
+
+The count does not change — the spacing decides that, and it was tuned on real
+walls: 75 fixings on 2400 × 1200 / 256 bed before and after, only the parts
+differ (24 single → 24 two-cell). One trap on the way: a grid-placed multi-cell
+fixing must not count as a seam junction "covering" the next grid point, or a
+small wall loses fixings (4 → 2 on the 4 × 4 test wall).
+
+Every multi-cell fixing carries its `partId`, so the parts list counts each as
+its own part (wall screws follow, one each), the 3D view draws each from its
+own mesh, and only the four-cell one's sockets stand in for an insert (D47).
+
+And they can be MOVED. Single fixings always could; with most fixings now
+multi-cell, refusing to move them would have taken the edit away. A moved one
+is `fixingEdits.placed` — part, anchor, turn — and lands with the dropped cell
+as its anchor in its own turn if that fits and the nearest turn that does
+otherwise. The exception stays: a four-cell insert tying three or four PLATES
+at their corner holds that corner, and can be removed but not moved.
+
+## D126 — Faster: one fixing plan per document, plates cached by shape
+
+Measured on a 2400 × 1200 wall, every edit planned the wall fixings three or
+four times — the parts list's count, `validate`, the 3D view, the store — at
+~100 ms each, and the 3D view regenerated every plate whenever its plate
+effect ran (a colour, a lit line, a zone nudged at the far end of the wall).
+
+- `fixingPlanFor` is cached on the document and the catalogue, both immutable.
+- The fixing planner looks for corner junctions only within two cells of a
+  seam, evaluates each placement once for both passes, rotates the footprint
+  once instead of per placement, keys its hot lookups by number, and finds
+  the cells near a grid point through a spatial index rather than a scan of
+  every cell. 514 → 189 ms on a 4 × 2.4 m wall, with byte-identical plans over
+  48 walls (every bed, both plate sources, three sizes).
+- `WallView3D` keeps generated plates in a cache keyed by geometry (D116)
+  across rebuilds, freeing what two rebuilds in a row did not use, so a
+  rebuild regenerates only the plates that changed.
+- `levelBands` (D124) reads each plate's top row only; on a 20 m wall of small
+  plates the whole block was 800 000 cells built to find a maximum.
+
+## D127 — Black plates and orange parts unless somebody says otherwise
+
+Asked for directly: an untouched wall is drawn as it would most often be
+printed, plates in black and every part and fixing in orange. The defaults
+are the LAST level of the four (D93) — item, line, kind, then
+`DEFAULT_PANEL_COLOR` / `DEFAULT_PART_COLOR` — so both views, the parts list,
+the swatches and the exports get them from the same three functions they
+already asked, and none of them had to learn about it separately.
+
+The document is unchanged by it. An untouched wall still serialises with no
+`colors` key, `hasColors` is still false, and `Clear colours` only appears
+once something has actually been chosen. Only the answer to "no decision"
+moved, from "as the theme draws it" to the default.
+
+The plate is `#262626`, not `#000000`: the bore walls are shaded, and true
+black loses them. Even so, near-black on the dark theme's near-black canvas
+disappears, so `standOffColor` carries a colour darker than the background
+toward white until it stands off by a fixed step — on a dark background only,
+and in the DRAWING only. The file you print and the swatch keep the colour
+that was chosen. Both views call the one function; the 3D view had its own
+copy for an hour and the two disagreed by a shade.

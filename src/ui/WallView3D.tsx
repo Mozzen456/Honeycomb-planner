@@ -19,8 +19,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import * as THREE from 'three';
 
 import { fasteningPlanFor, fixingPlanFor, itemCells, panelLineKeys } from '../core/bom';
-import { colorOfItem, colorOfLine, colorOfPanel } from '../core/colors';
-import { JUNCTION_FIXING_ID } from '../core/fixings';
+import { colorOfItem, colorOfLine, colorOfPanel, standOffColor } from '../core/colors';
+import { EDGE_FIXING_ID, JUNCTION_FIXING_ID } from '../core/fixings';
 import { CELL, PANEL_DEPTH, PITCH } from '../core/constants';
 import {
   cellsCentreMm, hexKey, hexToMm, mmToHex, panelCells, placedPanelCells,
@@ -388,6 +388,43 @@ function generatedPanelGeometry(
  */
 const hoverPlates = new Map<string, THREE.BufferGeometry | null>();
 
+
+/**
+ * The wall's plates, cached by SHAPE across rebuilds.
+ *
+ * Building a plate is the slowest thing this view does — tens of milliseconds
+ * each, seconds for a wall — and the panel effect used to rebuild every one of
+ * them whenever it ran: a zone nudged at one end of the wall, a line lit in the
+ * parts list, a colour picked. Keyed on the plate's geometry (D116), so an
+ * unchanged plate is a hit and a re-cut one a new key. Entries no rebuild has
+ * used for two generations are freed, so dragging a zone across the wall does
+ * not keep every intermediate cut alive.
+ */
+const plateCache = new Map<string, { geometry: THREE.BufferGeometry | null; used: number }>();
+let plateGeneration = 0;
+
+function cachedPlateGeometry(p: PlacedPanel, doc: LayoutDoc): THREE.BufferGeometry | null {
+  const key = plateShapeKey(p, doc);
+  const hit = plateCache.get(key);
+  if (hit !== undefined) {
+    hit.used = plateGeneration;
+    return hit.geometry;
+  }
+  const geometry = generatedPanelGeometry(p, doc);
+  plateCache.set(key, { geometry, used: plateGeneration });
+  return geometry;
+}
+
+/** Free the cached plates the last two rebuilds did not use. */
+function sweepPlateCache(): void {
+  for (const [key, entry] of plateCache) {
+    if (entry.used < plateGeneration - 1) {
+      entry.geometry?.dispose();
+      plateCache.delete(key);
+    }
+  }
+}
+
 /*
  * The plate's GEOMETRY, not a description of its inputs (D116).
  *
@@ -699,8 +736,11 @@ export function WallView3D(props: WallView3DProps) {
     for (const child of [...s.panelGroup.children]) {
       s.panelGroup.remove(child);
       const m = child as THREE.Mesh;
-      m.geometry?.dispose();
+      // Only what this view owns: a cached plate (below) or meshLibrary's
+      // shipped mesh is shared, and freeing it here blanks the next frame.
+      if (m.userData['ownGeometry'] !== false) m.geometry?.dispose();
     }
+    plateGeneration += 1;
 
     // One geometry per distinct SHAPE, instanced across every panel using it.
     // A panel cut round a light switch is a different shape from the stock
@@ -798,7 +838,9 @@ export function WallView3D(props: WallView3DProps) {
        * is the colour, the recessed shoulder the same colour in shadow, so a
        * coloured plate still reads as a plate rather than a flat card.
        */
-      const own = colour === undefined ? undefined : new THREE.Color(colour);
+      const own = colour === undefined
+        ? undefined
+        : new THREE.Color(standOffColor(colour, `#${theme.bg.getHexString()}`));
       const face = lit
         ? litFace
         : own
@@ -834,9 +876,10 @@ export function WallView3D(props: WallView3DProps) {
        * is also what stops a cut plate and its stock neighbour disagreeing about
        * which way the bore runs.
        */
-      const generated = generatedPanelGeometry(sample, doc);
+      const generated = cachedPlateGeometry(sample, doc);
       if (generated) {
         const mesh = new THREE.InstancedMesh(generated, face, origins.length);
+        mesh.userData['ownGeometry'] = false;
         const m4 = new THREE.Matrix4();
         origins.forEach((o, i) => {
           const p = hexToMm(o);
@@ -925,6 +968,7 @@ export function WallView3D(props: WallView3DProps) {
         s.panelGroup.add(mesh);
       }
     }
+    sweepPlateCache();
   }, [doc.panels, doc.frame, doc.colors, panelLines, panelMeshes, ready, readTheme, themeTick,
       litPanelIds]);
 
@@ -1165,6 +1209,7 @@ export function WallView3D(props: WallView3DProps) {
    */
   const [fixingMesh, setFixingMesh] = useState<PartMesh | null>(null);
   const [junctionMesh, setJunctionMesh] = useState<PartMesh | null>(null);
+  const [edgeMesh, setEdgeMesh] = useState<PartMesh | null>(null);
   const fixingPart = useMemo(
     () => catalog.parts.find((p) => p.type === 'fastener' || p.type === 'insert'
       ? (p.hardware ?? []).some((h) => /wall (screw|plug)/i.test(h.item))
@@ -1175,6 +1220,11 @@ export function WallView3D(props: WallView3DProps) {
 
   const junctionPart = useMemo(
     () => catalog.parts.find((p) => p.id === JUNCTION_FIXING_ID),
+    [catalog],
+  );
+  /** The two-cell fixing round the outside of the wall (D125). */
+  const edgePart = useMemo(
+    () => catalog.parts.find((p) => p.id === EDGE_FIXING_ID),
     [catalog],
   );
 
@@ -1220,6 +1270,15 @@ export function WallView3D(props: WallView3DProps) {
   }, [junctionPart]);
 
   useEffect(() => {
+    if (!edgePart) return;
+    let live = true;
+    void loadPartMesh(edgePart).then((m) => {
+      if (live && m !== null) setEdgeMesh(m);
+    });
+    return () => { live = false; };
+  }, [edgePart]);
+
+  useEffect(() => {
     const s = stateRef.current;
     if (!s || !ready) return;
     const theme = readTheme();
@@ -1261,6 +1320,7 @@ export function WallView3D(props: WallView3DProps) {
     };
     const mat = toneFor(fixingPart?.id);
     const junctionMat = toneFor(junctionPart?.id);
+    const edgeMat = toneFor(edgePart?.id);
     /*
      * The one you have picked, in the selection colour — the same signal a
      * selected part gets, because it is the same question ("which of these am I
@@ -1312,22 +1372,27 @@ export function WallView3D(props: WallView3DProps) {
       cx /= junction.cells.length;
       cy /= junction.cells.length;
 
-      const mesh = junctionMesh
-        ? new THREE.Mesh(junctionMesh.geometry, matFor(junction.anchor, junctionMat))
+      // Each by its own part: the four-cell insert, or the two-cell one round
+      // the edge (D125).
+      const edge = junction.partId === EDGE_FIXING_ID;
+      const model = edge ? edgeMesh : junctionMesh;
+      const material = edge ? edgeMat : junctionMat;
+      const mesh = model
+        ? new THREE.Mesh(model.geometry, matFor(junction.anchor, material))
         : new THREE.Mesh(
-            cellPrism((CELL.mouthAcrossFlats * 1.6) / Math.sqrt(3), PANEL_DEPTH),
-            matFor(junction.anchor, junctionMat),
+            cellPrism((CELL.mouthAcrossFlats * (edge ? 1.2 : 1.6)) / Math.sqrt(3), PANEL_DEPTH),
+            matFor(junction.anchor, material),
           );
       mesh.rotation.z = (Math.PI / 3) * junction.rotation;
-      mesh.position.set(cx, cy, junctionMesh ? seatedZ(junctionMesh, true) : PANEL_DEPTH / 2);
-      mesh.userData['ownGeometry'] = junctionMesh === null;
+      mesh.position.set(cx, cy, model ? seatedZ(model, true) : PANEL_DEPTH / 2);
+      mesh.userData['ownGeometry'] = model === null;
       s.fixingGroup.add(mesh);
     }
     // `doc` covers `doc.colors` here — this effect takes the whole document —
     // but the fixing PARTS do not, so they are listed: the tone is read off
     // their own parts-list lines.
-  }, [doc, catalog, fixingPlan, ready, readTheme, themeTick, fixingMesh, junctionMesh,
-      fixingPart, junctionPart, pickedFixing]);
+  }, [doc, catalog, fixingPlan, ready, readTheme, themeTick, fixingMesh, junctionMesh, edgeMesh,
+      fixingPart, junctionPart, edgePart, pickedFixing]);
 
   /*
    * --- obstacles: NOT drawn ------------------------------------------------

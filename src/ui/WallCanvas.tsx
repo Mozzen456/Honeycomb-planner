@@ -24,7 +24,7 @@ import {
   type Point,
 } from '../core/hex';
 import { itemCells, panelLineKeys } from '../core/bom';
-import { colorOfItem, colorOfPanel } from '../core/colors';
+import { colorOfItem, colorOfPanel, standOffColor } from '../core/colors';
 import {
   editZone,
   formatMm,
@@ -694,12 +694,11 @@ export function WallCanvas(props: WallCanvasProps) {
      * switch takes the colour of the generated plate it really is.
      */
     const cellColors = new Map<string, string>();
-    if (doc.colors) {
-      for (const p of doc.panels) {
-        const colour = colorOfPanel(doc.colors, panelLines.get(p.id));
-        if (colour === undefined) continue;
-        for (const c of placedPanelCells(p)) cellColors.set(hexKey(c), colour);
-      }
+    for (const p of doc.panels) {
+      const chosen = colorOfPanel(doc.colors, panelLines.get(p.id));
+      if (chosen === undefined) continue;
+      const colour = standOffColor(chosen, C.wall);
+      for (const c of placedPanelCells(p)) cellColors.set(hexKey(c), colour);
     }
 
     // 1 + 2. The static layer: panel cells and seams. Rebuilt only when the
@@ -858,7 +857,8 @@ export function WallCanvas(props: WallCanvasProps) {
             const b = cellsBounds(panelCells(p.origin, p.columns, p.rows));
             const a = toScreen({ x: b.minX, y: b.minY });
             const d = toScreen({ x: b.maxX, y: b.maxY });
-            lc.fillStyle = colorOfPanel(doc.colors, panelLines.get(p.id)) ?? C.panel;
+            const chosen = colorOfPanel(doc.colors, panelLines.get(p.id));
+            lc.fillStyle = chosen === undefined ? C.panel : standOffColor(chosen, C.wall);
             lc.fillRect(a.x, a.y, d.x - a.x, d.y - a.y);
           }
           /*

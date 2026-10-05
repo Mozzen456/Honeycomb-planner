@@ -427,8 +427,12 @@ interface Band {
 
 /** Where a band's honeycomb stops at the top, in wall millimetres. */
 function bandTopMm(band: Band): number {
+  // Only each plate's TOP row can be the band's top, and a wall of 4 × 4
+  // plates on a 20 m wall is 800 000 cells to build for nothing otherwise.
   const cells: Hex[] = [];
-  for (const p of band.panels) for (const c of panelCells(p.origin, p.columns, p.rows)) cells.push(c);
+  for (const p of band.panels) {
+    for (const c of panelCells({ q: p.origin.q, r: p.origin.r + p.rows - 1 }, p.columns, 1)) cells.push(c);
+  }
   return cellsBoundsMm(cells).maxY;
 }
 

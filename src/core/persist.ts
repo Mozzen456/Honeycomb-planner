@@ -21,7 +21,7 @@ import {
   clampMmPerPixel, clampPhotoOpacity, clampPhotoRotation, DEFAULT_PHOTO_OPACITY, photoRotation,
 } from './wallPhoto';
 import type {
-  FixingEdits, Group, Hex, LayoutDoc, Obstacle, PlacedItem, PlacedPanel, Rotation, WallColors,
+  FixingEdits, Group, PlacedFixing, Hex, LayoutDoc, Obstacle, PlacedItem, PlacedPanel, Rotation, WallColors,
   WallFrame, WallPhoto, WallSpec, ZonePoint, ZoneRect,
 } from './types';
 
@@ -132,8 +132,12 @@ function canonicalFixingEdits(edits: LayoutDoc['fixingEdits']): Record<string, u
   const out: Record<string, unknown> = {};
   const removed = cells(edits.removed);
   const added = cells(edits.added);
+  const placed = (edits.placed ?? []).map((f) => ({
+    partId: f.partId, at: { q: f.at.q, r: f.at.r }, rotation: f.rotation,
+  }));
   if (removed.length > 0) out['removed'] = removed;
   if (added.length > 0) out['added'] = added;
+  if (placed.length > 0) out['placed'] = placed;
   return Object.keys(out).length > 0 ? { fixingEdits: out } : {};
 }
 
@@ -1041,10 +1045,36 @@ export function migrate(raw: unknown): LoadResult {
       };
       const removed = readCells('removed');
       const added = readCells('added');
-      if (removed.length > 0 || added.length > 0) {
+      // Hand-placed multi-cell fixings (D125): a part id, an anchor and a turn.
+      const placed: PlacedFixing[] = [];
+      if (rawEdits['placed'] !== undefined) {
+        const list = readArray(rawEdits['placed'], 'fixingEdits.placed', errors);
+        const seen = new Set<string>();
+        for (let i = 0; i < list.length && placed.length < MAX_FIXING_EDITS; i++) {
+          const raw = list[i];
+          const where = `fixingEdits.placed[${i}]`;
+          if (!isPlainObject(raw) || typeof raw['partId'] !== 'string' || raw['partId'].length === 0) {
+            errors.push(`${where} is not a placed fixing; dropped.`);
+            continue;
+          }
+          const at = readHex(raw['at'], `${where}.at`, errors);
+          const rot = raw['rotation'];
+          if (at === null) continue;
+          if (typeof rot !== 'number' || !Number.isInteger(rot) || rot < 0 || rot > 5) {
+            errors.push(`${where}.rotation is ${describe(rot)}, not a turn of 0-5; dropped.`);
+            continue;
+          }
+          const key = `${at.q},${at.r}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          placed.push({ partId: raw['partId'], at, rotation: rot as Rotation });
+        }
+      }
+      if (removed.length > 0 || added.length > 0 || placed.length > 0) {
         fixingEdits = {
           ...(removed.length > 0 ? { removed } : {}),
           ...(added.length > 0 ? { added } : {}),
+          ...(placed.length > 0 ? { placed } : {}),
         };
       }
     }

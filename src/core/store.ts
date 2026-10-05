@@ -19,7 +19,7 @@ import { obstructedCells } from './obstacles';
 import { borderCutCells, frameIsOn } from './panelModel';
 import { placementsOf, withPartAdded, withPartRemoved, withPartsAdded } from './projectParts';
 import { crossesSeam } from './tiling';
-import type { FixingPlan } from './fixings';
+import { multiFootprint, type FixingPlan } from './fixings';
 import type {
   Bom,
   Catalog,
@@ -682,8 +682,9 @@ export class Store {
     const edits = this.current.doc.fixingEdits;
     if (plan.manual.has(key)) {
       const added = (edits?.added ?? []).filter((c) => hexKey(c) !== key);
+      const placed = (edits?.placed ?? []).filter((f) => hexKey(f.at) !== key);
       this.commit(label, {
-        doc: withFixingEdits(this.current.doc, { ...edits, added }),
+        doc: withFixingEdits(this.current.doc, { ...edits, added, placed }),
         selection: this.current.selection,
       });
       return { ok: true };
@@ -763,12 +764,8 @@ export class Store {
   moveFixing(from: Hex, to: Hex, label = 'Move wall fixing'): DropResult {
     if (hexKey(from) === hexKey(to)) return { ok: true };
     const plan = this.fixingPlan();
-    if (plan.junctions.some((j) => hexKey(j.anchor) === hexKey(from))) {
-      return {
-        ok: false,
-        reason: 'That one bridges the corner where the plates meet, so it stays there. It can be removed.',
-      };
-    }
+    const multi = plan.junctions.find((j) => hexKey(j.anchor) === hexKey(from));
+    if (multi !== undefined) return this.moveMultiFixing(plan, multi, to, label);
     const before = this.current;
     const taken = this.removeFixing(from, label);
     if (!taken.ok) return taken;
@@ -786,6 +783,72 @@ export class Store {
     this.past.pop();
     this.label = label;
     this.emit();
+    return { ok: true };
+  }
+
+  /**
+   * Move a two- or four-cell fixing (D125). Since every fixing the planner
+   * places is one of these where it fits, refusing to move them would take
+   * away the one edit people actually make. The exception stays the exception:
+   * a four-cell insert tying three or four PLATES together at their corner is
+   * there for that corner, and it can be removed but not moved.
+   *
+   * It lands with `to` as its anchor, in its own turn if that fits and the
+   * nearest turn that does otherwise — on plates, and in no hole another
+   * fixing is already in. One undo step, like a single fixing's move.
+   */
+  private moveMultiFixing(
+    plan: FixingPlan,
+    multi: FixingPlan['junctions'][number],
+    to: Hex,
+    label: string,
+  ): DropResult {
+    const key = hexKey(multi.anchor);
+    if (multi.panelIds.length >= 3 && !plan.manual.has(key)) {
+      return {
+        ok: false,
+        reason: 'That one holds the corner where the plates meet, so it stays there. It can be removed.',
+      };
+    }
+    const footprint = multiFootprint(multi.partId);
+    if (footprint === undefined) return { ok: false, reason: 'That fixing cannot be moved.' };
+    const doc = this.current.doc;
+    const onPlate = new Set(doc.panels.flatMap((p) => placedPanelCells(p)).map(hexKey));
+    const mine = new Set(multi.cells.map(hexKey));
+    const taken = new Set<string>();
+    for (const c of plan.cells) taken.add(hexKey(c));
+    for (const j of plan.junctions) {
+      if (j === multi) continue;
+      for (const c of j.cells) taken.add(hexKey(c));
+    }
+    const plugged = this.plugIndex();
+    let turn: Rotation | null = null;
+    for (let i = 0; i < 6 && turn === null; i++) {
+      const rot = ((multi.rotation + i) % 6) as Rotation;
+      const cells = placeFootprint(footprint, to, rot).map(hexKey);
+      if (cells.every((k) => onPlate.has(k) && !taken.has(k) && (mine.has(k) || !plugged.has(k)))) {
+        turn = rot;
+      }
+    }
+    if (turn === null) {
+      return {
+        ok: false,
+        reason: 'There is no room for that fixing there: it needs free cells on a panel.',
+        blockedCells: [to],
+      };
+    }
+    const edits = doc.fixingEdits;
+    const placed = (edits?.placed ?? []).filter((f) => hexKey(f.at) !== key);
+    placed.push({ partId: multi.partId, at: { q: to.q, r: to.r }, rotation: turn });
+    // The planner's own goes on the removed list; one placed by hand is simply
+    // replaced, so a fixing moved twice does not leave a trail of removals.
+    const removed = plan.manual.has(key)
+      ? (edits?.removed ?? [])
+      : [...(edits?.removed ?? []), { q: multi.anchor.q, r: multi.anchor.r }];
+    this.commit(label, {
+      doc: withFixingEdits(doc, { ...edits, removed, placed }),
+      selection: this.current.selection,
+    });
     return { ok: true };
   }
 
@@ -1263,7 +1326,8 @@ function withFixingEdits(doc: LayoutDoc, edits: FixingEdits): LayoutDoc {
   const next: FixingEdits = {};
   if (edits.removed && edits.removed.length > 0) next.removed = edits.removed;
   if (edits.added && edits.added.length > 0) next.added = edits.added;
-  if (next.removed === undefined && next.added === undefined) {
+  if (edits.placed && edits.placed.length > 0) next.placed = edits.placed;
+  if (next.removed === undefined && next.added === undefined && next.placed === undefined) {
     const { fixingEdits: _drop, ...rest } = doc;
     return rest as LayoutDoc;
   }

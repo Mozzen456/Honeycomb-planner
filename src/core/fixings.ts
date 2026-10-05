@@ -118,10 +118,35 @@ export const JUNCTION_FOOTPRINT: readonly Hex[] = [
   { q: 0, r: 0 }, { q: 1, r: -1 }, { q: 1, r: 0 }, { q: 2, r: -1 },
 ];
 
-/** A fixing that straddles a seam, holding several plates at once. */
+/**
+ * The two-cell countersunk fixing, used round the OUTSIDE of the wall (D125).
+ *
+ * The four-cell one needs a diamond of whole cells; along the wall's outer
+ * rows, where the border has cut the last ring to half cells, it often cannot
+ * have one, and a two-cell part still spreads the load over two hexagons where
+ * a single-cell fixing takes it on one. Footprint copied from the measured
+ * catalogue entry and held to it by `tests/fixings.test.ts`, like the junction's.
+ */
+export const EDGE_FIXING_ID = 'hexagon-countersung-and-hole';
+export const EDGE_FOOTPRINT: readonly Hex[] = [{ q: 0, r: 0 }, { q: 0, r: 1 }];
+
+/** The footprint of a multi-cell wall fixing, by part id; undefined for any other part. */
+export function multiFootprint(partId: string): readonly Hex[] | undefined {
+  if (partId === JUNCTION_FIXING_ID) return JUNCTION_FOOTPRINT;
+  if (partId === EDGE_FIXING_ID) return EDGE_FOOTPRINT;
+  return undefined;
+}
+
+/**
+ * A multi-cell wall fixing: the four-cell insert, or the two-cell one round
+ * the edge. Called a junction because the four-cell part was first used only
+ * where three or four plates meet; since D125 it is used wherever it fits.
+ */
 export interface JunctionFixing {
+  /** Which fixing this is — `JUNCTION_FIXING_ID` or `EDGE_FIXING_ID`. */
+  partId: string;
   cells: Hex[];
-  /** The panels it ties together — three or four, or it would not be one. */
+  /** The panels it ties together — one, where it sits inside a plate. */
   panelIds: string[];
   /**
    * Where and how it sits, so the 3D view can draw the real part rather than a
@@ -269,42 +294,93 @@ export function planFixings(
    * three-plate one. Still greedy within a pass — an exact cover is a set-packing
    * problem and not worth it here — but greedy on the right thing.
    */
+  /*
+   * Only a cell within two steps of ANOTHER plate's cell can anchor a fixing
+   * that spans three plates — the footprint reaches two cells from its anchor —
+   * so the search starts from those and not from every cell on the wall. Same
+   * anchors in the same order, so the same answer; most of a plate is interior.
+   */
+  // The same ownership keyed by NUMBER for the hot loops below: a string key
+  // per lookup was most of this pass's time on a big wall.
+  const num = (q: number, r: number): number => q * 20_000_003 + r;
+  const ownerAt = new Map<number, string>();
+  for (const { id, cells } of byPanel) for (const c of cells) ownerAt.set(num(c.q, c.r), id);
+  const nearSeam = (id: string, c: Hex): boolean => {
+    for (let dq = -2; dq <= 2; dq++) {
+      for (let dr = Math.max(-2, -dq - 2); dr <= Math.min(2, -dq + 2); dr++) {
+        const other = ownerAt.get(num(c.q + dq, c.r + dr));
+        if (other !== undefined && other !== id) return true;
+      }
+    }
+    return false;
+  };
+  const seamAnchors = byPanel.map(({ id, cells }) => cells.filter((c) => nearSeam(id, c)));
+
+  /*
+   * Every placement that spans three or more plates, worked out ONCE, in the
+   * order the passes below visit them — anchor by anchor, turn by turn. The two
+   * passes used to rebuild every placement each, and nearly all of them span
+   * one or two plates and are no use to either.
+   */
+  interface Candidate { anchor: Hex; rot: Rotation; placed: Hex[]; keys: string[]; spans: number }
+  const candidates: Candidate[][] = [];
+  // The six turns of the footprint, rotated once — `placeFootprint` per
+  // placement re-rotated the same four cells a hundred thousand times.
+  const turned = [0, 1, 2, 3, 4, 5].map((rot) => placeFootprint(JUNCTION_FOOTPRINT, { q: 0, r: 0 }, rot as Rotation));
+  for (const cells of seamAnchors) {
+    for (const anchor of cells) {
+      const mine: Candidate[] = [];
+      for (let rot = 0; rot < 6; rot++) {
+        const shape = turned[rot]!;
+        const spans = new Set<string>();
+        let onPlates = true;
+        for (const c of shape) {
+          const o = ownerAt.get(num(c.q + anchor.q, c.r + anchor.r));
+          if (o === undefined) { onPlates = false; break; }
+          spans.add(o);
+        }
+        if (!onPlates || spans.size < 3) continue;
+        const placed = shape.map((c) => ({ q: c.q + anchor.q, r: c.r + anchor.r }));
+        mine.push({ anchor, rot: rot as Rotation, placed, keys: placed.map(hexKey), spans: spans.size });
+      }
+      if (mine.length > 0) candidates.push(mine);
+    }
+  }
+
   for (const want of [4, 3]) {
-    for (const { cells } of byPanel) {
-      for (const anchor of cells) {
-        let taken = false;
-        for (let rot = 0; rot < 6 && !taken; rot++) {
-          const placed = placeFootprint(JUNCTION_FOOTPRINT, anchor, rot as Rotation);
-          const keys = placed.map(hexKey);
-          /*
-           * Every cell must be on a panel, free, and not already spoken for —
-           * where "free" means free of anything that is not plugged INTO this
-           * fixing. A part mounting through a plain socket may sit on one of the
-           * three socket cells; the fourth takes the wall screw, and a part over
-           * THAT is in the way of a screwdriver whatever it mounts with.
-           */
+    for (const mine of candidates) {
+      for (const { anchor, rot, placed, keys, spans } of mine) {
+        // Two plates is an ordinary seam, which the interlocking edge already
+        // handles; this pass wants exactly `want`.
+        if (spans !== want) continue;
+        /*
+         * Every cell must be on a panel, free, and not already spoken for —
+         * where "free" means free of anything that is not plugged INTO this
+         * fixing. A part mounting through a plain socket may sit on one of the
+         * three socket cells; the fourth takes the wall screw, and a part over
+         * THAT is in the way of a screwdriver whatever it mounts with.
+         */
+        if (keys.some((k) => usedByJunction.has(k))) continue;
+        if (avoid.size > 0) {
           const socketKeys = new Set(
-            placeFootprint(shared.junctionSockets, anchor, rot as Rotation).map(hexKey),
+            placeFootprint(shared.junctionSockets, anchor, rot).map(hexKey),
           );
           const blocked = (k: string): boolean =>
             avoid.has(k) && !(shared.cells.has(k) && socketKeys.has(k));
-          if (keys.some((k) => !owner.has(k) || blocked(k) || usedByJunction.has(k))) continue;
-          const panels = new Set(keys.map((k) => owner.get(k)!));
-          // Two plates is an ordinary seam, which the interlocking edge already
-          // handles; this pass wants exactly `want`.
-          if (panels.size !== want) continue;
-          junctions.push({
-            cells: placed,
-            panelIds: [...panels].sort(),
-            anchor,
-            rotation: rot as Rotation,
-          });
-          for (const k of keys) {
-            usedByJunction.add(k);
-            chosen.set(k, owner.get(k)!);
-          }
-          taken = true;
+          if (keys.some(blocked)) continue;
         }
+        junctions.push({
+          partId: JUNCTION_FIXING_ID,
+          cells: placed,
+          panelIds: [...new Set(keys.map((k) => owner.get(k)!))].sort(),
+          anchor,
+          rotation: rot,
+        });
+        for (const k of keys) {
+          usedByJunction.add(k);
+          chosen.set(k, owner.get(k)!);
+        }
+        break; // one per anchor per pass, as before
       }
     }
   }
@@ -316,6 +392,104 @@ export function planFixings(
       if (avoid.has(hexKey(c)) || usedByJunction.has(hexKey(c))) continue;
       const p = hexToMm(c);
       all.push({ cell: c, x: p.x, y: p.y, panelId: id });
+    }
+  }
+
+  /*
+   * The cells bucketed by position, so finding the ones near a grid point
+   * looks at a few buckets instead of every cell on the wall. Without it the
+   * plan is (grid points × cells): ~8 000 × 800 000 on a 20 m wall of small
+   * plates, which is minutes, and the parts list replans on every edit.
+   */
+  const bucketMm = spacing / 2;
+  const buckets = new Map<string, (typeof all)[number][]>();
+  for (const a of all) {
+    const k = `${Math.floor(a.x / bucketMm)},${Math.floor(a.y / bucketMm)}`;
+    const list = buckets.get(k);
+    if (list) list.push(a);
+    else buckets.set(k, [a]);
+  }
+  const within = (gx: number, gy: number, radius: number): (typeof all)[number][] => {
+    const out: (typeof all)[number][] = [];
+    const span = Math.ceil(radius / bucketMm);
+    const bx = Math.floor(gx / bucketMm), by = Math.floor(gy / bucketMm);
+    for (let i = -span; i <= span; i++) {
+      for (let j = -span; j <= span; j++) {
+        const list = buckets.get(`${bx + i},${by + j}`);
+        if (list) for (const a of list) out.push(a);
+      }
+    }
+    return out;
+  };
+
+  /**
+   * The placement of `footprint` nearest a grid point, on free cells.
+   *
+   * Every cell must be on a plate, free and not already spoken for — the same
+   * rules as the seam pass, sockets included. Searched from the cells nearest
+   * the point outwards, and scored by where the PART's middle lands, so the
+   * fixing sits on the grid rather than merely touching it.
+   */
+  const placeNear = (
+    footprint: readonly Hex[],
+    sockets: readonly Hex[],
+    partId: string,
+    gx: number,
+    gy: number,
+  ): JunctionFixing | null => {
+    const reach = (spacing * 0.5) ** 2;
+    const near = within(gx, gy, spacing * 0.5)
+      .map((a) => ({ a, d: (a.x - gx) ** 2 + (a.y - gy) ** 2 }))
+      .filter(({ a, d }) => d <= reach && !chosen.has(hexKey(a.cell)))
+      .sort((u, v) => u.d - v.d || u.a.cell.q - v.a.cell.q || u.a.cell.r - v.a.cell.r)
+      .slice(0, 24);
+    let best: JunctionFixing | null = null;
+    let bestD = Infinity;
+    for (const { a } of near) {
+      for (let rot = 0; rot < 6; rot++) {
+        const placed = placeFootprint(footprint, a.cell, rot as Rotation);
+        const keys = placed.map(hexKey);
+        const socketKeys = new Set(placeFootprint(sockets, a.cell, rot as Rotation).map(hexKey));
+        const blocked = (k: string): boolean =>
+          avoid.has(k) && !(shared.cells.has(k) && socketKeys.has(k));
+        if (keys.some((k) => !owner.has(k) || blocked(k) || usedByJunction.has(k) || chosen.has(k))) {
+          continue;
+        }
+        let cx = 0, cy = 0;
+        for (const c of placed) {
+          const p = hexToMm(c);
+          cx += p.x;
+          cy += p.y;
+        }
+        const d = (cx / placed.length - gx) ** 2 + (cy / placed.length - gy) ** 2;
+        if (d < bestD - 1e-9) {
+          bestD = d;
+          best = {
+            partId,
+            cells: placed,
+            panelIds: [...new Set(keys.map((k) => owner.get(k)!))].sort(),
+            anchor: a.cell,
+            rotation: rot as Rotation,
+          };
+        }
+      }
+    }
+    return best;
+  };
+
+  // Only the SEAM junctions stand in for grid points. A fixing the grid itself
+  // placed as a multi-cell part (D125) must not, or on a small wall the next
+  // grid point is "covered" by its neighbour and the plate loses a fixing.
+  const seamJunctions = junctions.slice();
+  // ...bucketed like the cells below, for the same reason.
+  const seamAt = new Map<string, { x: number; y: number }[]>();
+  for (const j of seamJunctions) {
+    for (const c of j.cells) {
+      const p = hexToMm(c);
+      const k = `${Math.floor(p.x / (spacing / 2))},${Math.floor(p.y / (spacing / 2))}`;
+      const list = seamAt.get(k);
+      if (list) list.push(p);
+      else seamAt.set(k, [p]);
     }
   }
 
@@ -332,18 +506,41 @@ export function planFixings(
       // inserts on top of 74 single ones and asked for 128 holes in a wall that
       // needs about 70.
       let covered = false;
-      for (const j2 of junctions) {
-        for (const c of j2.cells) {
-          const p2 = hexToMm(c);
-          if ((p2.x - gx) ** 2 + (p2.y - gy) ** 2 < (spacing * 0.7) ** 2) covered = true;
-          if (covered) break;
+      const cover = spacing * 0.7;
+      const span = Math.ceil(cover / bucketMm);
+      const bx = Math.floor(gx / bucketMm), by = Math.floor(gy / bucketMm);
+      for (let di = -span; di <= span && !covered; di++) {
+        for (let dj = -span; dj <= span && !covered; dj++) {
+          for (const p2 of seamAt.get(`${bx + di},${by + dj}`) ?? []) {
+            if ((p2.x - gx) ** 2 + (p2.y - gy) ** 2 < cover ** 2) { covered = true; break; }
+          }
         }
-        if (covered) break;
       }
       if (covered) continue;
+      /*
+       * A multi-cell fixing where one fits (D125): the four-cell insert inside
+       * the wall, the two-cell one along its outside rows, where the four-cell
+       * diamond so often has no room. Either holds the sheet over more than one
+       * hexagon, and the four-cell one leaves three sockets to hang things on.
+       * A single cell only where neither fits.
+       */
+      const onEdge = i === 0 || i === cols || j === 0 || j === rows;
+      const multi = onEdge
+        ? placeNear(EDGE_FOOTPRINT, [], EDGE_FIXING_ID, gx, gy)
+        : placeNear(JUNCTION_FOOTPRINT, shared.junctionSockets, JUNCTION_FIXING_ID, gx, gy)
+          ?? placeNear(EDGE_FOOTPRINT, [], EDGE_FIXING_ID, gx, gy);
+      if (multi !== null) {
+        junctions.push(multi);
+        for (const c of multi.cells) {
+          const k = hexKey(c);
+          usedByJunction.add(k);
+          chosen.set(k, owner.get(k)!);
+        }
+        continue;
+      }
       let best: (typeof all)[number] | null = null;
       let bestD = Infinity;
-      for (const candidate of all) {
+      for (const candidate of within(gx, gy, spacing)) {
         if (chosen.has(hexKey(candidate.cell))) continue;
         const d = (candidate.x - gx) ** 2 + (candidate.y - gy) ** 2;
         if (d < bestD) {
@@ -441,7 +638,8 @@ function applyFixingEdits(
 ): FixingPlan {
   const removed = new Set((edits?.removed ?? []).map(hexKey));
   const added = edits?.added ?? [];
-  if (removed.size === 0 && added.length === 0) return plan;
+  const placedByHand = edits?.placed ?? [];
+  if (removed.size === 0 && added.length === 0 && placedByHand.length === 0) return plan;
 
   const cells: Hex[] = [];
   const panelIds: string[] = [];
@@ -476,6 +674,25 @@ function applyFixingEdits(
     manual.add(key);
     cells.push({ q: cell.q, r: cell.r });
     panelIds.push(panelId);
+  }
+
+  // Multi-cell fixings a person moved (D125): the same part at the place they
+  // dropped it, on the same rules — on a plate, and in no hole already fixed.
+  for (const f of placedByHand) {
+    const footprint = multiFootprint(f.partId);
+    if (footprint === undefined) continue;
+    const placed = placeFootprint(footprint, f.at, f.rotation);
+    const keys = placed.map(hexKey);
+    if (keys.some((k) => !owner.has(k) || taken.has(k))) continue;
+    for (const k of keys) taken.add(k);
+    manual.add(hexKey(f.at));
+    junctions.push({
+      partId: f.partId,
+      cells: placed,
+      panelIds: [...new Set(keys.map((k) => owner.get(k)!))].sort(),
+      anchor: { q: f.at.q, r: f.at.r },
+      rotation: f.rotation,
+    });
   }
 
   // Reading order down the wall, exactly as the planner leaves it, so a

@@ -363,6 +363,40 @@ export function fixingPlanFor(
   catalog: Catalog,
   spacingMm?: number,
 ): FixingPlan {
+  /*
+   * Cached on the document and the catalogue, both immutable. One edit used to
+   * plan the fixings three or four times — the parts list twice (its own
+   * count and `validate`), the 3D view once more, the store again for a
+   * click — at ~100 ms a time on an ordinary wall, which is most of why a
+   * dragged zone stuttered.
+   */
+  if (doc === undefined) return planFixingPlan(doc, catalog, spacingMm);
+  let byCatalog = fixingPlanCache.get(doc);
+  if (byCatalog === undefined) {
+    byCatalog = new WeakMap();
+    fixingPlanCache.set(doc, byCatalog);
+  }
+  let bySpacing = byCatalog.get(catalog);
+  if (bySpacing === undefined) {
+    bySpacing = new Map();
+    byCatalog.set(catalog, bySpacing);
+  }
+  const key = spacingMm ?? -1;
+  let plan = bySpacing.get(key);
+  if (plan === undefined) {
+    plan = planFixingPlan(doc, catalog, spacingMm);
+    bySpacing.set(key, plan);
+  }
+  return plan;
+}
+
+const fixingPlanCache = new WeakMap<LayoutDoc, WeakMap<Catalog, Map<number, FixingPlan>>>();
+
+function planFixingPlan(
+  doc: LayoutDoc | undefined,
+  catalog: Catalog,
+  spacingMm?: number,
+): FixingPlan {
   const index = partIndex(catalog);
   const avoid = new Set<string>();
   const shared = new Set<string>();
@@ -443,22 +477,22 @@ export function fasteningPlanFor(
     const provides = socketProvidesOf(index.get(item.partId));
     if (provides !== undefined) noteSocket(item, provides);
   }
-  const junctionPart = index.get(JUNCTION_FIXING_ID);
-  const junctionProvides = socketProvidesOf(junctionPart);
-  if (junctionPart !== undefined && junctionProvides !== undefined) {
-    for (const [n, junction] of fixings.junctions.entries()) {
-      // Through `itemSocketCells`, so a planned fixing and a placed one place
-      // their sockets by the same transform.
-      noteSocket(
-        {
-          id: `fixing/${n}`,
-          partId: JUNCTION_FIXING_ID,
-          at: junction.anchor,
-          rotation: junction.rotation,
-        },
-        junctionProvides,
-      );
-    }
+  for (const [n, junction] of fixings.junctions.entries()) {
+    // Each multi-cell fixing by its OWN part: the four-cell one has sockets
+    // that stand in for an insert, the two-cell edge fixing (D125) has none.
+    const provides = socketProvidesOf(index.get(junction.partId));
+    if (provides === undefined) continue;
+    // Through `itemSocketCells`, so a planned fixing and a placed one place
+    // their sockets by the same transform.
+    noteSocket(
+      {
+        id: `fixing/${n}`,
+        partId: junction.partId,
+        at: junction.anchor,
+        rotation: junction.rotation,
+      },
+      provides,
+    );
   }
 
   /**
@@ -983,8 +1017,9 @@ export function computeBom(doc: LayoutDoc, catalog: Catalog): Bom {
    * the wall. Four separate fixings, one per plate, fix each plate and leave
    * the join itself unsupported.
    */
-  if (fixings.junctions.length > 0 && index.has(JUNCTION_FIXING_ID)) {
-    bump(quantities, JUNCTION_FIXING_ID, fixings.junctions.length);
+  // ...and the two-cell one round the edge (D125): each counted as its own part.
+  for (const junction of fixings.junctions) {
+    if (index.has(junction.partId)) bump(quantities, junction.partId, 1);
   }
 
   // Bought hardware, from every part in the BOM — including the inserts that
@@ -1186,7 +1221,8 @@ export function computeBom(doc: LayoutDoc, catalog: Catalog): Bom {
     },
     fixings: {
       count: fixings.cells.length + fixings.junctions.length,
-      junctions: fixings.junctions.length,
+      junctions: fixings.junctions.filter((j) => j.partId === JUNCTION_FIXING_ID).length,
+      edgeFixings: fixings.junctions.filter((j) => j.partId !== JUNCTION_FIXING_ID).length,
       spacingMm: fixings.spacingMm,
       perSquareMetre: roundTo(fixings.perSquareMetre, 1),
       starvedPanelIds: fixings.starvedPanelIds,
