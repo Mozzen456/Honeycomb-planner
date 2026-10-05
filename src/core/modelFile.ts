@@ -34,8 +34,25 @@ export interface ParsedModel {
 /** Is this name one we offer to read? Used by the file inputs and the drop handler. */
 export const isModelFile = (name: string): boolean => /\.(stl|3mf)$/i.test(name);
 
-/** What the file inputs put in their `accept`, so the picker greys out the rest. */
-export const MODEL_ACCEPT = '.stl,.3mf,model/stl,model/3mf';
+/**
+ * What the file inputs put in their `accept`: NOTHING, deliberately.
+ *
+ * It was `.stl,.3mf,model/stl,model/3mf`, and on macOS that made a 3MF
+ * unpickable. A file dialog filters by the system's idea of a TYPE, and this
+ * Mac has no idea what a `.3mf` is — `mdls` on one reports
+ * `dyn.ah62d4rv4ge8xg5pg`, the placeholder macOS mints for an extension nothing
+ * has claimed. Neither MIME type is registered with the OS either. So the
+ * filter greyed out the very file somebody opened the dialog to choose, while
+ * the same file dropped onto the window worked perfectly — which is what "I can
+ * only drag it in" means.
+ *
+ * A filter that hides what you came for is worse than no filter, and it was
+ * never doing any real work: `isModelFile` checks the name and
+ * `parseModelFile` checks the BYTES, so a wrong pick already comes back as a
+ * sentence rather than as a broken part. Undefined rather than an empty string,
+ * because React omits the attribute for one and sets `accept=""` for the other.
+ */
+export const MODEL_ACCEPT: string | undefined = undefined;
 
 export function looksLikeZip(buffer: ArrayBuffer): boolean {
   if (buffer.byteLength < 4) return false;

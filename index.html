@@ -38,9 +38,48 @@
     <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="A honeycomb wall with several parts placed on it, under the Honeycomb Planner wordmark." />
     <meta name="twitter:card" content="summary_large_image" />
+    <!--
+      If the app throws and leaves #root empty, say so on the page with the
+      error, rather than leaving the browser's background — black in dark mode
+      — as the only symptom. Plain script, so it runs even when the bundle does
+      not.
+    -->
+    <script>
+      window.addEventListener('error', function (event) {
+        setTimeout(function () {
+          var root = document.getElementById('root');
+          if (!root || root.childElementCount > 0) return;
+          var box = document.createElement('div');
+          box.style.cssText = 'font: 16px/1.5 system-ui, sans-serif; color: CanvasText; background: Canvas; padding: 2rem; max-width: 40rem';
+          var title = document.createElement('p');
+          title.textContent = 'Honeycomb Planner could not start.';
+          title.style.fontWeight = 'bold';
+          var detail = document.createElement('pre');
+          detail.style.whiteSpace = 'pre-wrap';
+          detail.textContent = String((event.error && event.error.stack) || event.message || 'Unknown error');
+          box.append(title, detail);
+          root.append(box);
+        }, 0);
+      });
+    </script>
   </head>
   <body>
-    <div id="root"></div>
+    <!--
+      Shown only until the app replaces it. A page that cannot start used to be
+      an empty body in the browser's own background — black in dark mode — with
+      the reason in the console. System colours, because no stylesheet has
+      loaded if this is still on screen.
+    -->
+    <div id="root">
+      <div style="font: 16px/1.5 system-ui, sans-serif; color: CanvasText; background: Canvas; padding: 2rem; max-width: 40rem">
+        <p><strong>Honeycomb Planner is loading…</strong></p>
+        <p>If this message stays, the app could not start here. Open
+        <strong>Honeycomb-Planner.html</strong> (the single-file download), or the
+        <strong>index.html</strong> inside the unzipped web build — not the
+        <strong>index.html</strong> of the source code, which only runs under
+        <code>npm run dev</code>. Or use <a href="https://honeycombplanner.com/">honeycombplanner.com</a>.</p>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

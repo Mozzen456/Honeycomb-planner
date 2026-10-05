@@ -81,6 +81,49 @@ export function hasColors(colors: WallColors | undefined): boolean {
 }
 
 /**
+ * What a wall is printed in when nobody has said (D127): black plates, and
+ * orange for everything that goes on them — accessories, inserts and the wall
+ * fixings alike. Asked for directly, and the commonest two-colour build of
+ * this wall. A choice on the document, at any level, still wins; these are
+ * only the last level, where "as the theme draws it" used to be.
+ *
+ * Not pure #000: a plate drawn in true black loses its cell walls to the
+ * shading, and in the dark theme sits on a near-black background.
+ */
+export const DEFAULT_PANEL_COLOR = '#262626';
+export const DEFAULT_PART_COLOR = '#f07f1a';
+
+/**
+ * A chosen colour as it should be DRAWN on a given background: itself, unless
+ * the background is dark and the colour darker still, when it is carried toward
+ * white until it stands off by a fixed step. The default plate is near-black,
+ * and drawn literally on the dark theme the honeycomb disappears into the
+ * canvas. Only the drawing moves; the document, the parts list and the exports
+ * keep the colour that was chosen. `#rgb`, `#rrggbb` and `rgb()` are read;
+ * anything else is returned untouched.
+ */
+export function standOffColor(colour: string, background: string): string {
+  const c = parseRgb(colour);
+  const bg = parseRgb(background);
+  if (!c || !bg) return colour;
+  const lum = (v: number[]) => (0.2126 * v[0]! + 0.7152 * v[1]! + 0.0722 * v[2]!) / 255;
+  if (lum(bg) > 0.5) return colour;
+  const need = lum(bg) + 0.3;
+  if (lum(c) >= need) return colour;
+  let out = c;
+  for (let i = 0; i < 40 && lum(out) < need; i++) out = out.map((v) => v + (255 - v) * 0.05);
+  return '#' + out.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('');
+}
+
+function parseRgb(css: string): number[] | undefined {
+  const s = css.trim();
+  const hex = normaliseColor(s);
+  if (hex) return [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  const m = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/i.exec(s);
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : undefined;
+}
+
+/**
  * The colour of one placed item: itself, then its line, then the default for
  * everything that clips into the wall.
  */
@@ -88,8 +131,7 @@ export function colorOfItem(
   colors: WallColors | undefined,
   item: Pick<PlacedItem, 'id' | 'partId'>,
 ): string | undefined {
-  if (!colors) return undefined;
-  return colors.items?.[item.id] ?? colors.lines?.[item.partId] ?? colors.parts;
+  return colors?.items?.[item.id] ?? colors?.lines?.[item.partId] ?? colors?.parts ?? DEFAULT_PART_COLOR;
 }
 
 /**
@@ -105,8 +147,7 @@ export function colorOfPanel(
   colors: WallColors | undefined,
   lineKey: string | undefined,
 ): string | undefined {
-  if (!colors) return undefined;
-  return (lineKey !== undefined ? colors.lines?.[lineKey] : undefined) ?? colors.panels;
+  return (lineKey !== undefined ? colors?.lines?.[lineKey] : undefined) ?? colors?.panels ?? DEFAULT_PANEL_COLOR;
 }
 
 /**
@@ -118,8 +159,8 @@ export function colorOfLine(
   lineKey: string,
   isPanel: boolean,
 ): string | undefined {
-  if (!colors) return undefined;
-  return colors.lines?.[lineKey] ?? (isPanel ? colors.panels : colors.parts);
+  return colors?.lines?.[lineKey]
+    ?? (isPanel ? colors?.panels ?? DEFAULT_PANEL_COLOR : colors?.parts ?? DEFAULT_PART_COLOR);
 }
 
 /**

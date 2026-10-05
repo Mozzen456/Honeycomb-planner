@@ -20,7 +20,9 @@ import catalogJson from '../src/catalog/catalog.json';
 import overridesJson from '../src/catalog/overrides.json';
 import { computeBom, panelLineKeys } from '../src/core/bom';
 import {
+  DEFAULT_PANEL_COLOR, DEFAULT_PART_COLOR,
   colorOfItem, colorOfLine, colorOfPanel, colorsInUse, hasColors, normaliseColor, readColors,
+  standOffColor,
 } from '../src/core/colors';
 import { applyOverrides } from '../src/core/overrides';
 import { deserialize, serialize } from '../src/core/persist';
@@ -94,7 +96,7 @@ describe('the four levels, most specific first', () => {
     expect(colorOfItem(colors, item('i1', 'hook-to-empty'))).toBe('#ff0000');
     expect(colorOfItem(colors, item('i2', 'hook-to-empty'))).toBe('#00aa00');
     expect(colorOfItem(colors, item('i3', 'shelf-1'))).toBe('#111111');
-    expect(colorOfItem({}, item('i3', 'shelf-1'))).toBeUndefined();
+    expect(colorOfItem({}, item('i3', 'shelf-1'))).toBe(DEFAULT_PART_COLOR);
   });
 
   it('gives a plate its line before the panel default', () => {
@@ -102,21 +104,22 @@ describe('the four levels, most specific first', () => {
     expect(colorOfPanel(colors, 'wall-honeycomb-k1-211x201')).toBe('#ffffff');
     // A generated plate is keyed by its own line, not by the shipped part.
     expect(colorOfPanel({ lines: { 'custom/3x3||': '#abcdef' } }, 'custom/3x3||')).toBe('#abcdef');
-    expect(colorOfPanel({}, 'anything')).toBeUndefined();
+    expect(colorOfPanel({}, 'anything')).toBe(DEFAULT_PANEL_COLOR);
   });
 
   it('shows a line its own colour, or the default its KIND would fall back to', () => {
     expect(colorOfLine(colors, 'hook-to-empty', false)).toBe('#00aa00');
     expect(colorOfLine(colors, 'shelf-1', false)).toBe('#111111');   // parts default
     expect(colorOfLine(colors, 'wall-honeycomb-k1-211x201', true)).toBe('#ffffff'); // panels
-    expect(colorOfLine({}, 'shelf-1', false)).toBeUndefined();
+    expect(colorOfLine({}, 'shelf-1', false)).toBe(DEFAULT_PART_COLOR);
+    expect(colorOfLine({}, 'wall-honeycomb-part', true)).toBe(DEFAULT_PANEL_COLOR);
   });
 
-  it('treats "no colour" as an answer, never as black', () => {
-    // The absence of a decision. Nothing may fill it in — a swatch showing
-    // #000000 says "your plates are black", which is a claim nobody made.
-    expect(colorOfItem(undefined, item('i1', 'x'))).toBeUndefined();
-    expect(colorOfPanel(undefined, 'x')).toBeUndefined();
+  it('answers "no colour" with the defaults: black plates, orange parts (D127)', () => {
+    // No decision stays OUT of the document — `hasColors` is false — and the
+    // drawing falls back to the default rather than to the theme.
+    expect(colorOfItem(undefined, item('i1', 'x'))).toBe(DEFAULT_PART_COLOR);
+    expect(colorOfPanel(undefined, 'x')).toBe(DEFAULT_PANEL_COLOR);
     expect(hasColors(undefined)).toBe(false);
     expect(hasColors({})).toBe(false);
     expect(hasColors({ lines: {} })).toBe(false);
@@ -278,9 +281,13 @@ describe('the parts list says the same thing the wall does', () => {
     }
   });
 
-  it('leaves the colour off a line nobody has coloured', () => {
+  it('gives a line nobody has coloured the default of its kind', () => {
     const bom = computeBom(solvedDoc(), catalog);
-    for (const line of bom.printed) expect(line.color).toBeUndefined();
+    for (const line of bom.printed) {
+      const isPanel = catalog.parts.find((p) => p.id === line.partId)?.type === 'panel'
+        || line.partId.startsWith('custom/');
+      expect(line.color, line.partId).toBe(isPanel ? DEFAULT_PANEL_COLOR : DEFAULT_PART_COLOR);
+    }
   });
 
   it('lists the colours a build actually USES, and no others', () => {
@@ -313,10 +320,11 @@ describe('the parts list says the same thing the wall does', () => {
     expect(used).not.toContain('#dddddd');
   });
 
-  it('is empty for an uncoloured wall', () => {
+  it('is the two defaults for an uncoloured wall', () => {
     const doc = solvedDoc();
     const bom = computeBom(doc, catalog);
-    expect(colorsInUse(doc, [...bom.printed, ...bom.fasteners])).toEqual([]);
+    expect(colorsInUse(doc, [...bom.printed, ...bom.fasteners]).sort())
+      .toEqual([DEFAULT_PANEL_COLOR, DEFAULT_PART_COLOR].sort());
   });
 });
 
@@ -375,5 +383,28 @@ describe('colours round-trip', () => {
     const base = solvedDoc();
     const result = deserialize(JSON.stringify({ ...base, colors: { panels: 'red' } }));
     expect(result.doc!.colors).toBeUndefined();
+  });
+});
+
+describe('a colour as drawn on the canvas (D127)', () => {
+  const lum = (hex: string) => {
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+    return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+  };
+
+  it('lifts a dark plate off a dark background, and only there', () => {
+    const lifted = standOffColor(DEFAULT_PANEL_COLOR, '#101418');
+    expect(lum(lifted)).toBeGreaterThan(lum('#101418') + 0.29);
+    // Still a grey: the lift is toward white, it never invents a hue.
+    expect(new Set([lifted.slice(1, 3), lifted.slice(3, 5), lifted.slice(5, 7)]).size).toBe(1);
+    // The token layer writes rgb(); read the same.
+    expect(standOffColor(DEFAULT_PANEL_COLOR, 'rgb(16 20 24)')).toBe(lifted);
+  });
+
+  it('leaves everything else exactly as chosen', () => {
+    expect(standOffColor(DEFAULT_PANEL_COLOR, '#f4f5f6')).toBe(DEFAULT_PANEL_COLOR);
+    expect(standOffColor(DEFAULT_PART_COLOR, '#101418')).toBe(DEFAULT_PART_COLOR);
+    expect(standOffColor('#ffffff', '#101418')).toBe('#ffffff');
+    expect(standOffColor('not a colour', '#101418')).toBe('not a colour');
   });
 });

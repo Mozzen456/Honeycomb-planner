@@ -24,11 +24,14 @@ import {
   DEFAULT_BORDER_MM,
   hasFrame,
   NO_FRAME,
+  heldFragments,
+  plateGeometryKey,
   type BorderSpec,
   type FrameSide,
 } from './honeycomb';
-import { hexKey, hexToMm, panelCells, placedPanelCells } from './hex';
-import { obstacleRects } from './obstacles';
+import { hexKey, hexToMm, keyToHex, panelCells, placedPanelCells } from './hex';
+import { cellRemainderBox, obstacleRegions, obstructedCells } from './obstacles';
+import { bedFor, MARGIN_X, MARGIN_Y, PITCH } from './constants';
 import type { Hex, LayoutDoc, Obstacle, PlacedPanel, WallFrame } from './types';
 
 export const NO_WALL_FRAME: WallFrame = {
@@ -72,7 +75,32 @@ export function assemblyBlockCells(panels: readonly PlacedPanel[]): Hex[] {
  *
  * Built by every border question, so it is built in one place.
  */
-function assemblyIndex(panels: readonly PlacedPanel[], frame?: WallFrame) {
+function assemblyIndex(panels: readonly PlacedPanel[], frame?: WallFrame): AssemblyIndex {
+  /*
+   * Memoised on the panels and frame by identity. Every per-plate question —
+   * its border spec, its edge letters, its geometry key — asks for the whole
+   * assembly, so unmemoised a 53-plate wall indexed the whole wall 53 times per
+   * question: a quarter of a second, on every edit that re-cut a plate.
+   */
+  const hit = indexCache.get(panels);
+  if (hit && hit.frame === frame) return hit.index;
+  const index = buildAssemblyIndex(panels, frame);
+  indexCache.set(panels, { frame, index });
+  return index;
+}
+
+interface AssemblyIndex {
+  occupied: ReadonlySet<string>;
+  ownerOf: ReadonlyMap<string, string>;
+  bounds: { minX: number; maxX: number; minY: number; maxY: number };
+}
+
+const indexCache = new WeakMap<
+  readonly PlacedPanel[],
+  { frame: WallFrame | undefined; index: AssemblyIndex }
+>();
+
+function buildAssemblyIndex(panels: readonly PlacedPanel[], frame?: WallFrame): AssemblyIndex {
   const occupied = new Set<string>();
   const ownerOf = new Map<string, string>();
   /*
@@ -141,7 +169,7 @@ function assemblyIndex(panels: readonly PlacedPanel[], frame?: WallFrame) {
  */
 function ownerOfPosition(
   p: Hex,
-  index: ReturnType<typeof assemblyIndex>,
+  index: AssemblyIndex,
 ): string | undefined {
   const votes = new Map<string, { n: number; best: string }>();
   const vote = (k: string): void => {
@@ -235,7 +263,42 @@ function ownedBorder(
       }
     }
   }
+  /*
+   * ...and the sides its own cells are CUT on (D124). The walk above only sees
+   * an edge where it finds an empty position past it, and the cut ring is
+   * `occupied`, so a plate in the outermost column reaches no empty position
+   * on that side at all: every left- and right-hand plate but the corners came
+   * out with no edge, and the parts list called them "generated" with no
+   * reason. The cut is the edge, so it says which side it is on.
+   */
+  const eps = 1e-6;
+  for (const c of panelCells(panel.origin, panel.columns, panel.rows)) {
+    const m = hexToMm(c);
+    const b = index.bounds;
+    if (frame.left && m.x <= b.minX + eps) sides.add('left');
+    if (frame.right && m.x >= b.maxX - eps) sides.add('right');
+    if (frame.bottom && m.y <= b.minY + eps) sides.add('bottom');
+    if (frame.top && m.y >= b.maxY - eps) sides.add('top');
+  }
   return { sides: [...sides], holes };
+}
+
+/**
+ * The plate a cell belongs to, for pointing at one: its surviving cells, plus
+ * the ring a border cut, which is printed but has left `placedPanelCells`
+ * through `omit` (D87). A cell a ZONE ate is nobody's — that one is a hole.
+ * The one rule the 3D hover, the 3D click and the plan's click all ask.
+ */
+export function plateAt(
+  panels: readonly PlacedPanel[],
+  borderCut: ReadonlySet<string>,
+  cell: Hex,
+): PlacedPanel | undefined {
+  const onBorder = borderCut.has(hexKey(cell));
+  return panels.find((p) =>
+    placedPanelCells(p).some((c) => c.q === cell.q && c.r === cell.r)
+    || (onBorder && panelCells(p.origin, p.columns, p.rows)
+      .some((c) => c.q === cell.q && c.r === cell.r)));
 }
 
 /**
@@ -314,7 +377,9 @@ export function borderSpecFor(
   // against exactly the rectangles the cells were cut against. An L clipped
   // against its bounding box would wall off the inside of the L, which is
   // honeycomb the user kept.
-  const keepClear = (obstacles ?? []).flatMap(obstacleRects);
+  // ...and a drawn outline as its convex pieces, edges and all, so the plate is
+  // cut along the line that was drawn rather than stepped round it (D118).
+  const keepClear = (obstacles ?? []).flatMap(obstacleRegions);
   return {
     thicknessMm: frame.thicknessMm > 0 ? frame.thicknessMm : DEFAULT_BORDER_MM,
     occupied: index.occupied,
@@ -337,6 +402,10 @@ export function panelModelSpec(
   panels: readonly PlacedPanel[],
   frame: WallFrame | undefined,
   obstacles?: readonly Obstacle[],
+  /** The plates a zone set aside (`LayoutDoc.covered`), for their stranded edge. */
+  covered?: readonly PlacedPanel[],
+  /** The printer bed, which a plate taking a stranded cell must still fit (D119). */
+  bed?: PlateBed,
 ): { cells: Hex[]; clipped: Hex[]; border: BorderSpec | undefined } {
   const cells = placedPanelCells(panel);
   /*
@@ -354,9 +423,37 @@ export function panelModelSpec(
    * `cells` is unchanged, so everything that counts cells — the parts list, the
    * file name, the fixing plan — sees exactly what it saw before.
    */
+  const base = baseModelSpec(panel, panels, frame, obstacles, covered, bed);
+  /*
+   * ...less the fragments another plate holds, plus the ones it holds of its
+   * neighbours' (D120). A cut cell that comes out loose in its own plate but
+   * flush against another plate's whole cell is printed BY that plate, where it
+   * is joined on.
+   */
+  const moved = heldTransfers(panels, frame, obstacles, covered, bed).get(panel.id);
+  if (moved === undefined) return { cells, clipped: base.clipped, border: base.border };
+  return {
+    cells,
+    clipped: [...base.clipped.filter((c) => !moved.give.has(hexKey(c))), ...moved.take],
+    border: base.border,
+  };
+}
+
+/** `panelModelSpec` before any fragment changes hands. */
+function baseModelSpec(
+  panel: PlacedPanel,
+  panels: readonly PlacedPanel[],
+  frame: WallFrame | undefined,
+  obstacles: readonly Obstacle[] | undefined,
+  covered: readonly PlacedPanel[] | undefined,
+  bed: PlateBed | undefined,
+): { cells: Hex[]; clipped: Hex[]; border: BorderSpec | undefined } {
+  const cells = placedPanelCells(panel);
   const kept = new Set(cells.map(hexKey));
   const clipped = panelCells(panel.origin, panel.columns, panel.rows)
     .filter((c) => !kept.has(hexKey(c)));
+  // ...and the stranded edge of any plate the zone set aside next to it (D119).
+  if (frameIsOn(frame)) clipped.push(...(adoptedCells(panels, covered, obstacles, bed).get(panel.id) ?? []));
   return {
     cells,
     clipped,
@@ -364,9 +461,381 @@ export function panelModelSpec(
   };
 }
 
+/**
+ * Which cut cells change plates, and between which (D120).
+ *
+ * A cut can leave a fragment that is joined to nothing in its own plate yet
+ * lies flush along a whole cell of the next: the top row of a plate a zone has
+ * eaten from below, or the arm of a cell at a concave corner. Printed where it
+ * was planned it is a separate fleck in that plate's file — loose in the wall,
+ * held by nothing. The generator names them (`heldFragments`); here each is
+ * handed to the plate that prints the cell it is flush against, if that plate
+ * still fits the bed with it (the same check as D119), and otherwise left
+ * where it was.
+ *
+ * Memoised like everything else here: one pass over the plates a zone or the
+ * edge actually cuts, per change of the wall.
+ */
+function heldTransfers(
+  panels: readonly PlacedPanel[],
+  frame: WallFrame | undefined,
+  obstacles: readonly Obstacle[] | undefined,
+  covered: readonly PlacedPanel[] | undefined,
+  bed: PlateBed | undefined,
+): ReadonlyMap<string, { give: Set<string>; take: Hex[] }> {
+  const out = new Map<string, { give: Set<string>; take: Hex[] }>();
+  if (!frameIsOn(frame) || !obstacles || obstacles.length === 0 || !bed) return out;
+  const hit = transferCache.get(panels);
+  if (hit && hit.frame === frame && hit.obstacles === obstacles && hit.covered === covered &&
+      hit.bedW === bed.width && hit.bedD === bed.depth) return hit.moves;
+
+  const blockOwner = new Map<string, string>();
+  for (const p of panels) {
+    for (const c of panelCells(p.origin, p.columns, p.rows)) blockOwner.set(hexKey(c), p.id);
+  }
+  const fit = footprints(panels, covered, obstacles, bed);
+  const entry = (id: string) => {
+    let e = out.get(id);
+    if (!e) { e = { give: new Set(), take: [] }; out.set(id, e); }
+    return e;
+  };
+  for (const p of panels) {
+    /*
+     * Only a plate a ZONE cuts can leave a held fragment — the edge cuts a
+     * straight run and leaves its half cells joined along it — so the plates
+     * round the rim, which all have cut cells once a border is on, are not
+     * generated here for nothing.
+     */
+    const block = panelCells(p.origin, p.columns, p.rows);
+    if (obstructedCells(obstacles, block).size === 0 &&
+        !(adoptedCells(panels, covered, obstacles, bed).get(p.id)?.length)) continue;
+    const spec = baseModelSpec(p, panels, frame, obstacles, covered, bed);
+    if (spec.clipped.length === 0 || spec.cells.length === 0) continue;
+    let fragments;
+    try {
+      fragments = heldFragments(spec);
+    } catch {
+      continue;
+    }
+    for (const f of fragments) {
+      const holder = blockOwner.get(f.holder);
+      if (holder === undefined || holder === p.id) continue;
+      const hexes = f.cells.map(keyToHex);
+      if (!fit.takeAll(holder, hexes)) continue;
+      for (const k of f.cells) entry(p.id).give.add(k);
+      entry(holder).take.push(...hexes);
+    }
+  }
+  transferCache.set(panels, {
+    frame, obstacles, covered, bedW: bed.width, bedD: bed.depth, moves: out,
+  });
+  return out;
+}
+
+const transferCache = new WeakMap<
+  readonly PlacedPanel[],
+  {
+    frame: WallFrame | undefined;
+    obstacles: readonly Obstacle[] | undefined;
+    covered: readonly PlacedPanel[] | undefined;
+    bedW: number;
+    bedD: number;
+    moves: ReadonlyMap<string, { give: Set<string>; take: Hex[] }>;
+  }
+>();
+
 /** The same thing, straight from a document. */
 export function panelModelSpecFor(panel: PlacedPanel, doc: LayoutDoc) {
-  return panelModelSpec(panel, doc.panels, doc.frame, doc.obstacles);
+  return panelModelSpec(panel, doc.panels, doc.frame, doc.obstacles, doc.covered, bedOfDoc(doc));
+}
+
+/** Only the size of a bed matters here. */
+export interface PlateBed {
+  width: number;
+  depth: number;
+}
+
+/** The document's printer bed, or undefined for one this build does not know. */
+export function bedOfDoc(doc: Pick<LayoutDoc, 'bedId' | 'customBed'>): PlateBed | undefined {
+  return bedFor(doc.bedId, doc.customBed);
+}
+
+/**
+ * The cut cells a SET-ASIDE plate leaves stranded, each handed to the standing
+ * plate it touches most (D119).
+ *
+ * A plate whose every cell a zone touches is set aside whole (D117) — nothing
+ * of it can take a part. But "touches" is not "covers": along a sloping zone a
+ * plate's bottom row can sit mostly below the line, and setting the plate aside
+ * took that strip with it. Measured on a 2400 × 1200 wall under a roof sloping
+ * 450 mm: the cut edge, which should run straight along the line, fell short of
+ * it by up to 14.6 mm wherever such a plate sat — a notch one cell deep.
+ *
+ * Every cell of such a plate that a zone cuts, and that no standing plate
+ * holds, goes to the standing plate whose block holds the most of its six
+ * neighbours (ties to the smallest neighbouring cell, as with the edge, D60).
+ * It joins that plate's `clipped` list, so the generator cuts it exactly as it
+ * cuts that plate's own: whatever is outside the zone is printed, and a cell
+ * with nothing worth printing is dropped there, by the one rule that decides it.
+ * A cell touching no standing plate stays stranded — printed on its own it
+ * would be a loose shard.
+ *
+ * Planner-side nothing changes: the cell is in no plate's `cells`, so nothing
+ * mounts in it, counts it or fixes into it, which is the D56 split again.
+ */
+export function adoptedCells(
+  panels: readonly PlacedPanel[],
+  covered: readonly PlacedPanel[] | undefined,
+  obstacles: readonly Obstacle[] | undefined,
+  /**
+   * The bed every plate has to fit. A plate takes a stranded cell only if its
+   * block grown by that cell still fits it, either way round; otherwise the next
+   * neighbour is asked, and failing that the cell stays stranded — a notch in
+   * the cut is a blemish, a plate that does not fit the printer is not a part.
+   * Unknown, nothing is adopted: there is nothing to check a plate against.
+   */
+  bed: PlateBed | undefined,
+): ReadonlyMap<string, Hex[]> {
+  const none = new Map<string, Hex[]>();
+  if (!covered || covered.length === 0 || !obstacles || obstacles.length === 0 || !bed) return none;
+  const hit = adoptCache.get(panels);
+  if (hit && hit.covered === covered && hit.obstacles === obstacles &&
+      hit.bedW === bed.width && hit.bedD === bed.depth) return hit.adopted;
+
+  const fit = footprints(panels, undefined, obstacles, bed);
+  const blockOwner = new Map<string, string>();
+  for (const p of panels) {
+    for (const c of panelCells(p.origin, p.columns, p.rows)) blockOwner.set(hexKey(c), p.id);
+  }
+  const adopted = new Map<string, Hex[]>();
+  const seen = new Set<string>();
+  for (const plate of covered) {
+    const block = panelCells(plate.origin, plate.columns, plate.rows);
+    const cut = obstructedCells(obstacles, block);
+    for (const c of block) {
+      const k = hexKey(c);
+      if (!cut.has(k) || blockOwner.has(k) || seen.has(k)) continue;
+      seen.add(k);
+      const votes = new Map<string, { n: number; best: string }>();
+      for (const d of RING) {
+        const nk = hexKey({ q: c.q + d.q, r: c.r + d.r });
+        const owner = blockOwner.get(nk);
+        if (owner === undefined) continue;
+        const v = votes.get(owner);
+        if (v === undefined) votes.set(owner, { n: 1, best: nk });
+        else {
+          v.n++;
+          if (nk < v.best) v.best = nk;
+        }
+      }
+      // Most neighbours first, the smallest neighbouring cell breaking a tie;
+      // the first that can take it without outgrowing the bed does.
+      const ranked = [...votes.entries()].sort(([, a], [, b]) =>
+        b.n - a.n || (a.best < b.best ? -1 : a.best > b.best ? 1 : 0));
+      const winner = ranked.map(([owner]) => owner).find((owner) => fit.takeAll(owner, [c]));
+      if (winner === undefined) continue;
+      const list = adopted.get(winner);
+      if (list) list.push(c);
+      else adopted.set(winner, [c]);
+    }
+  }
+  adoptCache.set(panels, { covered, obstacles, bedW: bed.width, bedD: bed.depth, adopted });
+  return adopted;
+}
+
+/**
+ * Every plate's printed footprint, and whether it can take more cut cells and
+ * still fit the bed, either way round.
+ *
+ * A block's own hexagons to begin with — exactly `plateFootprintMm` — then,
+ * for each extra cell, what of it lies outside the zones (`cellRemainderBox`),
+ * not the whole hexagon: charging the hexagon refused nearly every cell a
+ * shipped plate near its bed was offered, for a sliver a few millimetres deep.
+ * With `covered`, the cells those plates' neighbours adopted are counted in
+ * first. A border only ever cuts inside this.
+ */
+function footprints(
+  panels: readonly PlacedPanel[],
+  covered: readonly PlacedPanel[] | undefined,
+  obstacles: readonly Obstacle[] | undefined,
+  bed: PlateBed,
+) {
+  const extent = new Map<string, { minX: number; maxX: number; minY: number; maxY: number }>();
+  for (const p of panels) {
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const c of panelCells(p.origin, p.columns, p.rows)) {
+      const m = hexToMm(c);
+      minX = Math.min(minX, m.x - MARGIN_X); maxX = Math.max(maxX, m.x + MARGIN_X);
+      minY = Math.min(minY, m.y - MARGIN_Y); maxY = Math.max(maxY, m.y + MARGIN_Y);
+    }
+    extent.set(p.id, { minX, maxX, minY, maxY });
+  }
+  const EPS = 1e-6;
+  const fits = (w: number, h: number) =>
+    (w <= bed.width + EPS && h <= bed.depth + EPS) || (w <= bed.depth + EPS && h <= bed.width + EPS);
+  const grow = (owner: string, cells: readonly Hex[], commit: boolean): boolean => {
+    const e = extent.get(owner);
+    if (e === undefined) return false;
+    let g = { ...e };
+    for (const c of cells) {
+      const r = cellRemainderBox(c, obstacles);
+      if (r === null) continue; // nothing of it prints
+      g = {
+        minX: Math.min(g.minX, r.minX), maxX: Math.max(g.maxX, r.maxX),
+        minY: Math.min(g.minY, r.minY), maxY: Math.max(g.maxY, r.maxY),
+      };
+    }
+    const w0 = e.maxX - e.minX, h0 = e.maxY - e.minY;
+    const w1 = g.maxX - g.minX, h1 = g.maxY - g.minY;
+    // No growth at all is always fine, even for a plate already too big.
+    if (!(w1 <= w0 + EPS && h1 <= h0 + EPS) && !fits(w1, h1)) return false;
+    if (commit) extent.set(owner, g);
+    return true;
+  };
+  if (covered && covered.length > 0 && obstacles && obstacles.length > 0) {
+    for (const [owner, cells] of adoptedCells(panels, covered, obstacles, bed)) grow(owner, cells, true);
+  }
+  return {
+    /** Add `cells` to `owner` if it still fits; say whether it did. */
+    takeAll: (owner: string, cells: readonly Hex[]): boolean => grow(owner, cells, true),
+  };
+}
+
+const adoptCache = new WeakMap<
+  readonly PlacedPanel[],
+  {
+    covered: readonly PlacedPanel[];
+    obstacles: readonly Obstacle[];
+    bedW: number;
+    bedD: number;
+    adopted: ReadonlyMap<string, Hex[]>;
+  }
+>();
+
+/**
+ * Which plates are the SAME plate, by what the generator would build (D116).
+ *
+ * Every place that counts, draws or downloads "n of these" has to agree on what
+ * "these" are, and the only honest answer is the geometry. Part, block, `omit`
+ * and the edge letters are not enough once a border is on: the zone cuts a
+ * plate where its edge happens to land INSIDE the plate, and the plate under a
+ * zone's corner carries a sliver up the zone's side that its neighbours along
+ * the same edge do not. Same omitted cells, same letters, different plate.
+ *
+ * With no border the plate is its cells and nothing else — the eaten cells are
+ * dropped whole and there is no edge to cut — so the relative cell set IS the
+ * key and nothing is generated to find it. With one, `plateGeometryKey` asks the
+ * generator. Memoised on the panels, frame and zones by identity: the document
+ * is immutable, so an edit that does not touch them reuses the answer.
+ */
+export function panelGeometryKeys(
+  panels: readonly PlacedPanel[],
+  frame: WallFrame | undefined,
+  obstacles: readonly Obstacle[] | undefined,
+  /**
+   * Required, even when undefined: a plate's geometry includes the stranded
+   * cells it adopts from these (D119), and a key computed without them says two
+   * plates are the same when one of them is not.
+   */
+  covered: readonly PlacedPanel[] | undefined,
+  /** Required for the same reason: it decides which stranded cells a plate takes. */
+  bed: PlateBed | undefined,
+): ReadonlyMap<string, string> {
+  const hit = geometryKeyCache.get(panels);
+  if (hit && hit.frame === frame && hit.obstacles === obstacles && hit.covered === covered &&
+      hit.bedW === bed?.width && hit.bedD === bed?.depth) {
+    return hit.keys;
+  }
+  const keys = new Map<string, string>();
+  for (const p of panels) {
+    const spec = panelModelSpec(p, panels, frame, obstacles, covered, bed);
+    if (spec.border === undefined) {
+      const rel = spec.cells
+        .map((c) => hexKey({ q: c.q - p.origin.q, r: c.r - p.origin.r }))
+        .sort()
+        .join(' ');
+      keys.set(p.id, `cells:${rel}`);
+      continue;
+    }
+    if (isPlainPlate(spec)) {
+      const rel = spec.cells
+        .map((c) => hexKey({ q: c.q - p.origin.q, r: c.r - p.origin.r }))
+        .sort()
+        .join(' ');
+      keys.set(p.id, `plain:${rel}`);
+      continue;
+    }
+    try {
+      keys.set(p.id, spec.cells.length === 0 ? 'empty' : plateGeometryKey(spec, hexToMm(p.origin)));
+    } catch {
+      // The generator refused it; it is drawn from the fallback and is its own
+      // plate rather than a member of somebody else's group.
+      keys.set(p.id, `refused:${p.id}`);
+    }
+  }
+  geometryKeyCache.set(panels, { frame, obstacles, covered, bedW: bed?.width, bedD: bed?.depth, keys });
+  return keys;
+}
+
+/**
+ * A plate nothing reaches: no cut cell, no zone and no line of the wall's edge
+ * within a cell of it, and no empty position beside it for the border to grow
+ * into. The generator can only build such a plate from its cells, so its cells
+ * ARE its key and nothing need be generated to find it.
+ *
+ * Most of a big wall is plates like this, and generating each one to hash it
+ * was most of the cost of a zone drag frame: 0.5 s of keys on a 4 × 2.4 m wall.
+ * Conservative on every count — a plate it wrongly calls plain could only ever
+ * be one that is cut, and every condition below is one the cut needs — and a
+ * plate it wrongly calls NOT plain merely gets the generator's key, which is
+ * correct anyway.
+ */
+function isPlainPlate(spec: { cells: Hex[]; clipped: Hex[]; border: BorderSpec | undefined }): boolean {
+  const border = spec.border;
+  if (border === undefined || spec.clipped.length > 0 || spec.cells.length === 0) return false;
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const c of spec.cells) {
+    const m = hexToMm(c);
+    minX = Math.min(minX, m.x); maxX = Math.max(maxX, m.x);
+    minY = Math.min(minY, m.y); maxY = Math.max(maxY, m.y);
+  }
+  // The edge cuts outlines a cell's half-width from its line and bores a rail
+  // further; a full pitch clear of every line is clear of both.
+  const b = border.bounds;
+  const clear = PITCH + Math.max(0, border.thicknessMm);
+  const sides = border.sides;
+  if ((sides.left && minX - b.minX < clear) || (sides.right && b.maxX - maxX < clear) ||
+      (sides.bottom && minY - b.minY < clear) || (sides.top && b.maxY - maxY < clear)) return false;
+  // A zone within two cells could cut it, or hold a fragment against it.
+  const reach = 2 * PITCH;
+  for (const z of border.keepClear ?? []) {
+    if (!(maxX + reach <= z.minX || minX - reach >= z.maxX ||
+          maxY + reach <= z.minY || minY - reach >= z.maxY)) return false;
+  }
+  // An empty position beside it is a hole the border would grow a piece into.
+  for (const c of spec.cells) {
+    for (const d of RING) {
+      if (!border.occupied.has(hexKey({ q: c.q + d.q, r: c.r + d.r }))) return false;
+    }
+  }
+  return true;
+}
+
+const geometryKeyCache = new WeakMap<
+  readonly PlacedPanel[],
+  {
+    frame: WallFrame | undefined;
+    obstacles: readonly Obstacle[] | undefined;
+    covered: readonly PlacedPanel[] | undefined;
+    bedW: number | undefined;
+    bedD: number | undefined;
+    keys: ReadonlyMap<string, string>;
+  }
+>();
+
+/** `panelGeometryKeys` straight from a document. */
+export function panelGeometryKeysFor(doc: LayoutDoc): ReadonlyMap<string, string> {
+  return panelGeometryKeys(doc.panels, doc.frame, doc.obstacles, doc.covered, bedOfDoc(doc));
 }
 
 /**

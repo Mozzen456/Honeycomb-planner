@@ -263,6 +263,18 @@ export function customPanelGroups(
    * you would print one plate twice.
    */
   extraKey?: (panel: PlacedPanel) => string,
+  /**
+   * What the plate really IS — `panelModel.panelGeometryKeys` (D116).
+   *
+   * The key above describes the INPUTS, and two plates can agree on every one
+   * of them and still be cut differently: a zone edge landing at a different
+   * place inside each. When the geometry disagrees inside a group, the group is
+   * split. The biggest part keeps the plain key, so a printed count or a colour
+   * recorded against the line stays with the plates it was most likely about;
+   * the rest get a suffix from their geometry, stable for as long as the plate
+   * is.
+   */
+  geometryKey?: (panel: PlacedPanel) => string,
 ): { key: string; panels: PlacedPanel[]; params: CustomiserPanel | null }[] {
   const groups = new Map<string, PlacedPanel[]>();
   for (const panel of panels) {
@@ -281,6 +293,28 @@ export function customPanelGroups(
     const list = groups.get(key);
     if (list) list.push(panel);
     else groups.set(key, [panel]);
+  }
+  if (geometryKey) {
+    for (const [key, list] of [...groups.entries()]) {
+      const byShape = new Map<string, PlacedPanel[]>();
+      for (const panel of list) {
+        const g = geometryKey(panel);
+        const at = byShape.get(g);
+        if (at) at.push(panel);
+        else byShape.set(g, [panel]);
+      }
+      if (byShape.size < 2) continue;
+      groups.delete(key);
+      // Insertion order breaks a tie, so the first plate's shape keeps the key.
+      let main = '';
+      let most = 0;
+      for (const [g, members] of byShape) {
+        if (members.length > most) { main = g; most = members.length; }
+      }
+      for (const [g, members] of byShape) {
+        groups.set(g === main ? key : `${key}|v${g.slice(0, 8)}`, members);
+      }
+    }
   }
   return [...groups.entries()]
     .map(([key, list]) => ({ key, panels: list, params: toCustomiserPanel(list[0]!) }))

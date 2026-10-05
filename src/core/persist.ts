@@ -16,12 +16,13 @@ import { BEDS, clampBedMm, CUSTOM_BED_ID, MAX_BED_MM, MIN_BED_MM } from './const
 import { hasColors, readColors } from './colors';
 import { DEFAULT_BORDER_MM, MAX_BORDER_MM } from './honeycomb';
 import { MAX_PROJECT_PARTS } from './projectParts';
+import { MAX_OUTLINE_POINTS, normaliseOutline, outlineProblem } from './zonePolygon';
 import {
   clampMmPerPixel, clampPhotoOpacity, clampPhotoRotation, DEFAULT_PHOTO_OPACITY, photoRotation,
 } from './wallPhoto';
 import type {
-  FixingEdits, Group, Hex, LayoutDoc, Obstacle, PlacedItem, PlacedPanel, Rotation, WallColors,
-  WallFrame, WallPhoto, WallSpec, ZoneRect,
+  FixingEdits, Group, PlacedFixing, Hex, JoinedPlate, LayoutDoc, Obstacle, PlacedItem, PlacedPanel, Rotation, WallColors,
+  WallFrame, WallPhoto, WallSpec, ZonePoint, ZoneRect,
 } from './types';
 
 /** Schema version this build writes. Bumped whenever the document shape changes. */
@@ -131,8 +132,12 @@ function canonicalFixingEdits(edits: LayoutDoc['fixingEdits']): Record<string, u
   const out: Record<string, unknown> = {};
   const removed = cells(edits.removed);
   const added = cells(edits.added);
+  const placed = (edits.placed ?? []).map((f) => ({
+    partId: f.partId, at: { q: f.at.q, r: f.at.r }, rotation: f.rotation,
+  }));
   if (removed.length > 0) out['removed'] = removed;
   if (added.length > 0) out['added'] = added;
+  if (placed.length > 0) out['placed'] = placed;
   return Object.keys(out).length > 0 ? { fixingEdits: out } : {};
 }
 
@@ -154,21 +159,10 @@ function canonicalDoc(doc: LayoutDoc): Record<string, unknown> {
     ...(doc.customBed
       ? { customBed: { widthMm: doc.customBed.widthMm, depthMm: doc.customBed.depthMm } }
       : {}),
-    panels: doc.panels.map((p) => {
-      const out: Record<string, unknown> = {
-        id: p.id,
-        partId: p.partId,
-        origin: { q: p.origin.q, r: p.origin.r },
-        columns: p.columns,
-        rows: p.rows,
-      };
-      // Only when the panel really is cut: a stock plate must round-trip to the
-      // same bytes it always did.
-      if (p.omit && p.omit.length > 0) {
-        out['omit'] = p.omit.map((c) => ({ q: c.q, r: c.r }));
-      }
-      return out;
-    }),
+    panels: doc.panels.map(panelOut),
+    // Only when a zone has set a plate aside: an absent key must round-trip to
+    // an absent key (D117).
+    ...(doc.covered && doc.covered.length > 0 ? { covered: doc.covered.map(panelOut) } : {}),
     items: doc.items.map((it) => {
       const out: Record<string, unknown> = {
         id: it.id,
@@ -230,7 +224,11 @@ function canonicalDoc(doc: LayoutDoc): Record<string, unknown> {
             };
             // Same absent-key rule as everywhere else: a plain rectangular zone
             // must serialise to the bytes it always did.
-            if (o.shape && o.shape.length > 0) {
+            // A drawn outline wins over a shape and is written INSTEAD of one,
+            // so a reader never has to decide between two (D118).
+            if (o.outline && o.outline.length >= 3) {
+              out['outline'] = o.outline.map((p) => ({ xMm: p.xMm, yMm: p.yMm }));
+            } else if (o.shape && o.shape.length > 0) {
               out['shape'] = o.shape.map((r) => ({
                 xMm: r.xMm, yMm: r.yMm, widthMm: r.widthMm, heightMm: r.heightMm,
               }));
@@ -266,6 +264,29 @@ function canonicalDoc(doc: LayoutDoc): Record<string, unknown> {
         }
       : {}),
   };
+}
+
+function panelOut(p: PlacedPanel): Record<string, unknown> {
+  const out: Record<string, unknown> = {
+    id: p.id,
+    partId: p.partId,
+    origin: { q: p.origin.q, r: p.origin.r },
+    columns: p.columns,
+    rows: p.rows,
+  };
+  // Only when the panel really is cut: a stock plate must round-trip to the
+  // same bytes it always did.
+  if (p.omit && p.omit.length > 0) {
+    out['omit'] = p.omit.map((c) => ({ q: c.q, r: c.r }));
+  }
+  // The solver's plates a sliver was joined from (D130), so a re-cut after
+  // loading can still give them back.
+  if (p.joined && p.joined.length > 0) {
+    out['joined'] = p.joined.map((j) => ({
+      id: j.id, partId: j.partId, origin: { q: j.origin.q, r: j.origin.r }, columns: j.columns, rows: j.rows,
+    }));
+  }
+  return out;
 }
 
 /** Pretty, stable JSON with a trailing newline — a well-behaved text file. */
@@ -668,62 +689,95 @@ export function migrate(raw: unknown): LoadResult {
   const usedIds = new Set<string>();
 
   // --- panels -------------------------------------------------------------
-  const panels: PlacedPanel[] = [];
-  const rawPanels = readArray(value['panels'], 'panels', errors);
-  for (let i = 0; i < rawPanels.length; i++) {
-    const p = rawPanels[i];
-    const where = `panels[${i}]`;
-    if (!isPlainObject(p)) {
-      errors.push(`${where} is ${describe(p)}, not a panel; dropped.`);
-      continue;
-    }
-    const local: string[] = [];
-    const partId = readString(p['partId'], `${where}.partId`, local);
-    const origin = readHex(p['origin'], `${where}.origin`, local);
-    const columns = readPositiveInt(p['columns'], `${where}.columns`, local);
-    const rows = readPositiveInt(p['rows'], `${where}.rows`, local);
-    if (partId === null || partId === '' || origin === null || columns === null || rows === null) {
-      errors.push(...local);
-      errors.push(`${where} was dropped because it is not a usable panel.`);
-      continue;
-    }
-    // Bounding each factor is not enough: 10000 x 10000 passes both checks and
-    // is 100 million cells. `panelCells` costs ~70 ms per million and is called
-    // several times per render, so a single pasted share link could freeze or
-    // OOM the tab. The largest real panel is 288 cells; 20000 leaves enormous
-    // headroom while keeping the workload bounded.
-    if (columns * rows > MAX_PANEL_CELLS) {
-      errors.push(...local);
-      errors.push(
-        `${where} claims ${columns} × ${rows} = ${columns * rows} cells, far beyond the ` +
-          `${MAX_PANEL_CELLS} cell limit; dropped.`,
-      );
-      continue;
-    }
-    errors.push(...local);
-    let pid = typeof p['id'] === 'string' ? (p['id'] as string) : '';
-    if (pid === '') {
-      errors.push(`${where}.id is missing or empty; named it "panel-${i}".`);
-      pid = `panel-${i}`;
-    }
-    const finalId = uniqueId(pid, usedIds);
-    if (finalId !== pid) errors.push(`${where}.id "${pid}" is used twice; renamed this one to "${finalId}".`);
-    const panel: PlacedPanel = { id: finalId, partId, origin, columns, rows };
-    // Cut-outs for a light switch or a socket. A cell that is not a legal
-    // coordinate is dropped rather than taking the whole panel with it: the
-    // worst case is a plate with one hole too few, which is visible, against a
-    // plate that vanished, which is not.
-    const rawOmit = p['omit'];
-    if (Array.isArray(rawOmit)) {
-      const omit: Hex[] = [];
-      for (let k = 0; k < rawOmit.length; k++) {
-        const cell = readHex(rawOmit[k], `${where}.omit[${k}]`, errors);
-        if (cell !== null) omit.push(cell);
+  // Twice: the wall's plates, and the ones a zone has set aside (D117). One
+  // reader, one id namespace — a covered plate comes back onto the wall with
+  // its id, so the two lists must never share one.
+  const readPanels = (field: 'panels' | 'covered'): PlacedPanel[] => {
+    const panels: PlacedPanel[] = [];
+    const rawPanels = value[field] === undefined && field === 'covered'
+      ? []
+      : readArray(value[field], field, errors);
+    for (let i = 0; i < rawPanels.length; i++) {
+      const p = rawPanels[i];
+      const where = `${field}[${i}]`;
+      if (!isPlainObject(p)) {
+        errors.push(`${where} is ${describe(p)}, not a panel; dropped.`);
+        continue;
       }
-      if (omit.length > 0) panel.omit = omit;
+      const local: string[] = [];
+      const partId = readString(p['partId'], `${where}.partId`, local);
+      const origin = readHex(p['origin'], `${where}.origin`, local);
+      const columns = readPositiveInt(p['columns'], `${where}.columns`, local);
+      const rows = readPositiveInt(p['rows'], `${where}.rows`, local);
+      if (partId === null || partId === '' || origin === null || columns === null || rows === null) {
+        errors.push(...local);
+        errors.push(`${where} was dropped because it is not a usable panel.`);
+        continue;
+      }
+      // Bounding each factor is not enough: 10000 x 10000 passes both checks and
+      // is 100 million cells. `panelCells` costs ~70 ms per million and is called
+      // several times per render, so a single pasted share link could freeze or
+      // OOM the tab. The largest real panel is 288 cells; 20000 leaves enormous
+      // headroom while keeping the workload bounded.
+      if (columns * rows > MAX_PANEL_CELLS) {
+        errors.push(...local);
+        errors.push(
+          `${where} claims ${columns} × ${rows} = ${columns * rows} cells, far beyond the ` +
+            `${MAX_PANEL_CELLS} cell limit; dropped.`,
+        );
+        continue;
+      }
+      errors.push(...local);
+      let pid = typeof p['id'] === 'string' ? (p['id'] as string) : '';
+      if (pid === '') {
+        errors.push(`${where}.id is missing or empty; named it "panel-${i}".`);
+        pid = `panel-${i}`;
+      }
+      const finalId = uniqueId(pid, usedIds);
+      if (finalId !== pid) errors.push(`${where}.id "${pid}" is used twice; renamed this one to "${finalId}".`);
+      const panel: PlacedPanel = { id: finalId, partId, origin, columns, rows };
+      // Cut-outs for a light switch or a socket. A cell that is not a legal
+      // coordinate is dropped rather than taking the whole panel with it: the
+      // worst case is a plate with one hole too few, which is visible, against a
+      // plate that vanished, which is not.
+      const rawOmit = p['omit'];
+      if (Array.isArray(rawOmit)) {
+        const omit: Hex[] = [];
+        for (let k = 0; k < rawOmit.length; k++) {
+          const cell = readHex(rawOmit[k], `${where}.omit[${k}]`, errors);
+          if (cell !== null) omit.push(cell);
+        }
+        if (omit.length > 0) panel.omit = omit;
+      }
+      // The plates it was joined from. One that cannot be read is dropped: the
+      // worst case is a join the next cut cannot undo, not a lost plate.
+      const rawJoined = p['joined'];
+      if (Array.isArray(rawJoined)) {
+        const joined: JoinedPlate[] = [];
+        for (let k = 0; k < rawJoined.length; k++) {
+          const j = rawJoined[k];
+          const at = `${where}.joined[${k}]`;
+          if (!isPlainObject(j) || typeof j['id'] !== 'string' || typeof j['partId'] !== 'string') {
+            errors.push(`${at} is not a plate; dropped.`);
+            continue;
+          }
+          const o = readHex(j['origin'], `${at}.origin`, errors);
+          const c = j['columns'], r = j['rows'];
+          if (o === null || !Number.isInteger(c) || !Number.isInteger(r) ||
+              (c as number) < 1 || (r as number) < 1 || (c as number) * (r as number) > MAX_PANEL_CELLS) {
+            errors.push(`${at} has no usable size or origin; dropped.`);
+            continue;
+          }
+          joined.push({ id: j['id'] as string, partId: j['partId'] as string, origin: o, columns: c as number, rows: r as number });
+        }
+        if (joined.length > 0) panel.joined = joined;
+      }
+      panels.push(panel);
     }
-    panels.push(panel);
-  }
+    return panels;
+  };
+  const panels = readPanels('panels');
+  const covered = readPanels('covered');
 
   // --- items --------------------------------------------------------------
   const items: PlacedItem[] = [];
@@ -839,15 +893,61 @@ export function migrate(raw: unknown): LoadResult {
           shape.push({ xMm: px, yMm: py, widthMm: pw, heightMm: ph });
         }
       }
+      /*
+       * A drawn outline (D118). Every corner is a measurement out of user
+       * input, so each goes through the coordinate reader, and the whole is held
+       * to `outlineProblem` — a self-crossing or oversized outline would reach
+       * the cutter otherwise. One that fails keeps its zone as the bounding
+       * box: more honeycomb cut than was drawn, which shows on the plan, rather
+       * than the thing it was drawn round losing its zone altogether.
+       */
+      let outline: ZonePoint[] | undefined;
+      if (o['outline'] !== undefined) {
+        const raw = Array.isArray(o['outline']) ? (o['outline'] as unknown[]) : null;
+        const pts: ZonePoint[] = [];
+        const local: string[] = [];
+        if (raw === null) local.push(`${where}.outline is ${describe(o['outline'])}, not a list of corners.`);
+        else if (raw.length > MAX_OUTLINE_POINTS) {
+          local.push(`${where}.outline has ${raw.length} corners, more than ${MAX_OUTLINE_POINTS}.`);
+        } else {
+          for (let k = 0; k < raw.length; k++) {
+            const c = raw[k];
+            const cx = isPlainObject(c) ? readCoordMm(c['xMm'], `${where}.outline[${k}].xMm`, local) : null;
+            const cy = isPlainObject(c) ? readCoordMm(c['yMm'], `${where}.outline[${k}].yMm`, local) : null;
+            if (cx === null || cy === null) {
+              local.push(`${where}.outline[${k}] is not a usable corner.`);
+              break;
+            }
+            pts.push({ xMm: cx, yMm: cy });
+          }
+        }
+        const problem = local.length === 0
+          ? outlineProblem(pts.map((p) => ({ x: p.xMm, y: p.yMm })))
+          : null;
+        if (local.length > 0 || problem !== null) {
+          errors.push(...local);
+          errors.push(`${where}.outline was dropped${problem ? ` (${problem})` : ''}; the zone blocks its bounding box instead.`);
+        } else {
+          outline = normaliseOutline(pts.map((p) => ({ x: p.xMm, y: p.yMm })))
+            .map((p) => ({ xMm: p.x, yMm: p.y }));
+        }
+      }
+      // The outline is the truth and the box follows it, so a hand-edited file
+      // cannot leave the tag and the handles somewhere the zone is not.
+      const box = outline
+        ? {
+            xMm: Math.min(...outline.map((p) => p.xMm)),
+            yMm: Math.min(...outline.map((p) => p.yMm)),
+            widthMm: Math.max(...outline.map((p) => p.xMm)) - Math.min(...outline.map((p) => p.xMm)),
+            heightMm: Math.max(...outline.map((p) => p.yMm)) - Math.min(...outline.map((p) => p.yMm)),
+          }
+        : { xMm: x, yMm: y, widthMm: w, heightMm: h };
       obstacles.push({
         id: typeof o['id'] === 'string' && o['id'] !== '' ? (o['id'] as string) : `obstacle-${i}`,
         label: typeof o['label'] === 'string' ? (o['label'] as string) : 'Obstacle',
-        xMm: x,
-        yMm: y,
-        widthMm: w,
-        heightMm: h,
+        ...box,
         clearanceMm: Math.max(0, clearance),
-        ...(shape.length > 0 ? { shape } : {}),
+        ...(outline ? { outline } : shape.length > 0 ? { shape } : {}),
       });
     }
   }
@@ -975,10 +1075,36 @@ export function migrate(raw: unknown): LoadResult {
       };
       const removed = readCells('removed');
       const added = readCells('added');
-      if (removed.length > 0 || added.length > 0) {
+      // Hand-placed multi-cell fixings (D125): a part id, an anchor and a turn.
+      const placed: PlacedFixing[] = [];
+      if (rawEdits['placed'] !== undefined) {
+        const list = readArray(rawEdits['placed'], 'fixingEdits.placed', errors);
+        const seen = new Set<string>();
+        for (let i = 0; i < list.length && placed.length < MAX_FIXING_EDITS; i++) {
+          const raw = list[i];
+          const where = `fixingEdits.placed[${i}]`;
+          if (!isPlainObject(raw) || typeof raw['partId'] !== 'string' || raw['partId'].length === 0) {
+            errors.push(`${where} is not a placed fixing; dropped.`);
+            continue;
+          }
+          const at = readHex(raw['at'], `${where}.at`, errors);
+          const rot = raw['rotation'];
+          if (at === null) continue;
+          if (typeof rot !== 'number' || !Number.isInteger(rot) || rot < 0 || rot > 5) {
+            errors.push(`${where}.rotation is ${describe(rot)}, not a turn of 0-5; dropped.`);
+            continue;
+          }
+          const key = `${at.q},${at.r}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          placed.push({ partId: raw['partId'], at, rotation: rot as Rotation });
+        }
+      }
+      if (removed.length > 0 || added.length > 0 || placed.length > 0) {
         fixingEdits = {
           ...(removed.length > 0 ? { removed } : {}),
           ...(added.length > 0 ? { added } : {}),
+          ...(placed.length > 0 ? { placed } : {}),
         };
       }
     }
@@ -1102,6 +1228,7 @@ export function migrate(raw: unknown): LoadResult {
     bedId,
     ...(customBed ? { customBed } : {}),
     panels,
+    ...(covered.length > 0 ? { covered } : {}),
     items,
     groups,
     ...(library.length > 0 ? { library } : {}),

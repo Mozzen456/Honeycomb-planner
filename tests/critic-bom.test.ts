@@ -293,7 +293,10 @@ const L1_ITEMS: PlacedItem[] = [
 
 const L1 = doc({
   name: 'L1 small',
-  wall: { widthMm: 400, heightMm: 250 },
+  // 300, not 250: pB starts on an odd column, so its cells sit half a pitch up
+  // and the top row's centres are at 259.6 — past a 250 mm wall, which the
+  // parts list now reports (D128). The layout is the subject; the wall fits it.
+  wall: { widthMm: 400, heightMm: 300 },
   panels: L1_PANELS,
   items: L1_ITEMS,
 });
@@ -317,7 +320,10 @@ describe('1 — SMALL: 2 panels + a handful of accessories', () => {
   });
 
   it('required inserts multiply N x M', () => {
-    expect(qty(bom, 'insert-countersunk')).toBe(4); // the assembly's fixing plan
+    // The assembly's fixing plan: every fixing round the edge is the two-cell
+    // part since D125, so no single-cell countersunk insert is ordered.
+    expect(qty(bom, 'insert-countersunk')).toBe(0);
+    expect(qty(bom, 'hexagon-countersung-and-hole')).toBe(4);
     expect(qty(bom, 'insert-empty')).toBe(8); // 3x2 shelves + 2x1 hook
   });
 
@@ -328,7 +334,7 @@ describe('1 — SMALL: 2 panels + a handful of accessories', () => {
       ['hook-12mm-for-m3', 'hook-to-empty', 'shelf-1', 'wall-honeycomb-part'].sort(),
     );
     expect(bom.fasteners.map((l) => l.partId).sort()).toEqual(
-      ['insert-countersunk', 'insert-empty', 'insert-with-m3'].sort(),
+      ['hexagon-countersung-and-hole', 'insert-empty', 'insert-with-m3'].sort(),
     );
   });
 
@@ -343,7 +349,7 @@ describe('1 — SMALL: 2 panels + a handful of accessories', () => {
     ]);
     // one screw per countersunk insert, not two, and not zero
     expect(shop(bom, WALL_SCREW)).toBe(
-      qty(bom, 'insert-countersunk') + qty(bom, 'insert-for-countersunk-hole-3'),
+      qty(bom, 'insert-countersunk') + qty(bom, 'insert-for-countersunk-hole-3') + qty(bom, 'hexagon-countersung-and-hole'),
     );
     // and the M3 fixings follow the insert, not the accessory: D11's rule is
     // that the fixing belongs to the part it passes through.
@@ -354,8 +360,8 @@ describe('1 — SMALL: 2 panels + a handful of accessories', () => {
   it('totals match the hand arithmetic and the independent re-derivation', () => {
     expect(bom.totals.parts).toBe(20);
     expect(bom.totals.distinctParts).toBe(7);
-    expect(bom.totals.grams).toBe(147.1);
-    expect(bom.totals.metres).toBe(49.33);
+    expect(bom.totals.grams).toBe(155.3);
+    expect(bom.totals.metres).toBe(52.08);
 
     const expected = expectedTotals(
       new Map([
@@ -365,13 +371,13 @@ describe('1 — SMALL: 2 panels + a handful of accessories', () => {
         ['hook-12mm-for-m3', 1],
         ['insert-with-m3', 2],
         ['insert-empty', 8],
-        ['insert-countersunk', 4],
+        ['hexagon-countersung-and-hole', 4],
       ]),
     );
     // Exact decimal sums: 1115.07 min, 160.84 g, 53.9391 m.
-    expect(expected.rawMinutesHundredths).toBe(100317);
-    expect(expected.rawGramsHundredths).toBe(14710);
-    expect(expected.rawMetresTenThousandths).toBe(493275);
+    expect(expected.rawMinutesHundredths).toBe(106497);
+    expect(expected.rawGramsHundredths).toBe(15530);
+    expect(expected.rawMetresTenThousandths).toBe(520787);
     expect(bom.totals.parts).toBe(expected.parts);
     expect(bom.totals.grams).toBe(expected.grams);
     expect(bom.totals.metres).toBe(expected.metres);
@@ -380,10 +386,10 @@ describe('1 — SMALL: 2 panels + a handful of accessories', () => {
   it('per-line figures are per-unit x quantity', () => {
     // 4 fixings now, not 10 -- the quantity comes from the assembly plan, but
     // the per-unit x quantity rule this test exists for is unchanged.
-    const l = line(bom, 'insert-countersunk')!;
+    const l = line(bom, 'hexagon-countersung-and-hole')!;
     expect(l.quantity).toBe(4);
-    expect(l.grams).toBeCloseTo(9.2, 6); // 2.29 x 4 = 9.16 -> 9.2 at 1 dp
-    expect(l.metres).toBeCloseTo(3.07, 6); // 0.7686 x 4 = 3.0744 -> 3.07
+    expect(l.grams).toBeCloseTo(17.4, 6); // 4.34 x 4 = 17.36 -> 17.4 at 1 dp
+    expect(l.metres).toBeCloseTo(5.83, 6); // 1.4564 x 4 = 5.8256 -> 5.83
   });
 });
 
@@ -491,7 +497,7 @@ describe('2 — FULL GARAGE WALL: 1200 x 2400, bed256, 64 panels + 30 accessorie
     rows: p.rows,
   }));
   const items = garageItems();
-  const L2 = doc({ name: 'L2 garage', panels, items });
+  const L2 = doc({ name: 'L2 garage', wall: { widthMm: 1200, heightMm: 2400 }, panels, items });
   const bom = computeBom(L2, catalog);
 
   it('the solver gives the panel mix the hand arithmetic assumes', () => {
@@ -525,12 +531,14 @@ describe('2 — FULL GARAGE WALL: 1200 x 2400, bed256, 64 panels + 30 accessorie
   });
 
   it('required inserts multiply N x M across 64 panels', () => {
-    // 22 and 54 are the fixing PLANNER's output, pinned so a change is visible.
+    // 22 and 49 are the fixing PLANNER's output, pinned so a change is visible.
+    // 54 until D129 stopped tying seam corners closer than half a spacing apart.
     // They shifted with the frame turn (D35) because the seams moved, not
     // because anything about the wall did: same 64 panels, same 5784 cells.
-    expect(qty(bom, 'insert-countersunk')).toBe(22); // single-cell fixings only
+    expect(qty(bom, 'insert-countersunk')).toBe(0); // none: the edge takes the two-cell part (D125)
+    expect(qty(bom, 'hexagon-countersung-and-hole')).toBe(22); // round the edge
     // ...the rest of the wall is held by four-cell inserts bridging the joins.
-    expect(qty(bom, 'insert-for-countersunk-hole-3')).toBe(54);
+    expect(qty(bom, 'insert-for-countersunk-hole-3')).toBe(49);
     expect(qty(bom, 'insert-empty')).toBe(40); // 3x10 + 2x5
     expect(qty(bom, 'insert-m4')).toBe(5); // 1 per box; box used to require none
 
@@ -550,10 +558,10 @@ describe('2 — FULL GARAGE WALL: 1200 x 2400, bed256, 64 panels + 30 accessorie
     // One screw and one plug per fixing, whether it is a single-cell insert or
     // a four-cell one bridging a junction. That is the invariant; the split
     // between the two kinds is the fixing plan's business.
-    expect(shop(bom, WALL_SCREW)).toBe(76);
-    expect(shop(bom, WALL_PLUG)).toBe(76);
+    expect(shop(bom, WALL_SCREW)).toBe(71);
+    expect(shop(bom, WALL_PLUG)).toBe(71);
     expect(shop(bom, WALL_SCREW)).toBe(
-      qty(bom, 'insert-countersunk') + qty(bom, 'insert-for-countersunk-hole-3'),
+      qty(bom, 'insert-countersunk') + qty(bom, 'insert-for-countersunk-hole-3') + qty(bom, 'hexagon-countersung-and-hole'),
     );
     // ...and the wall is genuinely fixed: at least one per panel is the floor
     // the assembly plan guarantees (src/core/fixings.ts).
@@ -569,25 +577,25 @@ describe('2 — FULL GARAGE WALL: 1200 x 2400, bed256, 64 panels + 30 accessorie
       // insert's bolt clamps the insert, the box's bolt clamps the box to it.
       { item: 'M4 bolt, 10-16 mm', count: 5 },
       { item: 'M4 nut', count: 5 },
-      { item: WALL_PLUG, count: 76 },
-      { item: WALL_SCREW, count: 76 },
+      { item: WALL_PLUG, count: 71 },
+      { item: WALL_SCREW, count: 71 },
     ]);
     expect(shop(bom, 'M4 nut')).toBe(qty(bom, 'insert-m4'));
   });
 
   it('totals match the hand arithmetic', () => {
-    expect(bom.totals.parts).toBe(215);
+    expect(bom.totals.parts).toBe(210);
     expect(bom.totals.distinctParts).toBe(11);
-    expect(bom.totals.grams).toBe(5810.8);
-    expect(bom.totals.metres).toBe(1948.35);
+    expect(bom.totals.grams).toBe(5814);
+    expect(bom.totals.metres).toBe(1949.45);
   });
 
   it('totals are summed UNROUNDED, not from the rounded lines', () => {
-    // Summing the rounded gram figures on the lines gives 5811.0; the honest
-    // answer is 5810.8. If these are ever equal the accumulator was rounded early.
+    // Summing the rounded gram figures on the lines gives 5814.2; the honest
+    // answer is 5814.0. If these are ever equal the accumulator was rounded early.
     const fromLines = [...bom.printed, ...bom.fasteners].reduce((a, l) => a + l.grams, 0);
-    expect(Number(fromLines.toFixed(1))).toBe(5811);
-    expect(bom.totals.grams).toBe(5810.8);
+    expect(Number(fromLines.toFixed(1))).toBe(5814.2);
+    expect(bom.totals.grams).toBe(5814);
 
     const expected = expectedTotals(
       new Map([
@@ -600,17 +608,17 @@ describe('2 — FULL GARAGE WALL: 1200 x 2400, bed256, 64 panels + 30 accessorie
         ['insert-with-m3', 5],
         ['insert-m4', 5],
         ['insert-empty', 40],
-        ['insert-countersunk', 22],
-        ['insert-for-countersunk-hole-3', 54],
+        ['hexagon-countersung-and-hole', 22],
+        ['insert-for-countersunk-hole-3', 49],
       ]),
     );
-    // Exact decimal sums for the fixing-planned wall: 38154.37 min, 5810.79 g,
-    // 1948.3486 m. Recomputed from src/catalog/catalog.json against the quantity
+    // Exact decimal sums for the fixing-planned wall: 38169.87 min, 5814.04 g,
+    // 1949.4497 m. Recomputed from src/catalog/catalog.json against the quantity
     // map above -- NOT read back off the BOM, which is the whole point of this
     // check. Verified to agree with computeBom to the last digit.
-    expect(expected.rawMinutesHundredths).toBe(3815437);
-    expect(expected.rawGramsHundredths).toBe(581079);
-    expect(expected.rawMetresTenThousandths).toBe(19483486);
+    expect(expected.rawMinutesHundredths).toBe(3816987);
+    expect(expected.rawGramsHundredths).toBe(581404);
+    expect(expected.rawMetresTenThousandths).toBe(19494497);
     expect(bom.totals.parts).toBe(expected.parts);
     expect(bom.totals.grams).toBe(expected.grams);
     expect(bom.totals.metres).toBe(expected.metres);
@@ -716,7 +724,10 @@ describe('3 — AWKWARD: seams, edges, overlaps, a missing part and a rotation',
     expect(qty(bom, 'box')).toBe(1);
     expect(qty(bom, 'insert-countersunk-with-m3x3')).toBe(1); // rotation changes nothing
     expect(qty(bom, 'insert-hollow-dual')).toBe(1);
-    expect(qty(bom, 'insert-countersunk')).toBe(4); // the assembly's fixing plan
+    // The assembly's fixing plan: every fixing round the edge is the two-cell
+    // part since D125, so no single-cell countersunk insert is ordered.
+    expect(qty(bom, 'insert-countersunk')).toBe(0);
+    expect(qty(bom, 'hexagon-countersung-and-hole')).toBe(4);
     expect(qty(bom, 'insert-empty')).toBe(6); // 2 (hook) + 3 (shelf) + 1 placed
     expect(qty(bom, 'insert-m4')).toBe(1); // required by the box
     expect(qty(bom, 'ghost-shelf-9000')).toBe(0); // contributes nothing
@@ -792,15 +803,15 @@ describe('3 — AWKWARD: seams, edges, overlaps, a missing part and a rotation',
       { item: WALL_SCREW, count: 5 },
     ]);
     // 8 from the panels' countersunk inserts + 1 that the m3x3 fastener carries
-    expect(shop(bom, WALL_SCREW)).toBe(qty(bom, 'insert-countersunk') + 1);
+    expect(shop(bom, WALL_SCREW)).toBe(qty(bom, 'hexagon-countersung-and-hole') + 1);
     // Rotating the m3x3 fastener did not multiply its 3 bolts into 6 or 12.
     expect(shop(bom, 'M3 bolt, 10-16 mm')).toBe(3);
   });
 
   it('totals match the hand arithmetic', () => {
     expect(bom.totals.parts).toBe(19);
-    expect(bom.totals.grams).toBe(95.5);
-    expect(bom.totals.metres).toBe(32.03);
+    expect(bom.totals.grams).toBe(103.7);
+    expect(bom.totals.metres).toBe(34.78);
 
     const expected = expectedTotals(
       new Map([
@@ -812,15 +823,15 @@ describe('3 — AWKWARD: seams, edges, overlaps, a missing part and a rotation',
         ['insert-countersunk-with-m3x3', 1],
         ['insert-hollow-dual', 1],
         ['insert-m4', 1],
-        ['insert-countersunk', 4],
+        ['hexagon-countersung-and-hole', 4],
         ['insert-empty', 6],
       ]),
     );
-    // Exact decimal sums for the fixing-planned wall: 678.42 min, 95.48 g,
-    // 32.0270 m.
-    expect(expected.rawMinutesHundredths).toBe(67842);
-    expect(expected.rawGramsHundredths).toBe(9552);
-    expect(expected.rawMetresTenThousandths).toBe(320270);
+    // Exact decimal sums for the fixing-planned wall: 740.22 min, 103.72 g,
+    // 34.7782 m.
+    expect(expected.rawMinutesHundredths).toBe(74022);
+    expect(expected.rawGramsHundredths).toBe(10372);
+    expect(expected.rawMetresTenThousandths).toBe(347782);
     expect(bom.totals.parts).toBe(expected.parts);
     expect(bom.totals.grams).toBe(expected.grams); // 104.68 -> 104.7, half away from zero
     expect(bom.totals.metres).toBe(expected.metres); // 35.1014 -> 35.10

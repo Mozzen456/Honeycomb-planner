@@ -23,7 +23,8 @@
 /* The cursor says what the pointer will do, because the tool is modal and the
    toolbar is at the other end of the canvas from where the hand is. */
 .wall-canvas[data-tool='measure'] .wall-canvas__surface,
-.wall-canvas[data-tool='zone'] .wall-canvas__surface { cursor: crosshair; }
+.wall-canvas[data-tool='zone'] .wall-canvas__surface,
+.wall-canvas[data-tool='shape'] .wall-canvas__surface { cursor: crosshair; }
 .wall-canvas[data-tool='select'] .wall-canvas__surface { cursor: default; }
 /* The photo tool slides the picture, so the cursor says "grab" — except while
    the scale gesture is armed, when the very next drag measures instead. */
@@ -268,6 +269,13 @@
 .wall-canvas__toolbar .wall-canvas__scale-drop:hover {
   background: var(--danger-bg, var(--surface-3));
   color: var(--danger-fg, var(--text-primary));
+}
+
+.wall-canvas__scale-hint {
+  max-inline-size: 40ch;
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  white-space: normal;
 }
 
 .wall-canvas__scale-bad {

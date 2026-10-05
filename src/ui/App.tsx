@@ -11,12 +11,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import catalogJson from '../catalog/catalog.json';
 import overridesJson from '../catalog/overrides.json';
-import { BEDS, bedFor, CUSTOM_BED_ID, MAX_BED_MM, MIN_BED_MM } from '../core/constants';
-import { computeBom, panelsForLine } from '../core/bom';
-import { normaliseColor } from '../core/colors';
+import { BEDS, bedFor, CUSTOM_BED_ID, MAX_BED_MM, MIN_BED_MM, PEG } from '../core/constants';
+import { computeBom, panelLineKeys, panelsForLine } from '../core/bom';
+import { DEFAULT_PANEL_COLOR, DEFAULT_PART_COLOR, normaliseColor } from '../core/colors';
 import { toCsv, toMarkdownChecklist, toPrintableHtml, downloadName } from '../core/exporters';
-import { buildHoneycombMesh, toBinaryStl } from '../core/honeycomb';
-import { proposePart, type ImportedPart, type ImportProposal } from '../core/importPart';
+import {
+  buildHoneycombMesh, clampStack, meshBoundsMm, stackHeightMm, stackMesh, toBinaryStl,
+} from '../core/honeycomb';
+import { proposeFromMesh, proposePart, type ImportedPart, type ImportProposal } from '../core/importPart';
 import { isModelFile, MODEL_ACCEPT } from '../core/modelFile';
 import { applyOverrides, mountingOf, type MountingOverride } from '../core/overrides';
 import { panelModelFileName, panelModelSpecFor } from '../core/panelModel';
@@ -35,6 +37,8 @@ import {
   deleteModelBytes, loadUserParts, mergeCatalog, pruneWallPhotos, putModelBytes, saveUserParts,
   sweepOrphans, WALL_PHOTOS_KEPT,
 } from '../core/userCatalog';
+import { BinBuilder } from './BinBuilder';
+import { PegAdder } from './PegAdder';
 import { BomPanel } from './BomPanel';
 import { ColorSwatch } from './ColorSwatch';
 import { CatalogPanel } from './CatalogPanel';
@@ -200,6 +204,32 @@ export function App() {
    * turns it off.
    */
   const [litLine, setLitLine] = useState<string | null>(null);
+  /**
+   * The same thing, while the pointer is over a row — a plate in the generate
+   * list, which is where you are deciding which file to download.
+   *
+   * Kept apart from `litLine` rather than written into it, because a hover ENDS:
+   * folded together, moving the pointer off a plate would clear a highlight the
+   * person had deliberately clicked on, and putting the clicked one back would
+   * mean remembering it anyway. Hover wins while it lasts and leaves nothing
+   * behind.
+   */
+  const [hoverLine, setHoverLine] = useState<string | null>(null);
+  /**
+   * One plate clicked on the wall (D129): that plate lights whole, border and
+   * all, and its line is marked in the parts list. A PLATE, not its line — the
+   * line would light every copy, and the click was on one. Cleared by clicking
+   * anything else, by picking a line, and by Escape.
+   */
+  const [pickedPanel, setPickedPanel] = useState<string | null>(null);
+  // Clicking the plate that is already lit puts it out again.
+  const pickPanel = useCallback((id: string | null) => {
+    setPickedPanel((current) => (id !== null && current === id ? null : id));
+  }, []);
+  const pickLine = useCallback((update: (current: string | null) => string | null) => {
+    setPickedPanel(null);
+    setLitLine(update);
+  }, []);
   const [theme, setTheme] = useState<Theme>(storedTheme);
   /**
    * 3D is the default view. The wall is a physical object you hang things ON,
@@ -208,6 +238,22 @@ export function App() {
    * available because it is faster to aim precisely in.
    */
   const [view, setView] = useState<'3d' | '2d'>('3d');
+  /**
+   * Which half of the product is on screen.
+   *
+   * A different question from `view`, and deliberately a different control in a
+   * different tier: `view` chooses how to LOOK at this wall, this chooses what
+   * you are doing at all. Wall is planning a wall out of plates; Build is making
+   * something to hang on one. They share the document — a bin built here can go
+   * straight into the project — and nothing else.
+   *
+   * Not on the document: which tab you had open is not a property of the wall,
+   * and a share link that put the recipient in the generator instead of on the
+   * wall they were sent would be actively wrong.
+   */
+  const [tab, setTab] = useState<'wall' | 'build'>('wall');
+  /** Which generator the Build tab is showing. */
+  const [buildTool, setBuildTool] = useState<'bin' | 'pegs'>('bin');
   /**
    * Size plates to the chosen printer, instead of using the seven shipped ones.
    *
@@ -328,11 +374,20 @@ export function App() {
    * owner of that rule, so a click can never light a plate the line does not
    * count (a cut or bordered plate has left the stock line for a generated one).
    */
+  // A clicked plate that has since gone (a new solve, an undo) lights nothing.
+  const picked = pickedPanel !== null && state.doc.panels.some((p) => p.id === pickedPanel)
+    ? pickedPanel : null;
+  const pickedLine = useMemo(
+    () => (picked === null ? null : panelLineKeys(state.doc).get(picked) ?? null),
+    [state.doc, picked],
+  );
+  const shownLine = hoverLine ?? pickedLine ?? litLine;
   const litPanelIds = useMemo(() => {
-    if (litLine === null) return undefined;
-    const ids = panelsForLine(state.doc, litLine);
+    if (hoverLine === null && picked !== null) return new Set([picked]);
+    if (shownLine === null) return undefined;
+    const ids = panelsForLine(state.doc, shownLine);
     return ids.length > 0 ? new Set(ids) : undefined;
-  }, [state.doc, litLine]);
+  }, [state.doc, shownLine, hoverLine, picked]);
 
   /**
    * The colour the wall would draw something in if nobody had chosen one.
@@ -639,7 +694,7 @@ export function App() {
         return;
       }
       if (e.key === 'Escape') {
-        cancelDrag(); store.select([]); setPickedFixing(null); setLitLine(null); return;
+        cancelDrag(); store.select([]); setPickedFixing(null); setLitLine(null); setPickedPanel(null); return;
       }
       if (e.key.toLowerCase() === 'r' && sel.length) {
         e.preventDefault();
@@ -691,14 +746,17 @@ export function App() {
     const border = state.doc.frame
       ? Math.max(0, state.doc.frame.thicknessMm)
       : 0;
-    const available: PanelSize[] = sizeToPrinter
-      ? generatedPlateSizes(state.doc.bedId, border, state.doc.customBed)
-      : shipped;
+    const generated = generatedPlateSizes(state.doc.bedId, border, state.doc.customBed);
+    const available: PanelSize[] = sizeToPrinter ? generated : shipped;
     const res = solveTiling({
       wall: state.doc.wall,
       bedId: state.doc.bedId,
       ...(state.doc.customBed ? { customBed: state.doc.customBed } : {}),
       available,
+      // With the shipped plates, the bed's own sizes finish what they cannot
+      // reach — a band's top, the strip at the right — instead of leaving the
+      // wall stepped and bare there (D128).
+      ...(sizeToPrinter ? {} : { fillers: generated }),
       // MUST stay false. "Rotation" here swaps columns with rows, and 90° is
       // not a symmetry of a hex lattice — spinning a panel's measured cell
       // centres by 90° puts them 15.14 mm off the wall grid. With it enabled a
@@ -1013,6 +1071,106 @@ export function App() {
     [store, say],
   );
 
+  /**
+   * A bin from the Build tab, into the library and into this project.
+   *
+   * The same three writes an import ends with — bytes to IndexedDB, metadata to
+   * `userParts`, a `MountingOverride` to `userOverrides` — and NO alignment
+   * step, which is the whole difference. An uploaded model has to be lined up by
+   * hand because `detect()` cannot say which face of it meets the wall; a
+   * generated one already knows, exactly, because this app chose where its pegs
+   * went. So `needsReview` is false here and it is honest: the footprint is not
+   * a bounding-box bound, it is the cell list the mesh was built from.
+   *
+   * `proposeFromMesh` still runs, for the measurement and the print estimate,
+   * and its guesses about type and footprint are then replaced by what we know.
+   *
+   * The mounting is three facts, not a nudge:
+   *   - `wallFaceAxis: 'x'`, `matingEnd: 'low'` — the file frame `binModel`
+   *     documents, and the one cyclic permutation that puts up-the-wall on +z;
+   *   - `seat: 'insert'` plus `offsetMm: −PEG.lengthMm` — the back panel rests on
+   *     the insert flanges, and the pegs run a whole peg length in behind it;
+   *   - `offsetYMm` — the bin's own bounding-box centre against its peg rows,
+   *     which `drawOffsetYMm` derives and bounds.
+   */
+  const addGeneratedPart = useCallback(
+    (input: {
+      mesh: { positions: Float64Array; triangleCount: number };
+      cells: readonly Hex[];
+      offsets: { xMm: number; yMm: number };
+      name: string;
+      notes: string[];
+    }) => {
+      const { mesh, cells: made, offsets, name: binName, notes } = input;
+      const stl = toBinaryStl(mesh, binName);
+      const proposal = proposeFromMesh(
+        `${binName}.stl`,
+        {
+          positions: Float32Array.from(mesh.positions),
+          triangleCount: mesh.triangleCount,
+          format: 'binary',
+        },
+        catalog,
+      );
+      const part: ImportedPart = {
+        ...proposal.part,
+        name: binName,
+        type: 'accessory',
+        group: 'Generated',
+        footprint: [...made],
+        anchor: made[0] ?? { q: 0, r: 0 },
+        // Every cell carries a peg and every peg needs an empty insert. Not a
+        // count derived from the footprint's SIZE — that is the
+        // seven-inserts-for-two-pegs error — but from the pegs themselves, which
+        // here happen to be one per cell because that is how the bin was built.
+        requires: [{ partId: 'insert-empty', count: made.length }],
+        needsReview: false,
+        provenance: { basis: 'geometry', confidence: 1, notes },
+      };
+
+      void putModelBytes(part.id, stl).then((stored) => {
+        if (!stored) {
+          say('Added, but this browser would not store the model, so 3D will draw a box', 'warn');
+        }
+      });
+      setUserParts((prev) => {
+        const next = [...prev.filter((p) => p.id !== part.id), part];
+        const problem = saveUserParts(next);
+        if (problem !== null) say(problem, 'warn');
+        return next;
+      });
+      setUserOverrides((prev) =>
+        setMounting(
+          prev,
+          part.id,
+          {
+            wallFaceAxis: 'x',
+            matingEnd: 'low',
+            seat: 'insert',
+            offsetMm: -PEG.lengthMm,
+            offsetXMm: offsets.xMm,
+            offsetYMm: offsets.yMm,
+          },
+          'generated in the Build tab',
+        ),
+      );
+      // Both caches are keyed on part id and an id can be reused, so neither may
+      // carry a previous bin's shape into this one.
+      forgetPartMesh(part.id);
+      forgetThumbnail(part.id);
+      store.addToProject([part.id]);
+      if (Math.abs(offsets.xMm) > 40 || Math.abs(offsets.yMm) > 40) {
+        // `readTrim` clamps a stored correction at MAX_OFFSET_MM, silently. The
+        // FILE is unaffected — this is only about where the wall draws it.
+        say(`${binName} is in your project, but its pegs are far enough off centre `
+          + 'that the wall will draw it approximately. The file itself is exact.', 'warn');
+      } else {
+        say(`${binName} is in your library and in this project — drag it onto the wall`, 'ok');
+      }
+    },
+    [catalog, store, say],
+  );
+
   /** Delete an upload from the library for good — model, photo and all. */
   const removeImportedPart = useCallback(
     (partId: string) => {
@@ -1105,21 +1263,39 @@ export function App() {
    * printer's are deliberately different (D56).
    */
   const downloadPlate = useCallback(
-    (panel: PlacedPanel, label: string) => {
+    (panel: PlacedPanel, label: string, copies = 1) => {
       try {
+        const n = clampStack(copies);
         const spec = panelModelSpecFor(panel, state.doc);
-        const mesh = buildHoneycombMesh({
+        const one = buildHoneycombMesh({
           cells: spec.cells, clipped: spec.clipped, border: spec.border,
         });
-        const stl = toBinaryStl(mesh, `${state.doc.name} — ${label}`);
-        const name = panelModelFileName(`${state.doc.name} ${label}`, spec.cells.length);
+        // A stack is the same plate, n times, a layer of air apart (D111). The
+        // copies are separate shells on purpose — they are meant to come apart.
+        const mesh = stackMesh(one, n);
+        const stl = toBinaryStl(
+          mesh,
+          n > 1 ? `${state.doc.name} — ${label} ×${n}` : `${state.doc.name} — ${label}`,
+        );
+        const name = panelModelFileName(
+          n > 1 ? `${state.doc.name} ${label} stack of ${n}` : `${state.doc.name} ${label}`,
+          spec.cells.length,
+        );
         const url = URL.createObjectURL(new Blob([stl], { type: 'model/stl' }));
         const a = document.createElement('a');
         a.href = url;
         a.download = name;
         a.click();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
-        say(`${name} — ${mesh.triangleCount.toLocaleString()} triangles`, 'ok');
+        // The HEIGHT, on the mesh rather than on the arithmetic that asked for
+        // it: it is the one number that decides whether the print will fit, and
+        // a bed in this app has a width and a depth but no height.
+        say(
+          n > 1
+            ? `${name} — ${n} plates, ${stackHeightMm(meshBoundsMm(one).size[2], n).toFixed(1)} mm tall`
+            : `${name} — ${mesh.triangleCount.toLocaleString()} triangles`,
+          'ok',
+        );
       } catch (e) {
         say(e instanceof Error ? e.message : 'That plate could not be generated', 'error');
       }
@@ -1203,6 +1379,38 @@ export function App() {
           </div>
 
           {/*
+            * The two halves of the product, at the top level.
+            *
+            * In the TITLE bar and not the toolbar, because the toolbar carries
+            * the parameters the next solve reads (D100) and this carries none —
+            * it decides whether there is a solve at all. Tabs rather than a
+            * menu: there are two, one is always on, and a person who has never
+            * pressed Build should be able to see that it is there.
+            */}
+          <div className="app__tabs" role="tablist" aria-label="Section">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === 'wall'}
+              onClick={() => setTab('wall')}
+              title="Plan a wall out of plates, and lay accessories out on it"
+            >
+              <Icon name="wall" size="md" />
+              Wall
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === 'build'}
+              onClick={() => setTab('build')}
+              title="Generate a bin that pegs into the honeycomb, at any size"
+            >
+              <Icon name="layers" size="md" />
+              Build
+            </button>
+          </div>
+
+          {/*
             * The logo, in the gap between what you are working on and what you
             * can do to it.
             *
@@ -1273,7 +1481,7 @@ export function App() {
               Import
               <input
                 type="file"
-                accept={`${MODEL_ACCEPT},application/json,.json`}
+                accept={MODEL_ACCEPT}
                 multiple
                 onChange={(e) => {
                   for (const f of e.target.files ?? []) importFile(f);
@@ -1377,6 +1585,11 @@ export function App() {
           </div>
         </div>
 
+        {/* The toolbar is the WALL's parameters — nothing in it means anything
+            to the generator, and a row of controls that do nothing is worse
+            than no row. The title bar above stays: it is the document and the
+            app, both of which the Build tab still belongs to. */}
+        {tab === 'wall' && (
         <div className="app__toolbar">
           {/*
             * Three clusters, each in its own well: the WALL, the PRINTER, and
@@ -1542,7 +1755,7 @@ export function App() {
             <ColorSwatch
               label="Colour for the panels"
               value={state.doc.colors?.panels}
-              fallback={themeColor('--canvas-panel-tint', '#c8ced6')}
+              fallback={DEFAULT_PANEL_COLOR}
               onChange={(c) => store.setDefaultColor('panels', c, 'Colour the panels')}
               onClear={() => store.setDefaultColor('panels', undefined, 'Clear the panel colour')}
             />
@@ -1550,7 +1763,7 @@ export function App() {
             <ColorSwatch
               label="Colour for the accessories and fasteners"
               value={state.doc.colors?.parts}
-              fallback={themeColor('--accent', '#3d7ea6')}
+              fallback={DEFAULT_PART_COLOR}
               onChange={(c) => store.setDefaultColor('parts', c, 'Colour the parts')}
               onClear={() => store.setDefaultColor('parts', undefined, 'Clear the part colour')}
             />
@@ -1575,8 +1788,72 @@ export function App() {
             )}
           </div>
         </div>
+        )}
+
+        {/*
+          * The Build tab's own toolbar. The shell's is hidden here (nothing in
+          * it means anything to a generator), and these two are what this tab
+          * carries instead: which THING you are making. Same tier as the
+          * toolbar for the same reason — it decides what the next action
+          * produces (D100).
+          */}
+        {tab === 'build' && (
+          <div className="app__toolbar buildbar">
+            <div className="toolbar__group" role="group" aria-label="What to build">
+              <button
+                type="button"
+                className="buildbar__tool"
+                aria-pressed={buildTool === 'bin'}
+                onClick={() => setBuildTool('bin')}
+                title="Generate an open-top bin, sized to fit what goes in it"
+              >
+                <Icon name="layers" size="md" />
+                Bin
+              </button>
+              <button
+                type="button"
+                className="buildbar__tool"
+                aria-pressed={buildTool === 'pegs'}
+                onClick={() => setBuildTool('pegs')}
+                title="Add honeycomb pegs to a model you already have"
+              >
+                <Icon name="target" size="md" />
+                Add pegs
+              </button>
+            </div>
+          </div>
+        )}
       </header>
 
+      {tab === 'build' ? (
+        <>
+          {buildTool === 'bin' ? (
+            <BinBuilder
+              onAddToProject={(model, binName) =>
+                addGeneratedPart({
+                  mesh: model.mesh,
+                  cells: model.cells,
+                  offsets: { xMm: 0, yMm: model.offsetYMm },
+                  name: binName,
+                  notes: [
+                    `generated by the bin builder: ${model.spec.pegs} pegs, ` +
+                      `${model.spec.innerWidthMm.toFixed(1)} × ` +
+                      `${model.spec.innerDepthMm.toFixed(1)} × ` +
+                      `${model.spec.innerHeightMm.toFixed(1)} mm inside`,
+                    'the footprint is the cell list the mesh was built from, not a bounding-box bound',
+                  ],
+                })}
+              say={say}
+            />
+          ) : (
+            <PegAdder
+              onAddToProject={(mesh, made, offsets, partName, notes) =>
+                addGeneratedPart({ mesh, cells: made, offsets, name: partName, notes })}
+              say={say}
+            />
+          )}
+        </>
+      ) : (
       <div className="app__body">
         <aside className="app__rail">
           <CatalogPanel
@@ -1612,6 +1889,7 @@ export function App() {
                 store.select(additive ? [...state.selection, ...expanded] : expanded);
               }}
               litPanelIds={litPanelIds}
+              onPickPanel={pickPanel}
               pickedFixing={pickedFixing}
               onPickFixing={setPickedFixing}
               onMoveFixing={(from, to) => {
@@ -1629,6 +1907,7 @@ export function App() {
               dragRef={dragRef}
               invalidCells={dropCheck.ok ? undefined : dropCheck.blockedCells}
               litPanelIds={litPanelIds}
+              onPickPanel={pickPanel}
               placementValid={dropCheck.ok}
               onDragMove={onDragMove}
               onDrop={onDrop}
@@ -1702,10 +1981,10 @@ export function App() {
               // off, which is the only way back for a panel line: a plate is not
               // selectable, so Escape-the-selection does not cover it.
               store.select(state.doc.items.filter((i) => i.partId === partId).map((i) => i.id));
-              setLitLine((current) => (current === partId ? null : partId));
+              pickLine((current) => (current === partId ? null : partId));
               setPickedFixing(null);
             }}
-            litLine={litLine}
+            litLine={shownLine}
             onSetLineColor={(lineKey, color) => store.setLineColor(lineKey, color)}
             onClearColors={() => store.clearColors()}
             onSetPrinted={(partId, count) => store.setPrinted(partId, count)}
@@ -1726,6 +2005,14 @@ export function App() {
                   onChange={(obstacles) => store.setObstacles(obstacles)}
                   onFrameChange={(frame) => store.setFrame(frame)}
                   onDownload={downloadPlate}
+                  litLine={shownLine}
+                  onHoverLine={setHoverLine}
+                  // The same toggle a parts-list line has, and deliberately the
+                  // same state: a plate has one line, so pointing at it in
+                  // either list must light the same copies and mark the same
+                  // row (`bom.customLineKey` is what keeps the two agreeing).
+                  onLightLine={(lineKey, toggle) =>
+                    pickLine((current) => (toggle && current === lineKey ? null : lineKey))}
                   onCopy={(text, what) => {
                     void navigator.clipboard?.writeText(text);
                     say(`${what} settings copied — paste them into the customiser`, 'ok');
@@ -1736,6 +2023,7 @@ export function App() {
           />
         </aside>
       </div>
+      )}
 
       {aligning && (
         <AlignPanel

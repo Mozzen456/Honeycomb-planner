@@ -24,8 +24,9 @@ import {
   type Point,
 } from '../core/hex';
 import { itemCells, panelLineKeys } from '../core/bom';
-import { colorOfItem, colorOfPanel } from '../core/colors';
+import { colorOfItem, colorOfPanel, standOffColor } from '../core/colors';
 import {
+  editZone,
   formatMm,
   handlePoint,
   measure,
@@ -33,7 +34,9 @@ import {
   SNAP_RADIUS_MM,
   snapPoint,
   zoneFromDrag,
+  zoneFromOutline,
   zoneHit,
+  zoneOutlinePoints,
   zoneParts,
   moveZone,
   withZonePart,
@@ -41,14 +44,17 @@ import {
   ZONE_HANDLES,
   type Snap,
 } from '../core/measure';
-import { assemblyBlockCells, borderSpecFor, frameIsOn, NO_WALL_FRAME } from '../core/panelModel';
+import { simplifyPath, simplifyStroke } from '../core/zonePolygon';
+import {
+  assemblyBlockCells, borderCutCells, borderSpecFor, frameIsOn, NO_WALL_FRAME, plateAt,
+} from '../core/panelModel';
 import {
   borderPolygons, DEFAULT_BORDER_MM, MAX_BORDER_MM, MIN_BORDER_MM, plateEdgeShapes,
 } from '../core/honeycomb';
 import { MAX_WALL_MM } from '../core/store';
 import { Icon, type IconName } from './Icon';
 import { NumberField } from './NumberField';
-import { obstacleRects } from '../core/obstacles';
+import { obstacleRects, obstacleRegions, regionOutline } from '../core/obstacles';
 import { partCells } from '../core/store';
 import {
   calibratePhoto, MAX_PHOTO_OPACITY, MIN_PHOTO_OPACITY, movePhoto, photoCorners, photoHit,
@@ -68,7 +74,21 @@ import './WallCanvas.css';
  * about cannot all be "drag on empty wall at once". The mode is shown, and
  * Escape always returns to Select.
  */
-export type PlanTool = 'select' | 'measure' | 'zone' | 'photo';
+export type PlanTool = 'select' | 'measure' | 'zone' | 'shape' | 'photo';
+
+/**
+ * A zone being DRAWN as an outline (D118): the corners placed so far, the
+ * freehand stretch under the pointer if one is live, and the press that may
+ * become either.
+ */
+interface ShapeDraft {
+  points: Point[];
+  stroke: Point[] | null;
+  press: { x: number; y: number; at: Snap; free: Point } | null;
+}
+
+/** How close, in screen pixels, a click must land to the first corner to close the shape. */
+const CLOSE_PX = 10;
 
 export interface DragPayload {
   /** Dragging a new part from the catalogue. */
@@ -108,6 +128,8 @@ export interface WallCanvasProps {
   onDragCancel: () => void;
   onSelect: (ids: string[], additive: boolean) => void;
   onStartItemDrag: (itemIds: string[], grabOffset: Hex) => void;
+  /** A plate clicked, so the whole of it lights (D129); null for anything else. */
+  onPickPanel?: (panelId: string | null) => void;
   placementValid: boolean;
   /**
    * Blocked zones after an edit — drawn, moved, resized or deleted.
@@ -156,6 +178,7 @@ export function WallCanvas(props: WallCanvasProps) {
     onDragCancel,
     onSelect,
     onStartItemDrag,
+    onPickPanel,
     placementValid,
     onObstaclesChange,
     onFrameChange,
@@ -207,8 +230,70 @@ export function WallCanvas(props: WallCanvasProps) {
    * accumulating drifts, and a resize that drifts changes size when you pause.
    */
   const zoneDragRef = useRef<
-    { id: string; origin: Obstacle; grab: Point; handle: { hx: number; hy: number } | null } | null
+    {
+      id: string; origin: Obstacle; grab: Point; handle: { hx: number; hy: number } | null;
+      /** Where the zone is now; committed once, on release (D128). */
+      moved?: Obstacle;
+    } | null
   >(null);
+  /**
+   * The zone mid-drag, drawn in place of the document's.
+   *
+   * A zone's move used to commit every frame, and every commit re-cuts every
+   * plate on the wall, re-plans the fixings and rebuilds the parts list — 1.2 to
+   * 1.9 s a frame on a 2400 × 1200 wall, measured, so a drag froze the page and
+   * left one undo step per pointer move. The photograph's rule now: the gesture
+   * is local, and one commit at the end is one re-cut and one undo step.
+   */
+  const [zonePreview, setZonePreview] = useState<Obstacle | null>(null);
+  const shownZones = useMemo(
+    () => (zonePreview
+      ? (doc.obstacles ?? []).map((o) => (o.id === zonePreview.id ? zonePreview : o))
+      : (doc.obstacles ?? [])),
+    [doc.obstacles, zonePreview],
+  );
+  /**
+   * The outline being drawn with the Draw zone tool.
+   *
+   * In a REF, written synchronously, for the reason `sketchRef` is: a click or
+   * a freehand flick can go down, move and come up before a render lands, and
+   * read from state the release would see the corners as they were before it.
+   * The state copy exists only so the draw effect re-runs.
+   */
+  const shapeRef = useRef<ShapeDraft>({ points: [], stroke: null, press: null });
+  const [shapeDraft, setShapeDraft] = useState<{ points: Point[]; stroke: Point[] | null }>(
+    { points: [], stroke: null });
+  const syncShape = useCallback(() => {
+    const d = shapeRef.current;
+    setShapeDraft({ points: [...d.points], stroke: d.stroke ? [...d.stroke] : null });
+  }, []);
+  const clearShape = useCallback(() => {
+    shapeRef.current = { points: [], stroke: null, press: null };
+    setShapeDraft({ points: [], stroke: null });
+  }, []);
+  /** Why the last outline could not become a zone, as a sentence. */
+  const [shapeProblem, setShapeProblem] = useState<string | null>(null);
+  // Leaving the tool abandons a half-drawn outline, however it was left —
+  // a toolbar button, a key, or finishing it.
+  useEffect(() => {
+    if (tool === 'shape') return;
+    clearShape();
+    setShapeProblem(null);
+  }, [tool, clearShape]);
+  /*
+   * Drawing goes on with nothing selected. Backspace takes a corner back here,
+   * and the shell deletes the selected parts on the same key whenever anything
+   * is selected — so a part left selected from before was deleted by the
+   * keystroke meant for a corner. With the selection empty the shell's handler
+   * has nothing to do, which is the condition D88 sets for every key two
+   * handlers share. Not only on the way in: Ctrl+A and Ctrl+Z both put a
+   * selection back while the tool is up (found by the independent check), so
+   * whenever one appears, it goes.
+   */
+  useEffect(() => {
+    if (tool === 'shape' && selection.length > 0) onSelect([], false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tool, selection]);
 
   // --- the wall photograph -------------------------------------------------
 
@@ -471,13 +556,19 @@ export function WallCanvas(props: WallCanvasProps) {
   /** Fit the wall in view. Called on mount and by the Fit button. */
   const fit = useCallback(() => {
     const pad = 40;
+    // The tool strip floats over the top of the canvas, so the wall is fitted
+    // into the space BELOW it — a tall wall used to put its top rows under the
+    // strip, which is exactly where you look to check the top is straight.
+    const padTop = 76;
     const sx = doc.wall.widthMm / Math.max(1, size.w - pad * 2);
-    const sy = doc.wall.heightMm / Math.max(1, size.h - pad * 2);
+    const sy = doc.wall.heightMm / Math.max(1, size.h - pad - padTop);
     const scale = clamp(Math.max(sx, sy), MIN_SCALE, MAX_SCALE);
+    // Y-up (D70): `originY` is the wall y at the canvas's BOTTOM edge.
+    const centreFromBottom = (size.h - padTop + pad) / 2;
     setView({
       scale,
       originX: doc.wall.widthMm / 2 - (size.w / 2) * scale,
-      originY: doc.wall.heightMm / 2 - (size.h / 2) * scale,
+      originY: doc.wall.heightMm / 2 - centreFromBottom * scale,
     });
   }, [doc.wall.widthMm, doc.wall.heightMm, size.w, size.h]);
 
@@ -634,12 +725,11 @@ export function WallCanvas(props: WallCanvasProps) {
      * switch takes the colour of the generated plate it really is.
      */
     const cellColors = new Map<string, string>();
-    if (doc.colors) {
-      for (const p of doc.panels) {
-        const colour = colorOfPanel(doc.colors, panelLines.get(p.id));
-        if (colour === undefined) continue;
-        for (const c of placedPanelCells(p)) cellColors.set(hexKey(c), colour);
-      }
+    for (const p of doc.panels) {
+      const chosen = colorOfPanel(doc.colors, panelLines.get(p.id));
+      if (chosen === undefined) continue;
+      const colour = standOffColor(chosen, C.wall);
+      for (const c of placedPanelCells(p)) cellColors.set(hexKey(c), colour);
     }
 
     // 1 + 2. The static layer: panel cells and seams. Rebuilt only when the
@@ -798,7 +888,8 @@ export function WallCanvas(props: WallCanvasProps) {
             const b = cellsBounds(panelCells(p.origin, p.columns, p.rows));
             const a = toScreen({ x: b.minX, y: b.minY });
             const d = toScreen({ x: b.maxX, y: b.maxY });
-            lc.fillStyle = colorOfPanel(doc.colors, panelLines.get(p.id)) ?? C.panel;
+            const chosen = colorOfPanel(doc.colors, panelLines.get(p.id));
+            lc.fillStyle = chosen === undefined ? C.panel : standOffColor(chosen, C.wall);
             lc.fillRect(a.x, a.y, d.x - a.x, d.y - a.y);
           }
           /*
@@ -938,7 +1029,7 @@ export function WallCanvas(props: WallCanvasProps) {
     // have been cut out, so the zone shows through the gap it made, and seeing
     // the two together is the whole point — a zone whose rectangle does not
     // line up with the missing hexagons is a zone in the wrong place.
-    drawZones(ctx, doc, toScreen, C, zoneSel, tool);
+    drawZones(ctx, shownZones, toScreen, C, zoneSel, tool);
     drawBorder(ctx, plateEdge, toScreen, C);
 
     // 5c. The photograph, when it goes IN FRONT — over the plate, under the
@@ -996,6 +1087,55 @@ export function WallCanvas(props: WallCanvasProps) {
       );
     }
 
+    // 6b'. The outline being drawn: the corners so far, the freehand stretch
+    //      under the pointer, and a rubber band to the cursor — closed and
+    //      filled once there are three corners, because that is the zone you
+    //      will get if you finish now.
+    if (tool === 'shape') {
+      const pts = [...shapeDraft.points, ...(shapeDraft.stroke ?? [])];
+      if (pts.length > 0) {
+        const path = new Path2D();
+        pts.forEach((p, i) => {
+          const q = toScreen(p);
+          if (i === 0) path.moveTo(q.x, q.y);
+          else path.lineTo(q.x, q.y);
+        });
+        if (cursor && !shapeDraft.stroke) {
+          const q = toScreen(cursor);
+          path.lineTo(q.x, q.y);
+        }
+        if (pts.length >= 3) {
+          const filled = new Path2D(path);
+          filled.closePath();
+          ctx.fillStyle = C.zoneFill;
+          ctx.fill(filled);
+        }
+        ctx.strokeStyle = C.zone;
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([5, 4]);
+        ctx.stroke(path);
+        ctx.setLineDash([]);
+        ctx.fillStyle = C.zone;
+        for (const p of shapeDraft.points) {
+          const q = toScreen(p);
+          ctx.fillRect(q.x - 3, q.y - 3, 6, 6);
+        }
+        // The first corner, ringed when a click there would close the shape.
+        const first = shapeDraft.points[0];
+        if (first && cursor && shapeDraft.points.length >= 3) {
+          const a = toScreen(first);
+          const b = toScreen(cursor);
+          if (Math.hypot(a.x - b.x, a.y - b.y) <= CLOSE_PX) {
+            ctx.strokeStyle = C.measure;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(a.x, a.y, CLOSE_PX, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+        }
+      }
+    }
+
     // 6c. The tape: the one being dragged, or the last one taken.
     //
     //     The scale gesture borrows the same drawing, because it IS a
@@ -1010,7 +1150,8 @@ export function WallCanvas(props: WallCanvasProps) {
     if (shown) drawTape(ctx, shown, toScreen, C, size);
 
     // 6d. The snap crosshair, so you can see WHAT it caught before committing.
-    if (cursor && cursor.kind !== 'free' && (tool === 'measure' || tool === 'zone')) {
+    if (cursor && cursor.kind !== 'free' &&
+        (tool === 'measure' || tool === 'zone' || tool === 'shape')) {
       const p = toScreen(cursor);
       ctx.strokeStyle = C.measure;
       ctx.lineWidth = 1.25;
@@ -1038,7 +1179,7 @@ export function WallCanvas(props: WallCanvasProps) {
   }, [
     doc, catalog, selection, drag, hover, marquee, invalidCells, placementValid,
     size, view, toScreen, toWall, panelIndex, partOf, seamEdges, themeTick,
-    tool, tape, sketch, zoneSel, cursor, plateEdge,
+    tool, tape, sketch, zoneSel, cursor, plateEdge, shapeDraft, shownZones,
     shownPhoto, photoImg, scalePair,
     // The lit plates. A prop the draw effect READS has to be a dependency of it
     // — left out, clicking a parts-list line changed the row and repainted
@@ -1136,6 +1277,30 @@ export function WallCanvas(props: WallCanvasProps) {
     [toWall],
   );
 
+  /**
+   * The drawn outline becomes a zone — or says why it cannot.
+   *
+   * Either way the draft is cleared: a shape that crosses itself has no inside
+   * to keep, and drawing it again is quicker than unpicking it. A good one is
+   * selected and the tool goes back to Select, as after a dragged rectangle, so
+   * the zone just drawn can be nudged or sized straight away.
+   */
+  const finishShape = (pts: readonly Point[]): void => {
+    const made = zoneFromOutline(pts, `zone${Date.now().toString(36)}`, 'Blocked zone', 0);
+    clearShape();
+    if ('problem' in made) {
+      setShapeProblem(made.problem);
+      return;
+    }
+    setShapeProblem(null);
+    onObstaclesChange([...(doc.obstacles ?? []), made.zone]);
+    setZoneSel(made.zone.id);
+    setTool('select');
+  };
+  /** The latest `finishShape`, for the key handler, which outlives renders. */
+  const finishShapeRef = useRef(finishShape);
+  finishShapeRef.current = finishShape;
+
   const onPointerDown = (ev: React.PointerEvent<HTMLCanvasElement>) => {
     // Capture is an optimisation — it keeps the gesture alive past the canvas
     // edge — and it is allowed to fail: the browser rejects it for a pointer
@@ -1170,6 +1335,15 @@ export function WallCanvas(props: WallCanvasProps) {
 
     if (tool === 'zone') {
       setSketch({ from: snapped, to: snapped });
+      return;
+    }
+
+    // Draw zone: the press may be a click (a corner) or the start of a
+    // freehand stretch — which one is decided by how far it moves.
+    if (tool === 'shape') {
+      setShapeProblem(null);
+      shapeRef.current.press = { x: ev.clientX, y: ev.clientY, at: snapped, free: at };
+      shapeRef.current.stroke = null;
       return;
     }
 
@@ -1247,13 +1421,13 @@ export function WallCanvas(props: WallCanvasProps) {
     // a rectangle that drifts changes size whenever the pointer pauses.
     const zd = zoneDragRef.current;
     if (zd) {
-      const zones = doc.obstacles ?? [];
       const next = zd.handle
         ? resizeZone(zd.origin, zd.handle.hx, zd.handle.hy, snapAt(at, ev.shiftKey))
         // Through `moveZone`: a zone with a shape has to move its rectangles
         // with its box, or it blocks somewhere it is not drawn.
         : moveZone(zd.origin, at.x - zd.grab.x, at.y - zd.grab.y);
-      onObstaclesChange(zones.map((o) => (o.id === zd.id ? next : o)));
+      zd.moved = next;
+      setZonePreview(next);
       return;
     }
 
@@ -1271,6 +1445,26 @@ export function WallCanvas(props: WallCanvasProps) {
     if (tool === 'photo') {
       const live = sketchRef.current;
       if (live) setSketch({ ...live, to: snapAt(at, true) });
+      return;
+    }
+
+    if (tool === 'shape') {
+      setCursor(snapAt(at, ev.shiftKey));
+      const d = shapeRef.current;
+      if (d.press) {
+        // Past a few pixels a press is a freehand stretch, and from then on
+        // every move adds to it. Unsnapped: a hand-drawn line is meant where
+        // the hand went, and snapping each sample would make it a staircase.
+        if (d.stroke === null &&
+            Math.hypot(ev.clientX - d.press.x, ev.clientY - d.press.y) > 4) {
+          d.stroke = [d.press.free];
+        }
+        if (d.stroke) {
+          const last = d.stroke[d.stroke.length - 1]!;
+          if (Math.hypot(at.x - last.x, at.y - last.y) >= view.scale * 2) d.stroke.push(at);
+          syncShape();
+        }
+      }
       return;
     }
 
@@ -1315,8 +1509,14 @@ export function WallCanvas(props: WallCanvasProps) {
       return;
     }
 
-    if (zoneDragRef.current) {
+    const zd = zoneDragRef.current;
+    if (zd) {
       zoneDragRef.current = null;
+      setZonePreview(null);
+      // `zd.moved`, never `zonePreview`: the release can land before the
+      // render that would make the state visible (D58).
+      const moved = zd.moved;
+      if (moved) onObstaclesChange((doc.obstacles ?? []).map((o) => (o.id === zd.id ? moved : o)));
       return;
     }
 
@@ -1342,6 +1542,44 @@ export function WallCanvas(props: WallCanvasProps) {
         setScaleArmed(false);
       }
       setSketch(null);
+      return;
+    }
+
+    if (tool === 'shape') {
+      const d = shapeRef.current;
+      const press = d.press;
+      d.press = null;
+      if (!press) return;
+      // A few screen pixels of tolerance, in millimetres at this zoom: the
+      // simplified line may stray that far from the hand-drawn one.
+      const tol = Math.max(0.5, view.scale * 3);
+      if (d.stroke && d.stroke.length >= 2) {
+        const stroke = d.stroke;
+        d.stroke = null;
+        if (d.points.length === 0) {
+          // One stroke from nothing is a LASSO: it closes on release, which is
+          // what drawing round something in one go means.
+          finishShape(simplifyStroke(stroke, tol));
+          return;
+        }
+        d.points.push(...simplifyPath(stroke, tol));
+        syncShape();
+        return;
+      }
+      d.stroke = null;
+      const first = d.points[0];
+      if (first && d.points.length >= 3) {
+        const a = toScreen(first);
+        const rect = canvasRef.current?.getBoundingClientRect();
+        const bx = ev.clientX - (rect?.left ?? 0);
+        const by = ev.clientY - (rect?.top ?? 0);
+        if (Math.hypot(a.x - bx, a.y - by) <= CLOSE_PX) {
+          finishShape(d.points);
+          return;
+        }
+      }
+      d.points.push({ x: press.at.x, y: press.at.y });
+      syncShape();
       return;
     }
 
@@ -1408,6 +1646,13 @@ export function WallCanvas(props: WallCanvasProps) {
       const hits = itemsInRect(doc, catalog, marquee.a, marquee.b);
       onSelect(hits, ev.shiftKey || ev.metaKey || ev.ctrlKey);
       setMarquee(null);
+      // A press on bare plate starts a marquee; one that never moved is a CLICK
+      // on that plate, and lights it whole (D129).
+      const p = pressRef.current;
+      const still = p !== null && Math.hypot(ev.clientX - p.x, ev.clientY - p.y) < 4;
+      onPickPanel?.(still && p
+        ? plateAt(doc.panels, borderCutCells(doc.panels, doc.frame), p.cell)?.id ?? null
+        : null);
       pressRef.current = null;
       return;
     }
@@ -1415,6 +1660,10 @@ export function WallCanvas(props: WallCanvasProps) {
     if (press) {
       const id = press.itemId;
       onSelect(id === undefined ? [] : [id], ev.shiftKey || ev.metaKey || ev.ctrlKey);
+      // The same rule the 3D view's hover and click use, border ring included.
+      onPickPanel?.(id === undefined
+        ? plateAt(doc.panels, borderCutCells(doc.panels, doc.frame), press.cell)?.id ?? null
+        : null);
     }
     pressRef.current = null;
   };
@@ -1436,14 +1685,28 @@ export function WallCanvas(props: WallCanvasProps) {
    * a zone is, and Escape there clears the item selection without knowing a
    * tool exists. Two handlers, each minding its own selection.
    */
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
+  /*
+   * The listener is attached ONCE and calls whatever handler the latest render
+   * left in the ref — never re-subscribed per render (D118).
+   *
+   * It used to be an effect keyed on the selection, among other things, and the
+   * shell's own Escape handler clears the selection. When the shell's handler
+   * ran first, the selection change re-ran this effect mid-dispatch, the
+   * listener that was about to receive the very same Escape was removed, and the
+   * plan never saw it: Escape had to be pressed twice to leave a tool. Reading
+   * through a ref there is nothing to remove, and no closure to go stale either.
+   */
+  const onKeyRef = useRef<(e: KeyboardEvent) => void>(() => {});
+  onKeyRef.current = (e: KeyboardEvent) => {
+    {
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
 
       if (e.key === 'Escape') {
         setTool('select');
+        clearShape();
+        setShapeProblem(null);
         setSketch(null);
         setTape(null);
         setZoneSel(null);
@@ -1452,6 +1715,21 @@ export function WallCanvas(props: WallCanvasProps) {
         setPhotoProblem(null);
         setPhotoPreview(null);
         photoDragRef.current = null;
+        return;
+      }
+      // Drawing an outline: Enter finishes it, Backspace takes the last corner
+      // back. Scoped to the tool, like the photograph's Backspace below, so the
+      // same key elsewhere still means what it always did.
+      if (tool === 'shape' && e.key === 'Enter') {
+        e.preventDefault();
+        if (shapeRef.current.points.length >= 3) finishShapeRef.current(shapeRef.current.points);
+        else if (shapeRef.current.points.length > 0) setShapeProblem('A shape needs at least three corners.');
+        return;
+      }
+      if (tool === 'shape' && (e.key === 'Delete' || e.key === 'Backspace')) {
+        e.preventDefault();
+        shapeRef.current.points.pop();
+        syncShape();
         return;
       }
       if ((e.key === 'Delete' || e.key === 'Backspace') && zoneSel !== null) {
@@ -1492,7 +1770,7 @@ export function WallCanvas(props: WallCanvasProps) {
         return;
       }
       const keys: Record<string, PlanTool> = {
-        v: 'select', m: 'measure', b: 'zone', p: 'photo',
+        v: 'select', m: 'measure', b: 'zone', d: 'shape', p: 'photo',
       };
       const next = keys[e.key.toLowerCase()];
       if (next) {
@@ -1500,15 +1778,13 @@ export function WallCanvas(props: WallCanvasProps) {
         setSketch(null);
         if (next !== 'select') setZoneSel(null);
       }
-    };
+    }
+  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => onKeyRef.current(e);
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-    // `tool` and `selection` are read by the photo branch, so a stale closure
-    // here would delete the picture from the wrong mode — or refuse to from the
-    // right one.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [zoneSel, tool, selection, doc.obstacles, doc.frame, doc.photo,
-      onObstaclesChange, onFrameChange, onPhotoChange]);
+  }, []);
 
   const onWheel = (ev: React.WheelEvent<HTMLCanvasElement>) => {
     const rect = canvasRef.current?.getBoundingClientRect();
@@ -1554,6 +1830,13 @@ export function WallCanvas(props: WallCanvasProps) {
     { id: 'select', label: 'Select', key: 'V', icon: 'target', hint: 'Move parts and zones' },
     { id: 'measure', label: 'Measure', key: 'M', icon: 'ruler', hint: 'Drag between two points — hold Shift to ignore snapping' },
     { id: 'zone', label: 'Blocked zone', key: 'B', icon: 'zone', hint: 'Drag a rectangle the honeycomb must keep out of' },
+    {
+      id: 'shape',
+      label: 'Draw zone',
+      key: 'D',
+      icon: 'shape',
+      hint: 'Click corners, or drag freehand, round an area the honeycomb must keep out of — a sloping ceiling, a stair',
+    },
     {
       id: 'photo',
       label: 'Photo',
@@ -1676,6 +1959,55 @@ export function WallCanvas(props: WallCanvasProps) {
           would mean remembering it while aiming, and a prompt() over the canvas
           would hide the very points it is asking about.
         */}
+        {/*
+          Drawing a zone: what to do next, the two actions that are not a
+          click on the wall, and why the last outline was refused. The border
+          note is there because it changes what the line DOES: with the border
+          off, a plate is never cut, so the cells the line crosses are left out
+          whole and the edge steps; on, the plates are cut along the line.
+        */}
+        {tool === 'shape' && (
+          <span className="wall-canvas__scale" role="status">
+            <span className="wall-canvas__scale-hint">
+              {shapeDraft.points.length === 0
+                ? 'Click each corner, or drag round the area in one go'
+                : `${shapeDraft.points.length} corner${shapeDraft.points.length === 1 ? '' : 's'} — ` +
+                  'click the first one, or press Enter, to finish'}
+            </span>
+            {shapeDraft.points.length >= 3 && (
+              <button
+                type="button"
+                className="wall-canvas__scale-go"
+                onClick={() => finishShape(shapeRef.current.points)}
+              >
+                Finish
+                <kbd>↵</kbd>
+              </button>
+            )}
+            {shapeDraft.points.length > 0 && (
+              <button
+                type="button"
+                className="wall-canvas__scale-drop"
+                title="Take the last corner back (Backspace)"
+                onClick={() => { shapeRef.current.points.pop(); syncShape(); }}
+              >
+                Undo corner
+                <kbd>⌫</kbd>
+              </button>
+            )}
+            {/* Any border cuts, holes or not: it is what hands the zones to the
+                generator at all. Only with none is the line stepped. */}
+            {!frameIsOn(doc.frame) && (
+              <span className="wall-canvas__scale-hint">
+                Border off: cells the line crosses are left out whole. Turn the border on to cut the plates along it.
+              </span>
+            )}
+            {shapeProblem && (
+              <span className="wall-canvas__scale-bad" role="alert">{shapeProblem}</span>
+            )}
+          </span>
+        )}
+
         {tool === 'photo' && (
           <span className="wall-canvas__scale">
             {/*
@@ -1876,7 +2208,7 @@ export function WallCanvas(props: WallCanvasProps) {
         body of the zone stays free to grab and drag.
       */}
       <div className="wall-canvas__zonetags" aria-label="Blocked zones">
-        {(doc.obstacles ?? []).map((o) => {
+        {shownZones.map((o) => {
           const a = toScreen({ x: o.xMm, y: o.yMm });
           const b = toScreen({ x: o.xMm + o.widthMm, y: o.yMm + o.heightMm });
           const left = Math.min(a.x, b.x);
@@ -1910,6 +2242,14 @@ export function WallCanvas(props: WallCanvasProps) {
         onPointerCancel={onPointerLeave}
         onPointerLeave={onPointerLeave}
         onWheel={onWheel}
+        // A double-click finishes an outline, the way it ends a polyline in
+        // every drawing program. Its two clicks have each placed a corner on
+        // the same spot, which the outline's own clean-up folds into one.
+        onDoubleClick={() => {
+          if (tool === 'shape' && shapeRef.current.points.length >= 3) {
+            finishShape(shapeRef.current.points);
+          }
+        }}
         role="application"
         aria-label="Wall layout"
       />
@@ -2191,7 +2531,7 @@ function ZoneTag(props: {
             max={MAX_WALL_MM}
             step={1}
             commitOn="confirm"
-            onCommit={(v) => onChange({ ...zone, widthMm: v })}
+            onCommit={(v) => onChange(editZone(zone, { widthMm: v }))}
             aria-label={`${zone.label} width in millimetres`}
           />
           <span aria-hidden="true">×</span>
@@ -2202,7 +2542,7 @@ function ZoneTag(props: {
             max={MAX_WALL_MM}
             step={1}
             commitOn="confirm"
-            onCommit={(v) => onChange({ ...zone, heightMm: v })}
+            onCommit={(v) => onChange(editZone(zone, { heightMm: v }))}
             aria-label={`${zone.label} height in millimetres`}
           />
           <button
@@ -2322,13 +2662,13 @@ const HANDLE_PX = 7;
 
 function drawZones(
   ctx: CanvasRenderingContext2D,
-  doc: LayoutDoc,
+  zones: readonly Obstacle[],
   toScreen: (p: Point) => Point,
   C: Palette,
   selectedId: string | null,
   tool: PlanTool,
 ): void {
-  for (const o of doc.obstacles ?? []) {
+  for (const o of zones) {
     const selected = o.id === selectedId;
     /*
      * Every rectangle of the shape, not the bounding box.
@@ -2348,8 +2688,51 @@ function drawZones(
       };
     };
 
+    /*
+     * A DRAWN zone is its outline, and its clearance is the convex pieces the
+     * cutter is handed, each grown — drawn from `obstacleRegions`, the same
+     * list the plate is cut against, so the dashed line is where the honeycomb
+     * really stops (D118).
+     */
+    const outline = zoneOutlinePoints(o);
+    if (outline) {
+      const poly = (pts: readonly Point[]): Path2D => {
+        const path = new Path2D();
+        pts.forEach((p, i) => {
+          const q = toScreen(p);
+          if (i === 0) path.moveTo(q.x, q.y);
+          else path.lineTo(q.x, q.y);
+        });
+        path.closePath();
+        return path;
+      };
+      if (o.clearanceMm > 0) {
+        ctx.strokeStyle = C.zoneClearance;
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 4]);
+        for (const r of obstacleRegions(o)) ctx.stroke(poly(regionOutline(r)));
+        ctx.setLineDash([]);
+      }
+      const shape = poly(outline);
+      ctx.fillStyle = C.zoneFill;
+      ctx.fill(shape);
+      ctx.strokeStyle = C.zone;
+      ctx.lineWidth = selected ? 2.5 : 1.5;
+      ctx.stroke(shape);
+      // The handles stretch the BOX, so the box is shown while they are: a
+      // handle floating off the corner of a slope is otherwise a mystery.
+      if (selected && tool !== 'measure') {
+        const q = boxOf(o);
+        ctx.strokeStyle = C.zone;
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 4]);
+        ctx.strokeRect(q.x, q.y, q.w, q.h);
+        ctx.setLineDash([]);
+      }
+    }
+
     // The clearance ring first, so the solid rectangles sit on top of it.
-    if (o.clearanceMm > 0) {
+    if (!outline && o.clearanceMm > 0) {
       ctx.strokeStyle = C.zoneClearance;
       ctx.lineWidth = 1;
       ctx.setLineDash([4, 4]);
@@ -2364,11 +2747,13 @@ function drawZones(
       ctx.setLineDash([]);
     }
 
-    ctx.fillStyle = C.zoneFill;
-    for (const r of parts) { const q = boxOf(r); ctx.fillRect(q.x, q.y, q.w, q.h); }
-    ctx.strokeStyle = C.zone;
-    ctx.lineWidth = selected ? 2.5 : 1.5;
-    for (const r of parts) { const q = boxOf(r); ctx.strokeRect(q.x, q.y, q.w, q.h); }
+    if (!outline) {
+      ctx.fillStyle = C.zoneFill;
+      for (const r of parts) { const q = boxOf(r); ctx.fillRect(q.x, q.y, q.w, q.h); }
+      ctx.strokeStyle = C.zone;
+      ctx.lineWidth = selected ? 2.5 : 1.5;
+      for (const r of parts) { const q = boxOf(r); ctx.strokeRect(q.x, q.y, q.w, q.h); }
+    }
 
     // The label and the size are NOT painted here. They are real HTML controls
     // over the canvas, because a measurement you can only look at is half a

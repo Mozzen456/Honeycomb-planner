@@ -3978,3 +3978,1366 @@ A section through the mouth band, counting runs of ZERO length: two crossings at
 one x is a surface with no thickness, which no real plate can produce. It is the
 same slice the aperture is measured on, and it responds — 476, 706, 402, 0 across
 the four states of the code — which is how it was checked rather than assumed.
+
+## D107 — Point at the file, see the plate
+
+"Plates to generate" is a list of shapes with a Download button each, and until
+now it said nothing about WHERE they are. On a wall solved to a printer that is
+four rows of "Custom plate A ×36, B ×9, C ×4, D ×1" — four files, no way to tell
+which corner of the wall each one is, and the only thing you actually want to
+know before printing thirty-six of something is which thirty-six.
+
+So the row lights them: hover it and its copies light up on the wall, click its
+name or press Download and they stay lit. Both views already do the lighting —
+`litPanelIds` has existed since D92 — so this is a question of naming the plates,
+and of where the answer is kept.
+
+### The line key, said once
+
+A plate's identity for this purpose is its parts-list LINE, and a generated one's
+line is `custom/<shape>|<frame>` (D56, D66). That string was built in two places
+in `bom.ts`; the rail building a third copy is the exact shape of D50, D52, D66
+and D71 — a second reader of one fact, quietly disagreeing. It is now
+`bom.customLineKey(groupKey)`, called by all three, and the rail passes what it
+gets straight back through `panelsForLine` rather than deciding anything itself.
+
+The grouping the rail does and the grouping `panelLineKeys` does are already the
+same call with the same `panelFrameKey` extra, so the keys line up by
+construction. `tests/lit-panels.test.ts` holds them to it against the parts list
+itself — every group's key is a line the list has, with the line's quantity equal
+to the group's — which fails the moment either side re-spells the key.
+
+### Hover is its own state, and that is the point
+
+`hoverLine` sits beside `litLine` rather than being written into it. A hover
+ENDS: folded together, moving the pointer off a row would clear a highlight
+somebody had deliberately clicked, and putting the clicked one back afterwards
+means remembering it separately anyway. Hover wins while it lasts —
+`shownLine = hoverLine ?? litLine` — and leaves nothing behind.
+
+`shownLine` is what the parts list is given too, so pointing at a plate in the
+rail marks the line it is counted on, twenty rows up. That is the same fact
+arriving in the two places a person might be looking.
+
+Download PINS rather than toggles. You pressed it to get the file; turning the
+wall's answer off at that moment is the opposite of what it meant. The name is
+the toggle, exactly as a parts-list line's name is.
+
+---
+
+## D108 — A second tab, and a bin that fits by construction
+
+The planner answers "what plates do I print to cover this wall". It has never
+answered "what do I hang on it that is not one of the 51 shipped parts", and the
+catalogue is a fixed set: if the thing you want is 84 mm wide and everything on
+the shelf is 56 or 97, the product has nothing to say.
+
+So: a second top-level tab, and a parametric generator behind it. Sliders, a
+preview, a file. The shape is the SKÅDIS bin generator's — an open-top box with
+a width, a depth and a height — and the only interesting part is the fastening.
+
+### The peg, measured, not invented
+
+`models/shelves/shelf-2.stl` is the reference. Its two pegs measure:
+
+- **13.45 mm across flats**, so 15.53075 across corners. All four shelves read
+  15.53072, which is the round number typed once and float32 back;
+- **8.0 mm long**, of which the first 4.0 are the full section;
+- **flat-top**, exactly like the wall's cells and like the socket in the top of
+  an insert — a peg turned 30° would foul the socket.
+
+The taper is the part worth having written down. Five of the six faces are drawn
+in 0.2775 mm over the next 3.7 mm and then 0.6005 at the tip; the SIXTH, the one
+facing down, does not move until the last 0.3 mm. That is not a modelling
+accident — it is the face the part is printed ON. The shipped shelves are drawn
+lying down with their pegs' bottom flats at z = 0, and drafting that face would
+have lifted it off the bed.
+
+`PEG_PROFILE` in `constants.ts` reproduces it, and `binModel.ts` builds from it,
+so a generated peg is the shipped peg rather than something that measures the
+same.
+
+### The spacing rule, which turned out to be the designer's
+
+A peg has to sit on a CELL CENTRE. The only horizontal step that keeps two cells
+at the same height is `2·ROW_STEP` = 40.876 mm, because the columns stagger by
+half a pitch. Vertically the step is `PITCH`. So the peg grid is a genuine
+sub-lattice of the honeycomb and `cellsFor` names its cells in axial coordinates
+— never in millimetres, and `tests/bin-model.test.ts` closes the loop by putting
+every peg centre through `hexToMm` and demanding an exact match.
+
+That leaves how far apart to put them, and the answer arrived twice. From the
+mechanics: two pegs 41 mm apart in the middle of a 187 mm bin let it rock about
+its own centre, so spread them as wide as the width allows, in whole steps. Then
+from the models:
+
+| part | tray width | pegs | gap | gap / ROW_STEP |
+|---|---|---|---|---|
+| `shelf-1` | 56.4072 | 2 | 40.876 | 2 |
+| `shelf-2` | 97.2833 | 2 | 81.752 | 4 |
+| `shelf-3` | 138.1598 | 2 | 122.626 | 6 |
+| `shelf-4` | 179.0352 | 3 | 81.752 | 4 |
+
+Every one of them is the widest whole-step spacing its own width allows. The test
+holds `pegStep` to all four rather than to itself.
+
+### Two rows of pegs, and the honest sentence about printing
+
+A bin held only at the bottom hangs off the peg's own resistance to being levered
+out of its socket — which is all a shelf has, and fine for a 43 mm ledge. So
+there is a top row too whenever the height allows one, and then the couple
+closes: the top pegs take the pull and the bottom of the back panel bears on the
+wall. SKÅDIS bins are hooked top and bottom for the same reason.
+
+It costs something and the panel says so. The bottom pegs put their flats on the
+bed and print with nothing in the air; the top row bridges 8 mm, and there is
+nowhere to put a support for it that is not inside the wall's own socket. That
+sentence is measured rather than asserted: `measureMesh` counts downward faces
+steeper than 45° excluding the bed face, and a one-row bin comes out at exactly
+zero while a two-row bin comes out at its top pegs' bottom flats **and nothing
+else**.
+
+The two rows also keep the drawing honest. `orient` centres a part on its own
+wall-plane bounding box and `WallView3D` puts that centre on the box centre of
+its CELLS (D73) — halfway up the bin against halfway between the peg rows, which
+are different points. `topPegRow` takes the highest row that fits, so the two can
+never drift more than half a pitch apart, and `drawOffsetYMm` stays inside the
+40 mm `MAX_OFFSET_MM` clamp instead of being silently truncated into a bin drawn
+where it is not.
+
+### The preview draws it against a real plate
+
+`buildHoneycombMesh` on a block that provably contains the peg cells, with the
+bin sitting in it — the generator's own honeycomb and the generator's own pegs.
+The claim the tab makes is "these pegs fit that wall", and two things built from
+one set of constants sitting inside one another is the cheapest way to be
+believed. A drawn approximation is not evidence; that is D46 and D97's argument
+about `PartInspector`'s wall patch, made again.
+
+`previewPatch` lives in `binModel.ts` rather than in the view, because a patch
+that quietly missed a peg cell would draw the peg onto the WEB between two cells
+and look very nearly right. It is a claim about the lattice, so it belongs where
+a test can hold it.
+
+The second view button is `Behind`, not `Front`. Straight on, the bin covers the
+thing it is meant to be proving; from behind you are looking through the cells
+and there is a peg sitting in the middle of each of the right ones.
+
+### Rounded corners, and why they were free
+
+The reference generator's bins have rounded vertical edges, and matching that
+turned out to simplify the mesh rather than complicate it. The build direction is
+UP THE WALL, so the four vertical edges are corners of an extrusion PROFILE — a
+fillet on them leaves every face vertical and nothing overhangs. The horizontal
+edges are a different matter and are left square: rounding the bottom ones would
+put a curve on the first layers.
+
+So the outside stopped being four rectangles and became one rounded-rectangle
+outline extruded up the wall. That deleted three helpers, and it deleted the
+mitred rim: the rim is now a quad strip between the outer outline and the
+cavity's, which are built by the same function with the same segment count, so
+point i of one belongs with point i of the other by construction rather than by
+an argument.
+
+`CORNER_RADIUS_MM` is 8, fixed rather than a fraction of the width — it is a
+physical thing, how the corner feels and how much material is behind it, not a
+proportion. Clamped to a THIRD of the smaller side, because at a half a 15 mm
+deep bin comes out a lozenge with 1.2 mm of flat front.
+
+**The trap it introduces is `backHalf`.** The outline's closing segment is the
+flat part of the back panel — the only stretch that is not a plain wall, because
+it carries the peg holes — and it stops a radius short of the silhouette on each
+side. So `halfW − r` and not `halfW` bounds every peg, every hole and every split
+in the file; a peg placed against the silhouette would sit where the panel has
+already curved away. `minWidthMm` grew by `2 × CORNER_RADIUS_MM` to match, and
+`pegStep` measures its room against the flat part.
+
+Two smaller ones, both about `meshIsClosed` comparing vertices exactly.
+`roundedProfile` writes its tangent points out literally and only generates the
+arcs' interior points, because `cos(−π/2)` is 6.1e-17 rather than 0. And `capU`
+fans from point 1, which is always on an arc: an apex on a straight edge
+flattens every triangle along it.
+
+Measuring it needed a different instrument. A corner radius is invisible to a
+bounding box — `w × d` is unchanged by it — so the test takes the DIAGONAL:
+`max(a + d)` is `halfW + D − r(2 − √2)` for a rounded rectangle and exactly
+`halfW + D` for a sharp one.
+
+### The sliders are the INSIDE
+
+A bin is sized by what has to go in it. So `BinSpec` holds the cavity —
+`innerWidthMm`, `innerHeightMm`, `innerDepthMm` — and `outerMm` is the single
+place that derives the box: a wall on each side for width and depth, the floor
+for height, nothing at the top because the top is open. The panel shows both,
+inside first, because the outside is the other real question (does it fit the
+bed, does it clear the shelf) and showing one of them makes the other a
+subtraction the reader has to do.
+
+The fields carry `inner` in their names deliberately. They started out as outside
+measurements, and renaming rather than redefining is what makes every reader
+fail to compile until it has said which it meant — the alternative is a field
+whose meaning changed underneath it, which is the shape of D50, D52, D66 and D71.
+
+**Most of the module still wants the outside**, and that is the trap. The back
+panel runs the full height of the box; the flat part of it is bounded by the
+outer width; `topPegRow` asks whether the PANEL covers a peg, not whether the
+cavity does. So `buildBinMesh` converts once at the top and nothing below it has
+to remember which it is holding, and `topPegRow` takes a spec rather than a
+number — a bare `heightMm` parameter is exactly how the inside gets passed to it
+by mistake. `minWidthMm` gained a `wallMm` argument for the same reason: the
+constraint is on the outside and this is where it is translated inward.
+
+Checked on the solid rather than on the arithmetic. Twelve probes — six just
+inside the claimed cavity's faces, six just outside — with a skew ray for
+point-in-solid, because an axis-aligned one runs along faces and through edges on
+this geometry and registers a crossing twice or not at all. The probes are placed
+from the SPEC and the wall alone and never from `outerMm`: placed relative to the
+outside they would move with a wrong conversion and quietly agree with it. All
+four ways of getting the conversion wrong — a single wall instead of two, two
+instead of one, none at all — fail it.
+
+### It goes into the project without an alignment step
+
+An uploaded model needs `PartInspector` because `detect()` cannot say which face
+of it meets the wall. A generated one does not: this app chose where its pegs
+went, so `needsReview` is false and it is honest — the footprint is not a
+bounding-box bound, it is the cell list the mesh was built from.
+
+The file frame is `+x` out of the wall, `+y` across, `+z` up, which is both the
+PRINT orientation — drop the STL in a slicer and it is already on the bed the
+right way up — and a legal mounting, `wallFaceAxis: 'x'`, `matingEnd: 'low'`.
+Those agreeing is a constraint rather than luck: `AXES` offers only the three
+cyclic permutations, because an acyclic one is a reflection and a mirrored
+accessory is a left-hand hook on a right-hand wall. Of the three, this is the one
+that puts up-the-wall on `+z`.
+
+`tests/bin-mounting.test.ts` runs the whole chain — file frame, forced axis,
+`orient`, the mounting matrix, and the placement the 3D view applies — and
+demands every peg centre land on its own cell in wall millimetres. Every step in
+that chain is somewhere a part can end up half a cell out, and D53's lesson is
+that the two ends disagreeing is only ever found by measuring.
+
+### What is NOT here
+
+The tab makes one shape. A tray, a hook and a rail are the obvious next three and
+they would share every line of the peg code; nothing here is bin-shaped except
+`buildBinMesh` itself.
+
+And the peg count is a control rather than a consequence of the width, because it
+decides how many inserts the wall has to give up — that is a cost somebody may
+want to choose, not a number to be told.
+
+---
+
+## D109 — Pegs on somebody else's model
+
+D108 generates a whole part. This is the other half of the same question: you
+already have the model you want on the wall — a hook off Printables, something
+you drew — and what it lacks is the fastening. So: upload it, pick cells, get it
+back with pegs welded in.
+
+### Two constraints, and only one of them is the lattice
+
+THE LATTICE is absolute and it is the easy one. A peg sits on a cell centre, so
+the pick is a `Hex` and never a millimetre. Every set of cells is mountable —
+the wall is the same lattice everywhere — so what is constrained is the cells
+RELATIVE to each other, not where the lattice sits under the part. Which is why
+`latticeOffset` is free millimetres: sliding the lattice moves every peg
+together, and a rigid translation cannot take them off it. That is the control
+somebody reaches for when the cells land just off the solid part of a face.
+
+THE PART is not a constraint at all. It was one — a cell had to be solid to be
+clickable — and that was wrong, corrected the first time somebody used it. No
+rule here can know about a part it has never seen: a boss the raster reads as an
+intrusion, a cell somebody means to bridge with their own filler, a peg
+deliberately off the silhouette to catch something. Refusing the click refuses
+to have the conversation.
+
+So the part's backing is MEASURED and SAID, in three grades — `solid`,
+`partial`, `bare` — drawn as three colours, and every cell the lattice reaches
+is clickable, including cells `OUTSIDE_MM` past the part's own edge. What
+changes with the grade is the sentence underneath: a bare peg comes out of the
+file as a LOOSE PIECE, which is the one outcome that is different in kind rather
+than in degree, and it is worth saying out loud. The only thing that still stops
+a download is having picked no cells at all, because that is not a part.
+
+### The solidity test reads backwards, and that is why the first one failed
+
+Two probes. The FACE probe is a slab at the wall face: a triangle crossing it
+fills the raster, so it says "the part's surface is under the whole hexagon". The
+SEAT probe is a slab from just behind the face to `PEG_SEAT_MM`, and the cell
+passes when that slab is **empty**.
+
+The first version asked for COVERAGE in the deep slab and offered no cell on any
+part, ever. A solid has no triangles inside it — only on its surface — so a part
+that really is solid through the seat depth has nothing in that slab, and what
+the raster was actually measuring was the silhouette's outline. Inverted, the
+same probe is exactly right: anything found there is a surface where there should
+be material — a back face, the wall of a hole, or the part's own rim.
+
+It is deliberately a shade strict; a rib within 2 mm of the face refuses cells
+that would in fact hold. The two ways of being wrong are not equal. Refusing a
+good cell costs a nudge of the lattice; offering a bad one costs a peg that comes
+off under load.
+
+`PEG_SEAT_MM` is 2 and does two jobs — deep enough that the union is
+unambiguous, and, because the seat probe demands solid for all of it, it IS the
+minimum thickness rule. Three was the first guess and it refuses a 2.2 mm plate,
+which is most of what people upload.
+
+### Adding a peg is an OVERLAP, not a boolean
+
+There is no polygon boolean in this codebase and this is not the place to
+introduce one. A peg is a second closed solid overlapping the part — what
+putting two objects in a 3MF does, and what every slicer unions. `meshIsClosed`
+still passes, because every directed edge has one opposite within its own shell;
+what the output is NOT is one connected component, and that is deliberate.
+Overlap and not abut: two solids that merely touch share a zero-thickness
+contact, which a slicer may read as two parts leaning on each other.
+
+### The face is searched, not guessed
+
+Opening on an arbitrary axis and reporting "0 of 13 can take a peg" is a tool
+that looks broken on its first screen. `bestFace` tries all six and keeps the one
+with the most cells — six rasters, and the same answer somebody would get by
+pressing all six buttons. The quarter turn is NOT searched: it changes which
+cells land on the part (a hex lattice has no 90° symmetry) but it is the one part
+of the orientation that is a human judgement about which way up the part reads.
+
+### Three things found by driving it
+
+**The cell pad has to be FILLED.** It was a ring, and a ring's middle is a hole:
+the raycast went straight through, so a cell could only be picked by hitting a
+few millimetres of rim — and the middle is where anybody aims.
+
+**The wheel has to be a non-passive NATIVE listener.** React attaches wheel
+handlers passively, so `preventDefault` inside `onWheel` does nothing and the
+page scrolls out from under the model while it zooms. Invisible on a wide window
+where nothing scrolls; obvious on a narrow one, where the rail stacks below the
+stage. Fixed in the bin builder too, which had it as well.
+
+**A drop on the Build tab must stop at the tab.** The shell has a window-level
+drop handler that sends any model file to the IMPORT flow, which is a different
+thing to do with the same file. The tool's own handler calls `stopPropagation`,
+and window is the last hop in the bubble path, so that is enough.
+
+### ...and it converts 3MF to STL, because it always could
+
+The tool reads both formats and writes one, so a 3MF that goes in comes out as
+an STL whatever else happens to it. That made it a converter by accident — and
+the accident was unreachable, because `reviewPegs` refused a plan with no pegs
+and the refusal disabled the download. The most ordinary thing anybody would
+want from something that reads 3MF and writes STL was the one thing it would not
+do.
+
+So nothing blocks the download now, no pegs included. The panel says which way
+it is going (`3MF → STL` or `STL → STL`), the file keeps the model's own name
+rather than gaining a `-0peg`, and the note says the conversion is in the
+ORIENTATION ON SCREEN — the same one the preview is showing, because what you
+download matching what you are looking at is the least surprising rule
+available. `Add to project` still needs a peg, and that is the one thing that
+genuinely does: the wall places a part by its cells, and a part with no pegs has
+no footprint.
+
+The fixture moved for this. `tests/fixtures/threemf.ts` now holds the hand-built
+ZIP writer that `threemf.test.ts` had to itself, because proving a 3MF converts
+needs a REAL 3MF — correct CRCs, a real archive — and two copies of a ZIP writer
+is two chances to write it wrong. The conversion is checked end to end, unit
+declaration included: an inch 3MF has to come out 254 mm, because a silently
+25.4× wrong STL is exactly what `threemf.ts` exists to prevent and that has to
+survive this path too.
+
+### What it does not do
+
+It will not turn a part that has no flat face into one that has. It refuses
+cells rather than compromising, and the two answers to that are the six face
+buttons and the lattice nudge. Nor does it position the pegs FOR you: where a
+part wants to hang from is a judgement about the part, and this app does not
+have the part's opinion.
+
+---
+
+## D110 — The bin's pegs, placed by hand
+
+The bin generator chose its own peg positions: `pegs` across, spread by
+`pegStep`, on the bottom row and the top one. Good defaults, and no way to say
+"not there, there".
+
+Now the panel carries a CELL MAP and every cell on it is a click. The automatic
+layout is still what you get until you touch one — the first click seeds itself
+from wherever the pegs already are, so it adds or removes ONE peg rather than
+throwing the layout away.
+
+### The hole cutting had to go, and it could not have been fixed
+
+The back panel used to be drawn as horizontal BANDS with a hexagonal hole cut
+per peg, so the peg grew out of the panel as one solid. That is why the bin was
+a single closed manifold, and it is why it could only ever place a GRID.
+
+Two pegs one column apart sit half a pitch — 11.8 mm — above each other, and a
+peg is 13.45 mm across flats. Their hexagons therefore OVERLAP in u, in the very
+bands the cutting is organised by, and a band with two hexagons at different
+heights needs vertices partway along each hexagon's edge — which means splitting
+the peg's own side faces to match, or every one of them is a T-junction. Three
+formulations of that were considered (bands in u, strips in a, general polygon
+with holes) and all three end in the same place: subdividing hexagon outlines to
+keep `meshIsClosed` happy, with bit-exactness to maintain at every cut.
+
+So the pegs became SOLIDS THAT OVERLAP the back panel, seated `PEG_SEAT_MM` into
+it — exactly what `pegAdder` already does when it welds a peg onto an upload
+(D109), and what putting two objects in a 3MF does. One mechanism for pegs
+across the whole app instead of two, and ninety lines of banding, splitting and
+T-junction bookkeeping went with the change. `buildBinMesh` is now the profile
+extrusion, two caps, the rim, the cavity, and a peg per cell.
+
+**What that costs, stated plainly:** the bin is no longer one connected solid.
+Each shell is closed and correctly wound — `meshIsClosed` still passes, and it is
+checked on every shape including staggered cells — but a slicer unions the
+overlap rather than being handed a single manifold. That was never promised, it
+is how multi-body files have always worked, and it buys the thing that was
+asked for. The seat is clamped to the wall thickness less a skin, so the peg's
+root never breaks through into the bin as a hexagonal pimple on the inside face.
+
+### The offset has to be frozen
+
+The automatic layout's origin MOVES: a wider bin spreads its pegs, which slides
+the first one, and the peg count moves it too. Cells chosen by hand must not
+walk across the panel when the bin is resized — so the moment the pegs are taken
+over, `latticeOffset` stops being derived and is written into the spec. Free
+millimetres, like the peg adder's, because sliding a lattice cannot take cells
+off it; only the cells relative to each other have to be on it.
+
+`pegCentres` now goes through `cellsFor` and `cellPointMm` for both cases. It
+used to be two formulas — millimetres for the automatic layout, cells derived
+separately — which is the "two readers of one fact" this repo keeps paying for.
+
+### Picked in the 3D view, the way the peg adder is
+
+This was a flat map in the rail first, on the argument that a bin's back panel
+faces the WALL — so from the view anybody actually uses it is behind the bin, and
+picking there means orbiting round to reach it. That argument was right about
+the geometry and wrong about what matters: two tools that do the same thing
+should do it the same way, and hunting for a second interaction because one
+happens to be easier to draw is the app's problem, not the person's.
+
+So the cells are pads in the 3D preview, clicked exactly as the peg adder's are,
+and the occlusion is solved rather than avoided: the pads are drawn with
+`depthTest: false` and a `renderOrder` above everything. They are therefore
+visible and pressable from ANY angle — through the bin from the front, through
+the honeycomb plate from `Behind` — and the raycast hits the pad you can see, so
+what you click is what you get. Depth-tested they would appear from one angle
+only, and finding it would be the first thing anybody had to learn.
+
+Amber marks a cell whose peg would overhang the panel's flat part. Allowed,
+because the width is a slider away, and refusing the click is refusing to have
+the conversation.
+
+**The pad's position is the load-bearing number.** A pad sits at
+`place + (acrossMm, upMm)`, where `place` carries the bin's own frame into the
+wall's; if those drift you press one pad and a peg lands on another cell, which
+reads as a broken raycast and is arithmetic. `place` comes from the LATTICE and
+not from `cells[0]` — that was the first version, and it is the same number for
+every cell right up until there are no cells at all, at which point the two
+halves fall back to different defaults and the whole bin jumps. The test states
+`place` the way the view states it and checks every pad against `hexToMm`.
+
+---
+
+## D111 — A plate is downloaded as a stack
+
+Asked for: in the plates-to-generate list, print several copies of the same
+plate in one go, one above the next with a 0.2 mm gap, choosing how many in a
+small window at the download button.
+
+The reference is the OpenSCAD generator this planner grew out of (the
+customisable honeycomb storage wall on Printables). It has the same feature and
+the same number:
+
+```openscad
+stack_printing_gap = 0.2;
+for (i = [0 : max(Plate_Count - 1, 0)])
+  translate([0, 0, i * (depth + stack_printing_gap)])
+    plate(...);
+```
+
+So `stackMesh` in `honeycomb.ts` does exactly that: `copies` of the mesh, each
+lifted by its own height plus `STACK_GAP_MM`.
+
+**The gap is a LAYER, not a tolerance.** At 0.2 mm the printer bridges the space
+instead of fusing it, so the copies come apart in the hand and every one of them
+still gets a flat first layer. Less and they weld; much more and the bridge sags
+into the part below. It does not scale with the plate and there is no reason to
+offer it as a field.
+
+**The step is MEASURED, not `PANEL_DEPTH`.** Every plate this app generates is
+8 mm tall today, and hard-coding that here would silently stack them wrong the
+day one is not. `meshBoundsMm(mesh).size[2] + gap`, once.
+
+**The copies stay separate shells, on purpose.** There is no polygon boolean in
+this codebase and none is wanted: a stack is several solids that are MEANT to
+come apart, which is the same argument as the bolted-on peg (D109). `meshIsClosed`
+still passes — each shell is closed — and nothing should try to join them.
+
+**Measure the gap on the MESH, with a ray.** `tests/stack.test.ts` casts a
+vertical ray through a point where the plate is solid all the way through and
+reads the spans of material back: top of one copy to bottom of the next, exactly
+0.2 mm. Vertex z-levels cannot answer it — a plate's own bore profile has a
+4.6 mm step in it, so any rule that splits the level set on a jump either cuts
+one plate into five or misses a 0.2 mm gap entirely. That was the first version
+of the test and it read as coverage while measuring nothing.
+
+**The count is not document state.** It says how to write one file. The wall does
+not change, there is nothing to undo, and a saved layout has no opinion about how
+its plates were batched — the same argument as "Fit to printer".
+
+### The little window
+
+`StackMenu` is a popover on the Download STL button, portalled to the body for
+the reason `ColorSwatch`'s is: this rail renders inside the parts list, which
+clips its own overflow, so a popover in the row would be cut off at the panel's
+edge — which is where the button is.
+
+It **states the height**, because that is the only thing deciding whether the
+print will fit and this app cannot decide it: a `Bed` here has a width and a
+depth and no build height. Stated and left to the person who owns the machine.
+
+It defaults to **one**, with the wall's own batch one click away. The button's
+promise is "this plate"; pressing it twice should not quietly produce a tower.
+And that shortcut says `Max 25` rather than `All 25` when the wall wants more
+than a stack holds — `All` on a wall needing 36 is the control lying about what
+it does.
+
+**`onOpen` fires from an EFFECT, never inside `setOpen`'s updater.** Lighting the
+plate on the wall is a `setState` in `App`, and React invokes a state updater
+DURING render — so calling it there is "cannot update a component while rendering
+a different component", which is a warning today and a dropped update under a
+stricter mode. Found by reading the console in the running app, which is the only
+place it appears.
+
+---
+
+## D112 — Three ways a real 3MF was refused
+
+Reported as "I cannot choose file and upload, I can only drag in STL, 3MF not
+working at all". Three separate faults, none of which the suite could see,
+because every 3MF it had ever read was one this repo wrote.
+
+### The geometry need not be in the model part
+
+Bambu Studio — which is what a great many people on this wall print with —
+writes `3D/3dmodel.model` holding no mesh at all:
+
+```xml
+<object id="1" type="model">
+  <components>
+    <component objectid="1" p:path="/3D/Objects/object_1.model"/>
+  </components>
+</object>
+```
+
+That is the PRODUCTION extension: an object reference may name another part of
+the same archive. Resolved within one part, the file reads as "This 3MF contains
+no triangles" — a true statement about the part that was read and a wrong one
+about the file. Three of the four 3MFs already on the reporter's machine were
+this shape, and the fourth (single-part) was the one that had always worked.
+
+So an object reference is now a PAIR: which part, and which id in it. The parts
+are loaded to closure BEFORE anything is emitted — breadth-first and iterative,
+because reading a ZIP entry is asynchronous and flattening is not, and mixing
+the two would make every caller of `emit` await.
+
+**`seen` must be keyed on the pair, and this is the trap.** Ids are numbered per
+part, so both parts numbering their object `1` is ordinary — and keyed on the id
+alone the component reads as a reference to ITSELF, the "loop" is cut, and the
+geometry is silently dropped. The fixture therefore collides its ids on purpose:
+with different ids the bug passes unnoticed, which is exactly how it would have
+shipped.
+
+### ZIP64 is not about size
+
+`zip.ts` refused ZIP64 by name, on the reasoning that a 3MF is measured in
+megabytes and ZIP64 begins at four gigabytes. True about the format, false about
+the files: a writer may emit the ZIP64 records ALWAYS, and a **195 kB** model
+from Printables has every size and offset in its directory set to the
+`0xFFFFFFFF` sentinel with the real values in each entry's extra field. The
+refusal read "This is a ZIP64 archive", which is correct and useless.
+
+The sentinels are followed now. **The extra field is a packed LIST, not a struct
+with fixed slots** — it holds only the fields that were sentinelled, in the order
+uncompressed, compressed, local offset — so each value is consumed only if its
+own field asked for it. Read at fixed positions you get an offset where a size
+should be, which inflates to garbage rather than failing; the test breaks it that
+way round and watches it go red.
+
+### An `accept` filter hid the file it was for
+
+`accept=".stl,.3mf,model/stl,model/3mf"`, and on macOS that made a 3MF
+**unpickable**. A file dialog filters by the system's idea of a type, and this
+Mac has no idea what a `.3mf` is — `mdls` reports `dyn.ah62d4rv4ge8xg5pg`, the
+placeholder macOS mints for an extension nothing has claimed. Neither MIME type
+is registered either. So the dialog greyed out the very file somebody opened it
+to choose, while the same file dropped on the window worked — which is precisely
+what "I can only drag it in" describes.
+
+The filter was never doing real work: `isModelFile` checks the name and
+`parseModelFile` checks the BYTES, so a wrong pick already comes back as a
+sentence. `MODEL_ACCEPT` is now `undefined` — React omits the attribute
+entirely, where an empty string would set `accept=""`.
+
+### What the tests were worth before this
+
+All 32 of them passed on every file in this repo and on none of the five real
+3MFs on the reporter's machine. A fixture the code under test would also have
+written can only prove self-consistency; the fixtures now write the two shapes
+the world writes — a multi-part archive and a ZIP64 one — and each fix was
+confirmed by removing it and watching the new test fail.
+
+---
+
+## D113 — Point at the face that meets the wall
+
+Asked for: "not all models really make sense, so I need a button to select the
+face towards the wall — when I click that it gets rotated towards the wall."
+
+The peg adder had six buttons: −X, +X, −Y, +Y, −Z, +Z. They are complete and
+they are useless on an unfamiliar model. "−Y" is a fact about the file's
+coordinate system, and nobody who has just downloaded a headset holder knows
+which way its author pointed Y. The only vocabulary a person actually has is
+the thing on screen: *that* face, the one I am looking at.
+
+So `Pick on model` arms a mode, and the next click on the part names the face
+that meets the wall. `faceTowardWall` in `pegAdder.ts` does the work.
+
+**The winner is found by running the forward map, not by inverting it.** Six
+candidate file directions go through `orientedDirection` — the same signed
+permutation `orientForPegs` applies to positions — and the one that best agrees
+with the click wins. An inverse would be a second copy of the transform, and
+this repo's whole history is second copies of a transform quietly disagreeing
+with the first.
+
+**Snapped to the nearest of the six**, because a real model's faces are rarely
+square to anything and the lattice has six choices regardless. Clicking the face
+already against the wall is the identity: the commonest accidental click must be
+a no-op rather than a spin.
+
+**The quarter turn is carried**, exactly as the six buttons carry it. It is a
+separate judgement — which way up the part reads — and clearing it would undo a
+choice somebody made deliberately.
+
+**The pads come off while the mode is armed.** They are drawn over the part on
+purpose the rest of the time, so leaving them up would be asking somebody to hit
+the gaps between them.
+
+### The bug this uncovered: a raycast from a camera that had not moved yet
+
+The first version failed a test it should have passed — turn the model 180° and
+click the face now in front, and it picked the face that had been in front
+before. The geometry was right; the camera was stale.
+
+`camera.position` was computed inside the `requestAnimationFrame` loop, and the
+pointer handler raycast through `s.camera` — so a click arriving between the
+last pointer move and the next frame was cast from where the camera USED to be.
+Logged in the running app: `az` had moved to 0.0056 while the camera still sat
+at z = −195, half a turn away.
+
+`place()` now puts the camera where the orbit says it is, and BOTH the render
+loop and the pointer handler go through it. It ends with `updateMatrixWorld()`
+because `lookAt` does not, and `Raycaster.setFromCamera` reads the matrix rather
+than the position — the classic way for this fix to look applied and do nothing.
+
+**This was never specific to face picking: the CELL picking had it too.** Drag
+the model and immediately click a pad and you would peg a cell from the old
+view. Nobody had reported it because a human drag ends many frames before the
+click that follows it — which is exactly why it survived, and exactly why the
+fix belongs in the one place both picks go through.
+
+Found by driving the running app, not by reading the code: the unit tests all
+passed, because the transform they test was never wrong.
+
+---
+
+## D114 — At the angle it really is, not the nearest of six
+
+D113 snapped a clicked face to the nearest of the six axis directions. Reported
+back within the hour: "needs to be where on the geometry I clicked it rotates,
+and maybe not one of the predetermined ones."
+
+Right, and the snapping made the feature a duplicate of the buttons beside it.
+Six axis flats is the same claim the six buttons already make, so the models
+that needed help got none: a bracket with a 15° back, a curved shell, anything
+off a scanner has no flat square to the file's axes, and "nearest" there means
+wrong by up to 45°. **The surface you click goes flat on the wall, at whatever
+angle it actually is.**
+
+### `Orientation` gains a free rotation, and where it sits is the design
+
+```
+oriented = turn · tilt · permutation · file
+```
+
+- the PERMUTATION is a fact about the file — which of its axes meets the wall —
+  so it is innermost, and it stays exact: entries of 0 and ±1, so the six
+  buttons produce the same numbers to the bit as the hand-written loop did;
+- the TILT is the free part, from a click;
+- the TURN is "which way up does it read once it is on the wall", so it is
+  outermost — it has to stay a turn about the WALL normal after a tilt has moved
+  which direction that is.
+
+A click therefore composes as `tilt' = turnᵀ · Q · turn · tilt`. The conjugation
+is what lets the quarter turn somebody chose survive a re-aim unchanged; without
+it the turn silently becomes a turn about the old normal.
+
+`Q` is the SHORTEST arc from the clicked normal to −out, because the click says
+which way the surface faces and nothing about how the part should be spun around
+it — any more rotation would be invented. The antiparallel case is taken by hand
+(the axis is undefined there, and any perpendicular one is a correct half turn).
+
+Clicking the face already on the wall is still exactly the identity, and the
+tilt collapses back to absent when it is, so an untilted orientation stays
+untilted.
+
+**A rotation, never a reflection.** A mirrored part is a left-hand hook on a
+right-hand wall and it looks completely fine, which is the same failure the
+cyclic axis permutations exist to prevent. `tests/peg-adder.test.ts` asserts
+determinant +1 and orthonormal rows for every face of both test solids.
+
+**None of the six buttons is lit while a tilt is set**, because none of them is
+the face on the wall then, and a lit button would be the control claiming
+otherwise. Pressing one clears the tilt: they mean "this flat of the FILE",
+which is a different claim.
+
+### Testing it
+
+The claim is stated on the MESH, for every triangle of a box and of a 33.7°
+wedge, from all six starting faces: click a triangle and its own three corners
+land at out = 0 with the whole solid on the near side of them. Nothing in that
+sentence mentions an axis — an angled face has none, which is the point.
+
+Confirmed in the running app on that wedge: clicking the ramp gives 16.6 mm out
+and 36.1 up, which are 30·20/√1300 and √1300 — the wedge's extent along the
+ramp's own normal, and the ramp's own length. Snapped, it read 20.0 or 30.0.
+
+---
+
+## D115 — The turn is a slider, and the quarter turn stays
+
+Asked for: "now so that I can rotate with a slider, but keep the 90 degree
+button."
+
+`quarterTurns: number` becomes `spinDeg: number` — degrees about the wall
+normal, any angle. Four positions was never enough: a hook angled off a bracket,
+a label that should sit level, a part that reads straight at 37°. The slider is
+0–359 and the button is still there, because most parts DO want one of the four
+and hunting for 90 on a slider is worse than pressing a button.
+
+**The button is `+ 90`, not "snap to the next quarter".** Set 37° to line
+something up, press it, and you get 127° — the fine angle you just found
+survives. Snapping would throw it away, and it is the harder of the two to get
+back.
+
+**The quarter turns stay EXACT.** `Math.cos(Math.PI / 2)` is 6.1e-17, and this
+matrix multiplies every vertex of somebody's model, so a part turned a clean 90°
+would come out imperceptibly skewed — in a codebase where `meshIsClosed`
+compares vertices exactly. `turnMatrix` builds the permutation whenever the
+angle is a whole number of quarter turns and only reaches for `cos`/`sin`
+otherwise. Same rule as `roundedProfile` writing its cardinal points out rather
+than evaluating them from the arc.
+
+**A spin does NOT clear the picked cells; a face change does.** They are
+different edits: turning about the wall normal keeps the same face on the wall,
+so the cells are still the cells you chose, while a new face makes them cells on
+some other face. Routing the slider through `reorient` would empty the plan on
+every step of a drag — which is `NumberField`'s `commitOn` argument (D67) in a
+different shape. So `spin` sets the angle and nothing else.
+
+It stays OUTERMOST in the orientation for D114's reason: a turn about the wall
+normal has to remain one after a tilt has moved which direction that is. Tested
+as the property that actually matters — a spin cannot change how deep the part
+is, since depth is measured along that normal — from both a square face and a
+tilted one.
+
+*D116–D123 were written as D107–D114 on a branch of their own, alongside the
+Build tab's D107–D115 above, and renumbered when the two were merged. Every
+reference to them in the code and in CLAUDE.md was renumbered with them.*
+
+## D116 — "The same plate" means the same GEOMETRY
+
+Reported as a screenshot of the 3D view: a blocked zone drawn on the Plan, and
+along the edge of the aperture a row of little hooked fins standing up out of
+the plate, one per plate, each at the same place on its plate.
+
+Every one of them was real geometry — belonging to ONE plate. The 3D view draws
+one generated mesh per group of identical plates and instances it across the
+group, and "identical" was decided by a description of what a plate was MADE
+from: part, block size, which cells are omitted, which sides carry an edge. The
+parts list (`customPanelGroups`), its STL download and the hover cache all used
+the same description.
+
+With a border on, the description is not the plate. A zone's edge lands wherever
+it was drawn, so where exactly it cuts each plate is a property of the zone and
+the plate together, and no field of the plate records it. The plate under the
+zone's CORNER keeps a column of cut cells running up the zone's side; the plates
+along the zone's bottom edge do not; and all of them omit the same cells and
+carry the same edge letters. Whichever came first in the list was the group's
+sample, so when that was the corner plate its column was stamped onto every
+plate in the row. Swept over random zones on a freshly solved 2400 × 1200 wall,
+about one zone in three produced a group like that.
+
+The parts list had the same defect with a worse outcome: one line, one
+download, two different plates — print the file seven times and six of them do
+not fit the wall.
+
+### The fix: ask the generator
+
+`buildHoneycombMesh` is now two halves. `plateRings` makes every decision —
+which cells are cut, by which zone and which edge, which border pieces grow —
+and returns the flat rings; the rest welds and triangulates them, a pure
+function of those rings. `plateGeometryKey` hashes the rings relative to the
+plate's origin, rounded to a micron and sorted, so two plates have one key
+exactly when they build one solid. Rounding can at worst split a group that is
+really one plate (two lines for identical plates); it cannot merge two that
+differ, which is the direction that prints the wrong thing.
+
+`panelModel.panelGeometryKeys` computes it for every plate, memoised on the
+panels, frame and zones by identity. Without a border the plate is its cells and
+nothing else, so the relative cell set is the key and nothing is generated.
+
+Three readers use it:
+
+- **`customPanelGroups`** splits a group whose geometry disagrees. The biggest
+  part keeps the plain key, so a printed count or a colour recorded against the
+  line stays with the plates it was most likely about; the rest get a `|v…`
+  suffix from their own geometry.
+- **The 3D instancing key** is the geometry key plus lit and colour.
+- **The hover cache**, which is never cleared, is keyed on it too. Keyed on the
+  description, a zone dragged a couple of millimetres re-cut a plate without
+  changing its omitted cells, and the highlight went on drawing the old plate.
+
+### Paid for by memoising the assembly index
+
+Every per-plate border question — the spec, the edge letters, now the key —
+asked `assemblyIndex` for the whole wall, so a 53-plate wall indexed itself 53
+times per question: 241 ms of specs on the reported wall. Memoised on the
+panels and frame it is 14 ms, which more than pays for the ~100 ms of keys.
+
+### Also
+
+The obstacle panel measured each generated plate's size and weight from a spec
+built WITHOUT the zones and the cut cells — not the plate the download beside it
+produces. It now uses the download's own spec.
+
+`tests/plate-grouping.test.ts` builds every plate on each line and compares the
+solids. It was confirmed to fail with the split disabled (4 of the bordered
+cases) — the first version of it passed either way, because the zones it used
+did not happen to produce a disagreeing group.
+
+## D117 — A plate a zone swallows is set aside, not forgotten
+
+Found while reproducing D116: a test wall that had had one zone on it still had
+a plate-sized hole where that zone used to be, with no zone there any more.
+
+`cutAroundObstacles` recomputes `omit` from the whole block on every cut,
+specifically so that "moving a switch back where it was restores the cells it
+had taken". It did not extend that to a plate whose every cell was taken — that
+plate was dropped from `doc.panels`, and nothing remembered it. Move or shrink
+the zone and the cells it had freed belonged to no plate. A zone's move and
+resize commit once per frame, so dragging a large zone across the wall left a
+trail of missing plates behind it, and only a fresh solve gave them back.
+
+### The fix
+
+`LayoutDoc.covered` holds the plates a cut set aside, and `recutPanels` takes
+them back in with the panels on every cut. Only the cutter reads it: the 76
+places that read `doc.panels` go on reading the wall, which is why the plates
+are kept in a second list rather than in `panels` with every cell omitted — a
+plate with no cells would have had to be filtered out of every one of them.
+
+`setPanels` (a new solve) starts the list empty; `setObstacles` and `setFrame`
+carry it forward. It serialises only when non-empty, through the same panel
+reader and the same id namespace as `panels`, so a plate comes back with its own
+id and an old layout round-trips byte for byte.
+
+### And the edge is measured without them
+
+The cut used to measure the border's outer line from every plate it was handed,
+including the ones it was about to drop — while the generator measures it from
+the plates on the wall. On the first cut after a zone ate a row at the top of the
+wall the two disagreed by a row; every later cut agreed, because by then the
+plate was gone. The plates a zone takes are now decided first and the edge is
+measured without them, so the first cut and every later one give the same wall.
+
+`tests/zone-covered.test.ts` moves a zone off, drags one across the wall a frame
+at a time, round-trips through a save, and re-solves; all six cases fail on the
+old cutter.
+
+## D118 — A blocked zone can be drawn, and the plate is cut along it
+
+Asked for as "freedraw a blocked area, so I can do a slanted roof". A roof is
+not a rectangle and not a union of them: an L of rectangles cuts a slope as a
+staircase, and the staircase is what you would print.
+
+### The representation: an outline, cut as convex pieces
+
+`Obstacle.outline` is a list of corners in wall millimetres, the area itself
+before clearance. The generator still has no polygon boolean — that is D59's
+line and it holds — so the outline is handed over as the one thing the cutter
+can use: CONVEX pieces, each a short list of straight edges at any angle
+(`zonePolygon.convexParts`: ear clipping, then Hertel–Mehlhorn to merge the
+triangles back; a roof is one piece). Clearance moves every edge out and caps a
+sharp corner with a bevel, because a mitre on a 20° tip reaches 29 mm past it
+for 5 mm of clearance. `obstacles.obstacleRegions` is the one reader.
+
+**A rectangle is the special case, through the same code.** `clipPlanesFor`
+asked which SIDE of a rectangle a cell's material was on, per axis. It now asks
+which EDGES a cell has material outside of: the deepest, then the deepest that
+shares a corner with it. For a rectangle's four sides — listed left, bottom,
+right, top so a tie goes to the low side, as it always did — that is exactly the
+old rule, and it was checked rather than assumed: 603 plates over the 3-zone
+fixture and a 25-wall sweep of random rectangles came out BIT-IDENTICAL before
+the two fixes below were added. Every rectangle test in the suite is therefore
+also a test of the slanted cutter.
+
+A rectangle and an outline differ in one place on purpose: which cells a zone
+takes from the planner. A rectangle uses the cell's bounding box, which
+over-selects at its four empty corners and is harmless there (the cutter splits
+such a cell into pieces whose union is the cell). A slanted edge can pass a box
+corner without touching the hexagon, the cutter then finds nothing to cut, and a
+cut cell with nothing to cut it by is not drawn — a hole. An outline is tested
+against the real hexagon.
+
+### Two things that only went wrong once edges could slant
+
+**Bore rings starting on different corners.** The inner skin joins one bore
+level to the next corner k to corner k whenever they have the same number of
+corners, assuming both start at the same one. `clipConvex` starts wherever its
+first surviving input corner is, and a slanted line through a zone corner keeps
+different corners first at different depths. The strip was built twisted and
+the plate had 8 unmatched edges. Each level is now rotated to line up with the
+one above before the skin is built; rotation moves no point.
+
+**Flecks joined to nothing.** Every cutting rule is local to one cell and
+cannot see whether what it keeps still touches anything. Over random outlines
+about one wall in fifteen kept a fleck of 25–30 mm³ touching nothing at all.
+`dropShards` checks the plate as a whole once every piece is known: groups of
+pieces joined by a shared stretch of edge; the largest is the plate; any other
+under two cells' worth of plastic goes — unless it lies flush against a whole
+cell of ANOTHER plate. That exception is load-bearing: the top row of a plate
+whose lower rows a zone has eaten is loose within its own plate and is still
+part of the aperture's wall, held by the plate above. Without the exception
+`zone-apron.test.ts` measured an 11.8 mm notch exactly there.
+
+### The plan
+
+**Draw zone** (`D`) in the plan's toolbar: click the corners, or drag
+freehand; one stroke from nothing is a lasso and closes on release. Enter, a
+double-click or a click on the first corner finishes; Backspace takes a corner
+back. Corners snap like every other plan point; freehand does not, because a
+hand-drawn line is meant where the hand went. A stroke is reduced to its corners
+(Ramer–Douglas–Peucker at three screen pixels). A shape that crosses itself is
+refused with a sentence rather than guessed at.
+
+The strip says what the border does to it: with the border off nothing is ever
+cut, so the cells the line crosses are left out whole and the edge steps.
+
+Resize handles and typed sizes go through `refitZone`, which scales the outline
+— or an L's rectangles — into the new box. Writing the box alone was a latent
+defect for L-shapes: the tag and handles moved and the blocked area did not.
+
+The plan also drew the wall's edge-cut cells clipped by the edge alone, so under
+a roof running off the top of the wall it showed a row of half-hexagons inside
+the zone that the file does not have. `plateEdgeShapes` now skips a cell any zone
+reaches, as the plan does every other zone-cut cell.
+
+`tests/zone-outline.test.ts`; the watertightness, notch and fleck cases were each
+confirmed to fail with their fix taken out.
+
+## D119 — A set-aside plate's stranded edge is printed by its neighbour
+
+Measured on the first sloping roof: the cut edge ran straight along the line
+except at two places, where it fell 6.9 and 14.6 mm short. Each was a plate whose
+every cell the zone touched — so the whole plate was set aside (D117) — while its
+bottom row sat mostly BELOW the line. "Touches" is not "covers", and along a
+slope it is common for a plate to be all one and none of the other.
+
+Those cells now go to the standing plate whose block holds most of their
+neighbours (`panelModel.adoptedCells`, ties to the smallest neighbouring cell as
+at the edge, D60), into its `clipped` list. The generator cuts them as it cuts
+that plate's own: whatever lies outside the zone is printed, and a cell with
+nothing worth printing is dropped by the one rule that decides that. The planner
+does not see them — they are in no plate's `cells` — so nothing mounts in a
+sliver, which is D56 again.
+
+The roof now runs flush along its whole 2.4 m to within `WALL_AT_MOUTH` (1.6 mm),
+which is the floor every cut has: less than one wall of plate is not printed.
+`panelGeometryKeys` takes `covered` as a REQUIRED argument, because a plate's
+geometry now includes what it adopts and a key computed without it called two
+different plates the same — which the grouping test caught.
+
+### D119, amended: never past the bed
+
+Found by an independent check: on a 3000 × 2000 wall of shipped plates under a
+long roof, a 211 × 248 plate took a row from the set-aside plate above and came
+out 211 × 259.6 — on a 256 bed. A plate now takes a stranded cell only if it
+still fits the bed either way round, measured by what the cell really adds:
+the part of it outside the zones (`obstacles.cellRemainderBox`, a box certain
+to hold it), not the whole hexagon, which refused nearly every sliver a plate
+near its bed was offered. If no neighbour can take it, it stays stranded: a
+notch in the cut is a blemish, a plate that does not fit the printer is not a
+part. Measured on that wall, one notch remains — 27 mm deep, where the plate
+below is a 247.8 mm block on a 256 bed and the stranded cell is nearly a whole
+hexagon. With no known bed nothing is adopted. `panelGeometryKeys` takes the bed
+as a required argument for the same reason it takes `covered`.
+
+## D120 — A fragment held by another plate is printed by that plate
+
+D118's shard rule keeps a small piece that is loose in its own plate when it
+lies flush along a whole cell of ANOTHER plate — the top row of a plate a zone
+ate from below, which is the aperture's wall, and the arm of a cut cell at a
+concave corner. Kept was right, since the wall needs it; kept THERE was not. It
+was a separate body in its own plate's STL — on the 3-zone fixture several such
+flecks, at a concave outline corner one of 438 mm³ — which prints as a loose bit
+and is held in the wall by nothing but friction. That predates this work: the
+old cutter printed the same flecks.
+
+The generator now reports these groups (`heldFragments`) as the cells they are
+made of, and the cell they lie against. `panelModel.heldTransfers` hands each to
+the plate that prints that cell, if that plate still fits its bed with it (the
+D119 check), by moving the cells from one plate's `clipped` list to the
+other's. The cut is a function of the zones and the edge alone, so the cells
+come out as exactly the same pieces in the new plate — where they now share an
+edge with its own cell and are welded on. A cell split between a plate and a
+fragment cannot move whole and stays; so does a group containing a border
+phantom. Only cells another plate prints WHOLE count as holding anything: not
+the plate's own (cut or not), and not one any zone reaches.
+
+What is left: a fragment whose holder is already at the bed limit stays where
+it was, loose — one in a 24-wall sweep. And the edge-only rail strip on a
+bordered wall with no zone at all, which predates all of this and is not a
+zone's doing.
+
+### Also, from the same check
+
+- Escape had to be pressed twice in the Plan: the shell's handler cleared the
+  selection, which re-subscribed the plan's key listener mid-dispatch, removing
+  it before it saw the key. The plan's listener is now attached once and reads
+  its handler through a ref.
+- Backspace in Draw zone also deleted any part left selected, through the
+  shell's handler. Entering the tool now clears the selection, the condition
+  D88 sets for every key two handlers share.
+- The strip's "border off" note now shows only when no border is on at all;
+  any border hands the zones to the generator.
+- A zone drag on a big wall re-keyed every plate by generating it. A plate
+  nothing reaches is now keyed on its cells alone, and only plates a zone cuts
+  are searched for fragments: 1.5 s → about 1.0 s a frame on 4000 × 2400
+  (213 plates), 0.3–0.4 s on 2400 × 1200, most of what remains being the parts
+  list's fixing plan, which this did not touch. The base before D116 measured
+  10.8 s on the same wall.
+
+### D120, amended: a whole cell is never a shard
+
+The second independent check found the shard rule (D118) dropping real cells.
+With NO border a zone takes cells out whole rather than cutting them, and can
+leave a plate as a few separate cells. Each is under the shard size — one
+cell's plastic is about 136 mm² against the 300 mm² floor — so all but the
+largest were dropped: a plate the planner offered five cells of printed one
+(903 mm³ of 4513). Worse, the no-border geometry key is the cell set alone, so
+two such plates shared a parts-list line while printing different cells.
+
+`dropShards` now keeps any group holding one of the plate's WHOLE cells; only
+groups made entirely of cut pieces can be shards. The test that should have
+caught it did not, for a reason worth keeping: `wallWith(…, undefined)` in
+`zone-outline.test.ts` took the parameter's DEFAULT, which is the bordered
+frame, so both "no border" tests there were measuring a bordered wall. "No
+border" is now spelled `null`.
+
+Also from that check: Draw zone now clears the selection whenever one appears
+while it is up, not only on the way in — Ctrl+A and Ctrl+Z both put one back,
+and the next Backspace deleted those parts.
+
+## D121 — The build opens from disk
+
+The downloaded build, unzipped and double-clicked, drew an empty page in the
+browser's own background — black in dark mode. Vite emits
+`<script type="module" crossorigin>` and a `crossorigin` stylesheet, and a page
+opened as `file://` has the origin `null`, so the browser refused both under
+CORS. Nothing in the app was wrong; the reason was only in the console.
+
+The bundle is one chunk with no dynamic import, so it is now built as an IIFE
+and loaded by a classic `defer` script (`classicScripts` in `vite.config.ts`),
+with the CSS carried in the bundle. Served over http nothing changes. What a
+`file://` page still cannot do is `fetch`, so there the placed parts' meshes
+fall back to their measured boxes; plates are generated in the page and are
+unaffected. Checked in a browser from disk and over http, fresh and with a wall
+saved by the previous version.
+
+## D122 — One file that runs from anywhere, and no more silent black pages
+
+D121 was not enough for the person it was for: the page was still black. Two
+ways to get there that D121 cannot reach. The `index.html` at the repo root —
+the one in the source zip and GitHub's "Download ZIP" — is Vite's dev entry and
+loads `/src/main.tsx`, which only `npm run dev` can serve. And a zip viewer that
+opens `index.html` without extracting copies out only that one file, so
+`assets/` is not beside it.
+
+So there is now `npm run build:standalone`: ONE html file holding the bundle,
+its pictures (inlined by `assetsInlineLimit`) and every shipped mesh, gzipped,
+as `window.__HSW_MODELS__`, which `meshLibrary` reads before it tries to fetch.
+3.3 MB, and from disk it draws the real meshes, which D121's build cannot.
+
+And the page can no longer be blank without saying why. `#root` holds a
+message in system colours until React replaces it, naming which file to open;
+and a plain script in `<head>` writes the error into the page when one leaves
+`#root` empty — tested by refusing WebGL, which takes the whole app down.
+
+## D123 — The rail round a zone is cut into every bore it reaches, not only the cut cells'
+
+Reported with a screenshot as a border round a blocked zone that "is not
+consistent", with the border on. Two things were behind what the picture
+showed. The larger was already fixed on this branch (D116): the version the
+report came from still grouped plates by a description of their inputs, so the
+3D view drew one plate's cut column onto its neighbours as fins and steps along
+the aperture. The other was real and is fixed here.
+
+Only cells the zone OVERLAPS reach `clipPlanesFor`, so only their bores were
+cut a rail short of the aperture. A cell stopping just short of the zone kept
+its whole bore, and the wall between that bore and the aperture was whatever
+the lattice left. The plan snaps a zone's edges onto cell centres and flats,
+and a flat stands only 0.8 mm outside its mouth, so on a rectangle drawn in the
+app the top and bottom walls measured 0.80 mm (1.48 on the room face) for a
+third of their length and 3.60 everywhere else.
+
+Every bore — whole cells included — is now cut back to the rail wherever it
+comes within the rail of a zone, on the zone edge it faces. That is the rule the
+plate's own edge has always applied to every cell (`edgeBore`), so the two
+frames are now built the same way. Measured on that wall: 3.60 mm minimum on all
+four sides, at the mouth and at the room face. `tests/zone-rail.test.ts` states
+it as a property — no bore point of any plate within the rail of any zone, every
+plate closed — over snapped and unsnapped rectangles and a drawn outline, and
+fails 7 of its 13 cases with the cut taken out.
+
+What it costs is the same as at the edge: a cell whose mouth stood within the
+rail is shaved on that one side by at most the rail less 0.8 mm. It stays in the
+planner, as the edge's cells do.
+
+## D124 — A wall has one top, and a plate cut on its side says so
+
+Reported with a screenshot: a 2400 × 1200 wall on a 300 mm bed, stock plates,
+border on — one column at the right standing proud of the wall, and the top
+row of everything else "filled in".
+
+Bands are filled one at a time, tallest plates first, so each reaches whatever
+its own width's plate heights add up to. With the plates that fit a 300 bed the
+14-wide bands stack 14 × 11 four times, 44 rows, and the 4-wide band left at the
+right-hand edge stacks 4 × 4 twelve times, 48 — 94 mm higher. The border takes
+the assembly's top line from its highest cell, so every other band's top row
+was not on that line, read as a step, and was paved with border instead of cut.
+It was not one wall: with stock plates the same thing happened on every bed in
+the list for at least one ordinary wall size.
+
+`levelBands` takes the height most of the wall's WIDTH reaches and refills any
+band taller than that beneath it. Only taller bands move: pulling everything
+down to the SHORTEST band cascades — an 18-wide band cannot make 45 rows out of
+16s, so it falls to 32 and the wall loses a plate's height. A band that cannot
+reach the height stays lower; that is a band the plate set cannot fill, and is
+a notch rather than a tower. `tests/band-level.test.ts` holds it over every bed,
+both plate sources and six walls, and fails 8 of its 17 solver cases without it.
+
+The second fault was in the same picture's parts list: plates down the left and
+right edges listed as "143 cells, generated" — custom, for no stated reason.
+`ownedBorder` names a plate's sides by finding EMPTY positions past it, and the
+cut ring is occupied, so a plate in the outermost column found none on that
+side; only the corners, which reach past the end of a row, were named. The
+geometry was right all along — `plateEdgePlanes` cuts from the frame, not from
+this — so it was the label and the grouping key. A plate's own cut cells now
+name their side as well.
+
+## D125 — The four-cell fixing wherever it fits, the two-cell one round the edge
+
+Asked for directly: "use 4 where you can, and the 2 part in the border around".
+The planner put the four-cell countersunk insert only where three or four
+plates meet, and a single-cell insert at every other grid point.
+
+Now each grid point the seam junctions do not already cover gets a MULTI-cell
+part where one fits on free cells: `insert-for-countersunk-hole-3` inside the
+wall, `hexagon-countersung-and-hole` (two cells, one wall screw — HSW-SPEC §4,
+the counterpart of the four-cell one; `insert-countersung-m3` is the M3
+variant) on the grid points along the wall's outside, where the four-cell
+diamond so often has no room once the border has cut the last ring. A single
+cell only where neither fits. Placed where the PART's middle lands nearest the
+grid point, so the fixing sits on the grid rather than merely touching it.
+
+The count does not change — the spacing decides that, and it was tuned on real
+walls: 75 fixings on 2400 × 1200 / 256 bed before and after, only the parts
+differ (24 single → 24 two-cell). One trap on the way: a grid-placed multi-cell
+fixing must not count as a seam junction "covering" the next grid point, or a
+small wall loses fixings (4 → 2 on the 4 × 4 test wall).
+
+Every multi-cell fixing carries its `partId`, so the parts list counts each as
+its own part (wall screws follow, one each), the 3D view draws each from its
+own mesh, and only the four-cell one's sockets stand in for an insert (D47).
+
+And they can be MOVED. Single fixings always could; with most fixings now
+multi-cell, refusing to move them would have taken the edit away. A moved one
+is `fixingEdits.placed` — part, anchor, turn — and lands with the dropped cell
+as its anchor in its own turn if that fits and the nearest turn that does
+otherwise. The exception stays: a four-cell insert tying three or four PLATES
+at their corner holds that corner, and can be removed but not moved.
+
+## D126 — Faster: one fixing plan per document, plates cached by shape
+
+Measured on a 2400 × 1200 wall, every edit planned the wall fixings three or
+four times — the parts list's count, `validate`, the 3D view, the store — at
+~100 ms each, and the 3D view regenerated every plate whenever its plate
+effect ran (a colour, a lit line, a zone nudged at the far end of the wall).
+
+- `fixingPlanFor` is cached on the document and the catalogue, both immutable.
+- The fixing planner looks for corner junctions only within two cells of a
+  seam, evaluates each placement once for both passes, rotates the footprint
+  once instead of per placement, keys its hot lookups by number, and finds
+  the cells near a grid point through a spatial index rather than a scan of
+  every cell. 514 → 189 ms on a 4 × 2.4 m wall, with byte-identical plans over
+  48 walls (every bed, both plate sources, three sizes).
+- `WallView3D` keeps generated plates in a cache keyed by geometry (D116)
+  across rebuilds, freeing what two rebuilds in a row did not use, so a
+  rebuild regenerates only the plates that changed.
+- `levelBands` (D124) reads each plate's top row only; on a 20 m wall of small
+  plates the whole block was 800 000 cells built to find a maximum.
+
+## D127 — Black plates and orange parts unless somebody says otherwise
+
+Asked for directly: an untouched wall is drawn as it would most often be
+printed, plates in black and every part and fixing in orange. The defaults
+are the LAST level of the four (D93) — item, line, kind, then
+`DEFAULT_PANEL_COLOR` / `DEFAULT_PART_COLOR` — so both views, the parts list,
+the swatches and the exports get them from the same three functions they
+already asked, and none of them had to learn about it separately.
+
+The document is unchanged by it. An untouched wall still serialises with no
+`colors` key, `hasColors` is still false, and `Clear colours` only appears
+once something has actually been chosen. Only the answer to "no decision"
+moved, from "as the theme draws it" to the default.
+
+The plate is `#262626`, not `#000000`: the bore walls are shaded, and true
+black loses them. Even so, near-black on the dark theme's near-black canvas
+disappears, so `standOffColor` carries a colour darker than the background
+toward white until it stands off by a fixed step — on a dark background only,
+and in the DRAWING only. The file you print and the swatch keep the colour
+that was chosen. Both views call the one function; the 3D view had its own
+copy for an hour and the two disagreed by a shade.
+
+## D128 — What a tester found walking the whole app, and what changed
+
+An adversarial pass through the running app — every printer, six wall sizes,
+both plate sources, zones, parts, saving, exports, the Build tab — found no
+crash and no black page, and these:
+
+- **Shipped plates left the top stepped.** With "Fit to printer" off — the
+  default — 24 of 54 printer and wall combinations came out with one band short
+  of the rest: 82 mm at 800 × 2600 on the default bed, 200 mm on a 400 bed at
+  4000 × 2500, and a 500 × 400 wall on a 300 bed half bare. D124 only brought
+  TALL bands down; these are short ones, and seven fixed plates cannot stack to
+  every height. `solveTiling` now takes `fillers`, which the app fills with the
+  bed's own generated sizes: used only where no shipped plate reaches — the top
+  of a band, a strip at the right too narrow for any of them — so a wall the
+  shipped plates can cross is still made of them and the edge is finished.
+  Generated fill-ins are ordinary `generated/` plates (D61): counted, costed
+  per cell and downloadable.
+- **A wall made smaller kept its plates.** 2166 cells past the edge of an
+  1800 × 1000 wall, all still on the parts list. Re-solving behind the
+  person's back is not on — the size field commits per keystroke — so it is
+  SAID: `panel-off-wall`, an error naming how many plates, with "Solve panels"
+  as the fix. Tested on cell CENTRES, because a plate at the lattice origin
+  has its bottom half-cells below y = 0 by construction (D63).
+- **Dragging a zone took 1.2–1.9 s a frame and one undo step a frame.** Every
+  frame committed, and every commit re-cut every plate. The drag is the
+  photograph's now: local while it moves, one commit on release.
+- **3D Fit cropped a wide wall**, including the default, because it assumed a
+  1.6 : 1 window. It frames from the camera's field of view and the view's real
+  aspect.
+- **The plan's tool strip covered the top of a tall wall** and the solve
+  message covered the tools. Fit leaves room under the strip; the message sits
+  below it.
+- **The bin builder forgot the size you set** when the peg count clamped it.
+  `changePegCount` starts from the size last asked for.
+- Smaller: preset zones added in a row stack visibly instead of exactly on top
+  of each other (and no longer share an id when added in one millisecond), and
+  the empty parts list points at Solve panels rather than at a panel in the
+  catalogue that has not been there since D98.
+
+## D129 — Fewer pieces at the edge, no crowded fixings, and a plate you click lights whole
+
+Reported with a screenshot of a 2000 × 2000 wall: the fixings ran down the
+right-hand side twice as thick as anywhere else, "not really sure why this is
+the solution, it should be something cleaner".
+
+Two causes, one feeding the other. D128's fill-ins were only offered when no
+shipped width fitted the strip that was left, and 7 columns still fit the
+shipped 4 × 4 plate — so the strip came out as twenty 4 × 4 plates and a
+3-wide band of fill-ins beside them. Every corner where those met took a
+three-plate tie, 42 down one edge. Now, at the strip narrower than the widest
+shipped plate, the fill-in widths compete with the shipped ones and
+`isBetterBand` takes the fewest pieces: one band of 7 × 9 plates.
+
+And even with sensible plates, two runs of plates of different heights put a
+corner on each side of the seam about every 110 mm, and each got a tie — pairs
+47 mm apart. A three-plate tie is now skipped within half a spacing of another
+tie; four-plate crossings are always tied. A plate that loses its only tie
+this way is held by the every-plate pass, which now tries the four-cell and
+two-cell parts before a single cell, as the grid does. Across five printers,
+both plate sources and three wall shapes no two fixings are now closer than
+40 % of the spacing (`fixing-parts.test.ts`), where the old planner put pairs
+47 mm apart. The count moves with it, and that is the point: 75 → 72 on the
+default wall, 76 → 71 on the garage wall in `critic-bom.test.ts`.
+
+Clicking a plate — in 3D or in the plan, border ring included — lights that
+whole plate and marks its line in the parts list. One plate, not its line:
+the line lights every copy, and the click was on one. Clicking it again,
+clicking anything else, picking a line or Escape puts it out. Which plate a
+cell belongs to is `panelModel.plateAt`, the rule the 3D hover already used,
+now shared by all three. In the plan a press on bare wall starts a marquee, so
+the click is a marquee that never moved.
+
+## D130 — No plate is left a sliver: joined if the printer takes it, shared if not
+
+Asked for directly, after a screenshot listing "Custom plate H — 2 cells,
+87 × 44 mm": "instead of making one that small, combine them (if they fit the
+printer) or make two smaller ones so that one does not get that small".
+
+Two sources, two places.
+
+**The solver.** Bands are filled tallest-first and taken widest-first, so the
+LAST plate of a column and the LAST column of the wall were whatever was left:
+10 × 1 plates on top of 10 × 10s, and a strip of 1 × 10 plates 27 mm wide down
+the right of a 2 m wall. 74 of 128 printer × wall pairs had one. Now a band's
+last plate under half the tallest its width comes in shares its rows with the
+plate below (`balanceTail`: 10 + 1 → 6 + 5), and a last band under half the
+widest shares its columns with the band before (`balanceLastBand`: one band if
+the bed makes that width, else the most even split whose first half is an even
+width, so the next band starts in phase, D96). Only the last two move, so every
+other plate stays one identical file. A split is judged AFTER levelling: with
+the shipped plates alone a band brought down to the wall's top can land short
+of it, and that is D124's step again. No plate is now under three rows or three
+columns on any of 128 pairs (`stock-fill.test.ts`).
+
+**The zones.** A zone can leave a plate a few cells. The re-cut now joins a
+plate with fewer than `MIN_PLATE_CELLS` (12) mountable cells to its neighbour in
+the same column of plates when the joined plate's printed size fits the bed,
+and otherwise moves the boundary between the two to give the smaller as many
+cells as it can. Rules that make it safe:
+
+- **Reversible.** The result carries the solver's plates in `joined`, and every
+  re-cut starts from those. Move or delete the zone and the wall is exactly as
+  solved. Persisted, so a saved wall can still be undone the same way.
+- **One piece.** Every plate it makes must be one connected piece: blocks that
+  meet can still have a zone between their surviving cells, and a join across
+  it is two loose bits in one file that the generator drops as shards (D118).
+- **Measured as printed.** The bed check uses what survives the zones
+  (`cellRemainderBox`), ignoring the zero-width remainder a cell lying exactly
+  on a zone's edge reports — a zone run to the wall's corner puts its edge on
+  every outermost cell's vertex, and counting that line refused every join.
+- **Same column only.** Across columns two blocks are not a rectangle on the
+  lattice, so a strip one cell wide beside a zone that takes the rest of a
+  column of plates stays a strip. So does a plate on a bed with no room.
+
+Swept over 80 random zones on five printers: 28 slivers → 14, none under six
+cells (`sliver-join.test.ts`). What is left is those strips and the Prusa Mini.

@@ -14,7 +14,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { hexKey, panelCells, placedPanelCells } from '../src/core/hex';
-import { borderCutCells } from '../src/core/panelModel';
+import { borderCutCells, plateAt } from '../src/core/panelModel';
 import { cutAroundObstacles } from '../src/core/store';
 import type { Hex, PlacedPanel, WallFrame } from '../src/core/types';
 
@@ -22,15 +22,11 @@ const FRAME: WallFrame = {
   left: true, right: true, bottom: true, top: true, holes: true, thicknessMm: 3.6,
 };
 
-/** The rule the view uses: surviving cells, plus the ring a border cut. */
+/** The rule the views use (`plateAt`): surviving cells, plus the ring a border cut. */
 function ownerOf(
   cell: Hex, panels: readonly PlacedPanel[], borderCut: ReadonlySet<string>,
 ): PlacedPanel | undefined {
-  const onBorder = borderCut.has(hexKey(cell));
-  return panels.find((p) =>
-    placedPanelCells(p).some((c) => c.q === cell.q && c.r === cell.r)
-    || (onBorder && panelCells(p.origin, p.columns, p.rows)
-      .some((c) => c.q === cell.q && c.r === cell.r)));
+  return plateAt(panels, borderCut, cell);
 }
 
 function wall(frame: WallFrame | undefined) {

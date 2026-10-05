@@ -194,10 +194,13 @@ describe('junctions where panels meet', () => {
       { id: 'd', partId: 'wall-honeycomb-part', origin: { q: 8, r: 4 }, columns: 8, rows: 7 },
     ];
     const plan = planFixings(tiled);
-    expect(plan.junctions.length).toBeGreaterThan(0);
-    for (const j of plan.junctions) {
-      // Three or more plates, or it is not a junction.
-      expect(j.panelIds.length).toBeGreaterThanOrEqual(3);
+    // Where the four plates meet, ONE four-cell insert ties three or more of
+    // them. Since D125 the grid uses multi-cell parts too, so not every
+    // multi-cell fixing is a junction — but the corner must have one.
+    const ties = plan.junctions.filter((j) => j.panelIds.length >= 3);
+    expect(ties.length).toBeGreaterThan(0);
+    for (const j of ties) {
+      expect(j.partId).toBe(JUNCTION_FIXING_ID);
       expect(j.cells).toHaveLength(4);
     }
   });

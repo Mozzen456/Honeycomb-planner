@@ -127,6 +127,22 @@ export interface PlacedPanel {
    * OpenSCAD honeycomb customiser, which works on this exact lattice.
    */
   omit?: Hex[];
+  /**
+   * The solver's plates this one was JOINED from (D130), when a zone left one
+   * of them a sliver. Every re-cut starts again from these, so moving or
+   * removing the zone gives the original plates back; absent on every plate
+   * nothing was joined into.
+   */
+  joined?: JoinedPlate[];
+}
+
+/** One of the solver's plates, as it was before a sliver was joined away. */
+export interface JoinedPlate {
+  id: string;
+  partId: string;
+  origin: Hex;
+  columns: number;
+  rows: number;
 }
 
 /**
@@ -164,17 +180,33 @@ export interface Obstacle {
    * A zone made of more than one rectangle — an L round a consumer unit, a run
    * of pipe with a spur off it.
    *
-   * A UNION OF RECTANGLES rather than a polygon, and that is a geometry
-   * decision, not a UI one: the border generator clips convex pieces with
-   * half-planes and has no polygon boolean anywhere by design (D59). A
-   * rectangle gives four half-planes directly; an arbitrary polygon would have
-   * to be decomposed before it could be clipped against, and a concave one
-   * cannot be clipped against at all in one piece.
+   * A UNION OF RECTANGLES, because that is what a person drags out: the
+   * generator clips convex pieces with half-planes and has no polygon boolean
+   * anywhere by design (D59), and a rectangle gives four half-planes directly.
+   * A zone that is not made of rectangles at all is `outline` below, which is
+   * decomposed into convex pieces for the same cutter (D118).
    *
    * Absent means the zone is just the rectangle above, which is what every zone
    * drawn before this existed is — and what it must still serialise as.
    */
   shape?: ZoneRect[];
+  /**
+   * A zone drawn as a POLYGON — the slope of a roof, a stair, a pipe at an
+   * angle (D118). Counter-clockwise corners in wall millimetres, the blocked
+   * area itself before clearance.
+   *
+   * Takes precedence over `shape`, and the two are never both written. The
+   * cutter receives it as convex pieces with straight edges at any angle
+   * (`obstacles.obstacleRegions`), so the honeycomb is cut along the drawn
+   * line rather than stepped round it. Absent means a rectangle or a union of
+   * rectangles, which is what every zone drawn before this existed is.
+   */
+  outline?: ZonePoint[];
+}
+
+export interface ZonePoint {
+  xMm: number;
+  yMm: number;
 }
 
 export interface PlacedItem {
@@ -243,6 +275,19 @@ export interface WallColors {
 export interface FixingEdits {
   removed?: Hex[];
   added?: Hex[];
+  /**
+   * Multi-cell fixings a person put somewhere themselves — the two- or
+   * four-cell part, anchored and turned (D125). `added` is single cells only,
+   * and stays so: a layout written before this field existed reads the same.
+   */
+  placed?: PlacedFixing[];
+}
+
+/** A multi-cell wall fixing placed by hand. */
+export interface PlacedFixing {
+  partId: string;
+  at: Hex;
+  rotation: Rotation;
 }
 
 /**
@@ -370,6 +415,15 @@ export interface LayoutDoc {
    */
   customBed?: { widthMm: number; depthMm: number };
   panels: PlacedPanel[];
+  /**
+   * Plates a blocked zone covers COMPLETELY — not on the wall, and not printed.
+   *
+   * Kept so the next cut can give them back (D117). Only the cutter in
+   * `store.ts` reads it; everything else reads `panels`, which is the wall. A
+   * plate in neither list was never planned. Absent means none, which is what
+   * every layout saved before this existed is.
+   */
+  covered?: PlacedPanel[];
   items: PlacedItem[];
   groups: Group[];
   /** Switches, sockets and pipes the wall has to go round. */
@@ -436,7 +490,9 @@ export interface Issue {
     /** Accessories have taken the cells the panel's own wall mounts need. */
     | 'no-room-for-mounts'
     /** Its fixing was removed by hand, so nothing holds this plate to the wall. */
-    | 'panel-unfixed';
+    | 'panel-unfixed'
+    /** The wall was made smaller after it was solved; these plates stand past it. */
+    | 'panel-off-wall';
   message: string;
   itemIds: string[];
   cells?: Hex[];
@@ -513,6 +569,8 @@ export interface WallFixings {
    * wall, which is what the single-cell ones cannot do (HSW-SPEC §4).
    */
   junctions: number;
+  /** Two-cell fixings round the outside of the wall (D125). */
+  edgeFixings: number;
   spacingMm: number;
   perSquareMetre: number;
   /** Panels with no free cell left for a fixing. */

@@ -94,6 +94,14 @@ export interface TilingRequest {
   available: PanelSize[];
   /** Default true: a panel may be used 90° rotated, which swaps both footprints. */
   allowRotation?: boolean;
+  /**
+   * Sizes used only where `available` leaves wall bare (D128): the top of a band
+   * whose plates do not stack to the wall's height, and a strip at the right too
+   * narrow for any of them. The app passes the bed's generated sizes here when
+   * it tiles with the shipped plates, so the shipped plates still do the work
+   * and the edge is finished rather than stepped.
+   */
+  fillers?: PanelSize[];
 }
 
 export interface TiledPanel {
@@ -363,18 +371,22 @@ function fillBand(
   bandColumns: number,
   byColumns: ReadonlyMap<number, readonly Variant[]>,
   wallHeightMm: number,
+  /** A lower ceiling than the wall's, in rows — see `levelBands`. */
+  capRows = Infinity,
+  fillers?: ReadonlyMap<number, readonly Variant[]>,
 ): TiledPanel[] {
-  const usable = byColumns.get(bandColumns);
-  if (usable === undefined) return [];
+  const usable = byColumns.get(bandColumns) ?? [];
+  const extra = fillers?.get(bandColumns) ?? [];
+  if (usable.length === 0 && extra.length === 0) return [];
 
   const rOrigin = -Math.floor(q0 / 2) + bandBump(q0);
-  const maxRows = maxRowsInBand(wallHeightMm, q0);
+  const maxRows = Math.min(maxRowsInBand(wallHeightMm, q0), capRows);
 
   const out: TiledPanel[] = [];
   let row = 0;
   for (;;) {
     const room = maxRows - row;
-    const pick = usable.find((v) => v.rows <= room);
+    const pick = usable.find((v) => v.rows <= room) ?? extra.find((v) => v.rows <= room);
     if (pick === undefined) break;
     out.push({
       partId: pick.partId,
@@ -384,7 +396,48 @@ function fillBand(
     });
     row += pick.rows;
   }
-  return out;
+  return balanceTail(out, [...usable, ...extra]);
+}
+
+/**
+ * A stack must not END on a sliver (D130).
+ *
+ * Filled tallest-first, a band's last plate is whatever height was left over —
+ * one row of ten cells on top of nine full plates, measured on half the walls
+ * a sweep of printers and sizes produced. A plate one row tall is 35 mm of
+ * honeycomb that bends in the hand, and it is the plate a person would never
+ * have chosen. So a last plate under half the tallest one this width comes in
+ * shares its height with the plate below it: 10 + 1 becomes 6 + 5. Only the
+ * last two move, so every other plate in the band stays one identical file.
+ * Heights the band cannot make are left alone — a shipped-only plate set may
+ * have no sizes to balance with.
+ */
+function balanceTail(out: TiledPanel[], options: readonly Variant[]): TiledPanel[] {
+  if (out.length < 2 || options.length === 0) return out;
+  const last = out[out.length - 1]!;
+  const prev = out[out.length - 2]!;
+  if (prev.columns !== last.columns) return out;
+  const byRows = new Map<number, Variant>();
+  for (const v of options) if (v.columns === last.columns && !byRows.has(v.rows)) byRows.set(v.rows, v);
+  const tallest = Math.max(...byRows.keys());
+  if (last.rows * 2 >= tallest) return out;
+  const total = prev.rows + last.rows;
+  let best: [number, number] | null = null;
+  for (const [a] of byRows) {
+    const b = total - a;
+    if (b < 1 || !byRows.has(b) || Math.min(a, b) <= last.rows) continue;
+    if (best === null || Math.abs(a - b) < Math.abs(best[0] - best[1]) ||
+        (Math.abs(a - b) === Math.abs(best[0] - best[1]) && a > best[0])) best = [a, b];
+  }
+  if (best === null) return out;
+  const [a, b] = best;
+  const lower = byRows.get(a)!;
+  const upper = byRows.get(b)!;
+  return [
+    ...out.slice(0, -2),
+    { partId: lower.partId, origin: prev.origin, columns: prev.columns, rows: a },
+    { partId: upper.partId, origin: { q: prev.origin.q, r: prev.origin.r + a }, columns: prev.columns, rows: b },
+  ];
 }
 
 interface BandPlan {
@@ -415,6 +468,136 @@ function isBetterBand(candidate: BandPlan, incumbent: BandPlan | null): boolean 
     return candidate.panels.length < incumbent.panels.length;
   }
   return candidate.columns > incumbent.columns;
+}
+
+interface Band {
+  q0: number;
+  columns: number;
+  panels: TiledPanel[];
+}
+
+/** Where a band's honeycomb stops at the top, in wall millimetres. */
+function bandTopMm(band: Band): number {
+  // Only each plate's TOP row can be the band's top, and a wall of 4 × 4
+  // plates on a 20 m wall is 800 000 cells to build for nothing otherwise.
+  const cells: Hex[] = [];
+  for (const p of band.panels) {
+    for (const c of panelCells({ q: p.origin.q, r: p.origin.r + p.rows - 1 }, p.columns, 1)) cells.push(c);
+  }
+  return cellsBoundsMm(cells).maxY;
+}
+
+/**
+ * Bring every band down to the height most of the wall reaches (D124).
+ *
+ * Each band is filled on its own, tallest plates first, so how high it gets
+ * depends on which heights its WIDTH comes in. On a 300 mm bed with the shipped
+ * plates, the 14-wide bands stack 14 × 11 four times — 44 rows — while the
+ * 4-wide band left at the right-hand edge stacks 4 × 4 twelve times and reaches
+ * 48. The wall came out with one column standing 94 mm proud of the rest, and
+ * with the border on it was worse than a bump: the assembly's top line is taken
+ * from its highest cell, so every other band's top row read as a STEP and was
+ * paved over with border instead of being cut straight.
+ *
+ * So the height that most of the wall's WIDTH reaches is the wall's top, and a
+ * band taller than that is refilled under it. Only taller bands move. Pulling
+ * everything down to the shortest band instead cascades — on a 400 mm bed the
+ * 9-wide band reaches 45 rows, the 18-wide ones cannot make 45 from 16s, so
+ * they would fall to 32 and the whole wall would lose a plate's height.
+ */
+function levelBands(
+  bands: readonly Band[],
+  byColumns: ReadonlyMap<number, readonly Variant[]>,
+  wallHeightMm: number,
+  fillers?: ReadonlyMap<number, readonly Variant[]>,
+): Band[] {
+  if (bands.length < 2) return [...bands];
+  const tops = bands.map(bandTopMm);
+  const widthAt = new Map<string, { top: number; columns: number }>();
+  bands.forEach((b, i) => {
+    const key = tops[i]!.toFixed(3);
+    const w = widthAt.get(key);
+    if (w) w.columns += b.columns;
+    else widthAt.set(key, { top: tops[i]!, columns: b.columns });
+  });
+  let level = -Infinity;
+  let most = -1;
+  for (const { top, columns } of widthAt.values()) {
+    // Ties go to the LOWER height: trimming is the only move available.
+    if (columns > most || (columns === most && top < level)) {
+      most = columns;
+      level = top;
+    }
+  }
+  return bands.map((band, i) => {
+    if (tops[i]! <= level + EPS) return band;
+    const rows = band.panels.reduce((n, p) => n + p.rows, 0);
+    const base = tops[i]! - rows * PITCH;
+    const cap = Math.floor((level - base) / PITCH + EPS);
+    const refilled = fillBand(band.q0, band.columns, byColumns, wallHeightMm, cap, fillers);
+    return refilled.length > 0 ? { ...band, panels: refilled } : band;
+  });
+}
+
+/**
+ * The wall must not END on a sliver either (D130) — the same rule across.
+ *
+ * Bands are taken widest-first, so the last is whatever columns were left: one
+ * column of plates 27 mm wide down the whole right-hand side of a 2 m wall on
+ * a 256 bed. A last band under half the widest is shared with the band before
+ * it — one band if the two together are a width the bed makes, otherwise two
+ * of nearly equal width, the first EVEN so the second still starts in phase
+ * (D96). Only taken when it covers at least as much wall as before.
+ */
+function balanceLastBand(
+  bands: Band[],
+  byColumns: ReadonlyMap<number, readonly Variant[]>,
+  fillers: ReadonlyMap<number, readonly Variant[]> | undefined,
+  wallHeightMm: number,
+): void {
+  if (bands.length < 2) return;
+  const last = bands[bands.length - 1]!;
+  const prev = bands[bands.length - 2]!;
+  const widths = new Set([...byColumns.keys(), ...(fillers?.keys() ?? [])]);
+  const widest = Math.max(...widths);
+  if (last.columns * 2 >= widest || prev.q0 % 2 !== 0) return;
+  const total = prev.columns + last.columns;
+  const cellsOf = (ps: readonly TiledPanel[]) => ps.reduce((n, p) => n + p.columns * p.rows, 0);
+  const before = cellsOf(prev.panels) + cellsOf(last.panels);
+  const plans: Band[][] = [];
+  if (widths.has(total)) {
+    plans.push([{ q0: prev.q0, columns: total, panels: fillBand(prev.q0, total, byColumns, wallHeightMm, Infinity, fillers) }]);
+  }
+  // The most even split whose first band is an even width (so the second
+  // starts in phase) and whose narrower band is wider than the sliver was.
+  let split: number | null = null;
+  for (let a = 2; a < total; a += 2) {
+    const b = total - a;
+    if (!widths.has(a) || !widths.has(b) || Math.min(a, b) <= last.columns) continue;
+    if (split === null || Math.abs(a - b) < Math.abs(split - (total - split))) split = a;
+  }
+  if (split !== null) {
+    const a = split, b = total - split;
+    plans.push([
+      { q0: prev.q0, columns: a, panels: fillBand(prev.q0, a, byColumns, wallHeightMm, Infinity, fillers) },
+      { q0: prev.q0 + a, columns: b, panels: fillBand(prev.q0 + a, b, byColumns, wallHeightMm, Infinity, fillers) },
+    ]);
+  }
+  const others = bands.slice(0, -2);
+  for (const plan of plans) {
+    if (plan.some((b) => b.panels.length === 0)) continue;
+    if (cellsOf(plan.flatMap((b) => b.panels)) < before) continue;
+    // Nor a step: judged AFTER levelling, because shipped plates alone stack
+    // only to certain heights and a band brought down to the wall's top can
+    // land short of it (D124).
+    const leveled = levelBands([...others, ...plan], byColumns, wallHeightMm, fillers);
+    const ref = others.length > 0
+      ? Math.min(...leveled.slice(0, others.length).map(bandTopMm))
+      : bandTopMm(prev);
+    if (leveled.slice(others.length).some((b) => bandTopMm(b) < ref - EPS)) continue;
+    bands.splice(bands.length - 2, 2, ...plan);
+    return;
+  }
 }
 
 /** Is cell `c` inside `p`? The arithmetic inverse of `panelCells`, allocation-free. */
@@ -537,19 +720,46 @@ export function solveTiling(req: TilingRequest): TilingResult {
   // Ascending so band-width selection is order-independent; `isBetterBand` decides.
   const columnCounts = [...byColumns.keys()].sort((a, b) => a - b);
 
+  // The fill-ins (D128): never rotated, never preferred, only what fits the bed.
+  const fillerByColumns = new Map<number, Variant[]>();
+  for (const size of req.fillers ?? []) {
+    if (!isUsableSize(size) || !fitsBed(size.widthMm, size.heightMm, bed)) continue;
+    const v: Variant = {
+      partId: size.partId, columns: size.columns, rows: size.rows,
+      cells: size.columns * size.rows, rotated: false,
+    };
+    const bucket = fillerByColumns.get(v.columns);
+    if (bucket === undefined) fillerByColumns.set(v.columns, [v]);
+    else bucket.push(v);
+  }
+  for (const bucket of fillerByColumns.values()) bucket.sort(compareVariants);
+  const fillers = fillerByColumns.size > 0 ? fillerByColumns : undefined;
+  const fillerCounts = [...fillerByColumns.keys()].sort((a, b) => a - b);
+
   // --- band-by-band fill, left to right -----------------------------------
   // Bands run vertically since the wall turned flat-top (D35).
   const qMax = maxColumnIndex(wallWidthMm);
   const panels: TiledPanel[] = [];
+  const bands: Band[] = [];
   let q0 = 0;
 
   while (q0 <= qMax) {
     const remainingColumns = qMax - q0 + 1;
     let best: BandPlan | null = null;
 
-    for (const columns of columnCounts) {
+    // The shipped widths across the wall; at the right-hand strip — narrower
+    // than the widest shipped plate — the fill-in widths compete as well, and
+    // `isBetterBand` takes the plan of fewest pieces. Shipped widths alone
+    // filled a 7-column strip with twenty 4 × 4 plates and a 3-wide band of
+    // fill-ins beside them, and every corner where those met took a fixing:
+    // 42 down one edge of a 2 m wall (D129).
+    const widestShipped = columnCounts.length > 0 ? columnCounts[columnCounts.length - 1]! : 0;
+    const candidates = remainingColumns >= widestShipped
+      ? columnCounts
+      : [...new Set([...columnCounts, ...fillerCounts])].sort((a, b) => a - b);
+    for (const columns of candidates) {
       if (columns > remainingColumns) break; // ascending, so nothing later fits either
-      const band = fillBand(q0, columns, byColumns, wallHeightMm);
+      const band = fillBand(q0, columns, byColumns, wallHeightMm, Infinity, fillers);
       if (band.length === 0) continue;
       let cells = 0;
       for (const p of band) cells += p.columns * p.rows;
@@ -566,8 +776,12 @@ export function solveTiling(req: TilingRequest): TilingResult {
     }
 
     if (best === null) break;
-    for (const p of best.panels) panels.push(p);
+    bands.push({ q0, columns: best.columns, panels: best.panels });
     q0 += best.columns;
+  }
+  balanceLastBand(bands, byColumns, fillers, wallHeightMm);
+  for (const band of levelBands(bands, byColumns, wallHeightMm, fillers)) {
+    for (const p of band.panels) panels.push(p);
   }
 
   if (panels.length === 0) {

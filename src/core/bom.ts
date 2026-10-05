@@ -39,8 +39,10 @@ import { colorOfLine as lineColor } from './colors';
 import { customPanelGroups, isCustomPanel } from './customiser';
 import { fastenerCells, fixingsFor, JUNCTION_FIXING_ID, type FixingPlan } from './fixings';
 import { fastenersNeedReview, socketProvidesOf, socketsOf } from './overrides';
-import { hexKey, hexSub, keyToHex, placedPanelCells, placeFootprint } from './hex';
-import { borderCutCells, isGeneratedSize, panelFrameKey, panelFrameSides } from './panelModel';
+import { hexKey, hexSub, hexToMm, keyToHex, placedPanelCells, placeFootprint } from './hex';
+import {
+  bedOfDoc, borderCutCells, isGeneratedSize, panelFrameKey, panelFrameSides, panelGeometryKeys,
+} from './panelModel';
 import { crossesSeam } from './tiling';
 import type {
   Bom,
@@ -283,6 +285,22 @@ function mountsThroughSocket(
  * Returns ids so a caller can match placements without re-deriving anything;
  * empty for an accessory line, which is answered by `doc.items` instead.
  */
+/**
+ * The parts-list line a group of GENERATED plates is counted on.
+ *
+ * One line of string building, and it exists because three places need the
+ * answer: `panelLineKeys`, `computeBom`, and the generate list in the rail,
+ * which lights a plate's copies on the wall when you hover or download it. A
+ * fourth spelling of `custom/` is a highlight that lights nothing — the same
+ * shape as every other second reader of one fact in this codebase.
+ *
+ * The key is `customPanelGroups`' own — the plate's SHAPE and its edge — so it
+ * survives a re-solve, which the letter in the label does not.
+ */
+export function customLineKey(groupKey: string): string {
+  return `custom/${groupKey}`;
+}
+
 export function panelsForLine(doc: LayoutDoc | undefined, partId: string): string[] {
   if (typeof partId !== 'string' || partId.length === 0) return [];
   const out: string[] = [];
@@ -316,8 +334,10 @@ export function panelLineKeys(doc: LayoutDoc | undefined): ReadonlyMap<string, s
 
   // The generated plates first, since a plate on one of those lines is exactly
   // a plate that is NOT on its own stock one.
-  for (const group of customPanelGroups(panels, frameKeyOf)) {
-    for (const panel of group.panels) out.set(panel.id, `custom/${group.key}`);
+  // By what the plate IS, not only by what it was made from (D116).
+  const shapes = panelGeometryKeys(panels, doc?.frame, doc?.obstacles, doc?.covered, doc ? bedOfDoc(doc) : undefined);
+  for (const group of customPanelGroups(panels, frameKeyOf, (p) => shapes.get(p.id) ?? '')) {
+    for (const panel of group.panels) out.set(panel.id, customLineKey(group.key));
   }
   for (const panel of panels) {
     if (out.has(panel.id)) continue;
@@ -339,6 +359,40 @@ export function panelLineKeys(doc: LayoutDoc | undefined): ReadonlyMap<string, s
  * disappear the moment you hung a hook on one of its open holes (D48).
  */
 export function fixingPlanFor(
+  doc: LayoutDoc | undefined,
+  catalog: Catalog,
+  spacingMm?: number,
+): FixingPlan {
+  /*
+   * Cached on the document and the catalogue, both immutable. One edit used to
+   * plan the fixings three or four times — the parts list twice (its own
+   * count and `validate`), the 3D view once more, the store again for a
+   * click — at ~100 ms a time on an ordinary wall, which is most of why a
+   * dragged zone stuttered.
+   */
+  if (doc === undefined) return planFixingPlan(doc, catalog, spacingMm);
+  let byCatalog = fixingPlanCache.get(doc);
+  if (byCatalog === undefined) {
+    byCatalog = new WeakMap();
+    fixingPlanCache.set(doc, byCatalog);
+  }
+  let bySpacing = byCatalog.get(catalog);
+  if (bySpacing === undefined) {
+    bySpacing = new Map();
+    byCatalog.set(catalog, bySpacing);
+  }
+  const key = spacingMm ?? -1;
+  let plan = bySpacing.get(key);
+  if (plan === undefined) {
+    plan = planFixingPlan(doc, catalog, spacingMm);
+    bySpacing.set(key, plan);
+  }
+  return plan;
+}
+
+const fixingPlanCache = new WeakMap<LayoutDoc, WeakMap<Catalog, Map<number, FixingPlan>>>();
+
+function planFixingPlan(
   doc: LayoutDoc | undefined,
   catalog: Catalog,
   spacingMm?: number,
@@ -423,22 +477,22 @@ export function fasteningPlanFor(
     const provides = socketProvidesOf(index.get(item.partId));
     if (provides !== undefined) noteSocket(item, provides);
   }
-  const junctionPart = index.get(JUNCTION_FIXING_ID);
-  const junctionProvides = socketProvidesOf(junctionPart);
-  if (junctionPart !== undefined && junctionProvides !== undefined) {
-    for (const [n, junction] of fixings.junctions.entries()) {
-      // Through `itemSocketCells`, so a planned fixing and a placed one place
-      // their sockets by the same transform.
-      noteSocket(
-        {
-          id: `fixing/${n}`,
-          partId: JUNCTION_FIXING_ID,
-          at: junction.anchor,
-          rotation: junction.rotation,
-        },
-        junctionProvides,
-      );
-    }
+  for (const [n, junction] of fixings.junctions.entries()) {
+    // Each multi-cell fixing by its OWN part: the four-cell one has sockets
+    // that stand in for an insert, the two-cell edge fixing (D125) has none.
+    const provides = socketProvidesOf(index.get(junction.partId));
+    if (provides === undefined) continue;
+    // Through `itemSocketCells`, so a planned fixing and a placed one place
+    // their sockets by the same transform.
+    noteSocket(
+      {
+        id: `fixing/${n}`,
+        partId: junction.partId,
+        at: junction.anchor,
+        rotation: junction.rotation,
+      },
+      provides,
+    );
   }
 
   /**
@@ -669,6 +723,38 @@ export function validate(doc: LayoutDoc, catalog: Catalog): Issue[] {
       }). It contributes nothing to the BOM.`,
       itemIds: ids,
     });
+  }
+
+  // --- panel-off-wall -----------------------------------------------------
+  // A wall made smaller after it was solved keeps its plates, and every one
+  // still counts in the list — plates ordered for wall that is not there. The
+  // plan is not re-solved behind anyone's back (that would discard a layout
+  // mid-keystroke); it is SAID, with the fix (D128).
+  const wallW = doc?.wall?.widthMm;
+  const wallH = doc?.wall?.heightMm;
+  if (Number.isFinite(wallW) && Number.isFinite(wallH)) {
+    // A cell whose CENTRE is off the wall: more than half of it stands past
+    // the edge. Not its rim — a plate placed by hand at the lattice origin has
+    // its bottom half cells below y = 0, which is how the lattice is anchored
+    // (D63) and not a wall that shrank.
+    const outside: string[] = [];
+    for (const panel of panels) {
+      for (const c of placedPanelCells(panel)) {
+        const m = hexToMm(c);
+        if (m.x < 0 || m.x > wallW || m.y < 0 || m.y > wallH) {
+          outside.push(panel.id);
+          break;
+        }
+      }
+    }
+    if (outside.length > 0) {
+      issues.push({
+        level: 'error',
+        code: 'panel-off-wall',
+        message: `${outside.length} plate${outside.length === 1 ? ' reaches' : 's reach'} past the edge of the ${wallW} × ${wallH} mm wall.`,
+        itemIds: outside,
+      });
+    }
   }
 
   // --- panel-overlap ------------------------------------------------------
@@ -963,8 +1049,9 @@ export function computeBom(doc: LayoutDoc, catalog: Catalog): Bom {
    * the wall. Four separate fixings, one per plate, fix each plate and leave
    * the join itself unsupported.
    */
-  if (fixings.junctions.length > 0 && index.has(JUNCTION_FIXING_ID)) {
-    bump(quantities, JUNCTION_FIXING_ID, fixings.junctions.length);
+  // ...and the two-cell one round the edge (D125): each counted as its own part.
+  for (const junction of fixings.junctions) {
+    if (index.has(junction.partId)) bump(quantities, junction.partId, 1);
   }
 
   // Bought hardware, from every part in the BOM — including the inserts that
@@ -1044,7 +1131,11 @@ export function computeBom(doc: LayoutDoc, catalog: Catalog): Bom {
   // the other never. Same rule, one function, both callers.
   const panels = docPanels;
   const frame = doc?.frame;
-  const groups = customPanelGroups(panels, frameKeyOf);
+  // Split by the generated geometry as well, or one line can stand for plates
+  // that are cut differently and the download prints the first of them for all
+  // (D116). `panelLineKeys` groups the same way, so a colour finds its plates.
+  const shapes = panelGeometryKeys(panels, frame, doc?.obstacles, doc?.covered, doc ? bedOfDoc(doc) : undefined);
+  const groups = customPanelGroups(panels, frameKeyOf, (p) => shapes.get(p.id) ?? '');
   // The reference a generated plate is costed against: the biggest shipped
   // plate, per cell. A plate the app sized itself has no catalogue entry to
   // scale from, and left at zero it would report a wall that prints in no time
@@ -1090,7 +1181,7 @@ export function computeBom(doc: LayoutDoc, catalog: Catalog): Bom {
     // the letter, which is a position in this list and changes the moment
     // another custom plate appears. Re-solve a wall and the plates you have
     // already printed are still the same plates.
-    const partId = `custom/${group.key}`;
+    const partId = customLineKey(group.key);
     const done = printedOf(progress, partId, quantity);
 
     totalParts += quantity;
@@ -1162,7 +1253,8 @@ export function computeBom(doc: LayoutDoc, catalog: Catalog): Bom {
     },
     fixings: {
       count: fixings.cells.length + fixings.junctions.length,
-      junctions: fixings.junctions.length,
+      junctions: fixings.junctions.filter((j) => j.partId === JUNCTION_FIXING_ID).length,
+      edgeFixings: fixings.junctions.filter((j) => j.partId !== JUNCTION_FIXING_ID).length,
       spacingMm: fixings.spacingMm,
       perSquareMetre: roundTo(fixings.perSquareMetre, 1),
       starvedPanelIds: fixings.starvedPanelIds,
