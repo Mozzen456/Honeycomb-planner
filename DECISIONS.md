@@ -5263,3 +5263,36 @@ crash and no black page, and these:
   of each other (and no longer share an id when added in one millisecond), and
   the empty parts list points at Solve panels rather than at a panel in the
   catalogue that has not been there since D98.
+
+## D129 — Fewer pieces at the edge, no crowded fixings, and a plate you click lights whole
+
+Reported with a screenshot of a 2000 × 2000 wall: the fixings ran down the
+right-hand side twice as thick as anywhere else, "not really sure why this is
+the solution, it should be something cleaner".
+
+Two causes, one feeding the other. D128's fill-ins were only offered when no
+shipped width fitted the strip that was left, and 7 columns still fit the
+shipped 4 × 4 plate — so the strip came out as twenty 4 × 4 plates and a
+3-wide band of fill-ins beside them. Every corner where those met took a
+three-plate tie, 42 down one edge. Now, at the strip narrower than the widest
+shipped plate, the fill-in widths compete with the shipped ones and
+`isBetterBand` takes the fewest pieces: one band of 7 × 9 plates.
+
+And even with sensible plates, two runs of plates of different heights put a
+corner on each side of the seam about every 110 mm, and each got a tie — pairs
+47 mm apart. A three-plate tie is now skipped within half a spacing of another
+tie; four-plate crossings are always tied. A plate that loses its only tie
+this way is held by the every-plate pass, which now tries the four-cell and
+two-cell parts before a single cell, as the grid does. Across five printers,
+both plate sources and three wall shapes no two fixings are now closer than
+40 % of the spacing (`fixing-parts.test.ts`), where the old planner put pairs
+47 mm apart. The count moves with it, and that is the point: 75 → 72 on the
+default wall, 76 → 71 on the garage wall in `critic-bom.test.ts`.
+
+Clicking a plate — in 3D or in the plan, border ring included — lights that
+whole plate and marks its line in the parts list. One plate, not its line:
+the line lights every copy, and the click was on one. Clicking it again,
+clicking anything else, picking a line or Escape puts it out. Which plate a
+cell belongs to is `panelModel.plateAt`, the rule the 3D hover already used,
+now shared by all three. In the plan a press on bare wall starts a marquee, so
+the click is a marquee that never moved.

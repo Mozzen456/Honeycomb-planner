@@ -12,7 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import catalogJson from '../catalog/catalog.json';
 import overridesJson from '../catalog/overrides.json';
 import { BEDS, bedFor, CUSTOM_BED_ID, MAX_BED_MM, MIN_BED_MM, PEG } from '../core/constants';
-import { computeBom, panelsForLine } from '../core/bom';
+import { computeBom, panelLineKeys, panelsForLine } from '../core/bom';
 import { DEFAULT_PANEL_COLOR, DEFAULT_PART_COLOR, normaliseColor } from '../core/colors';
 import { toCsv, toMarkdownChecklist, toPrintableHtml, downloadName } from '../core/exporters';
 import {
@@ -215,6 +215,21 @@ export function App() {
    * behind.
    */
   const [hoverLine, setHoverLine] = useState<string | null>(null);
+  /**
+   * One plate clicked on the wall (D129): that plate lights whole, border and
+   * all, and its line is marked in the parts list. A PLATE, not its line — the
+   * line would light every copy, and the click was on one. Cleared by clicking
+   * anything else, by picking a line, and by Escape.
+   */
+  const [pickedPanel, setPickedPanel] = useState<string | null>(null);
+  // Clicking the plate that is already lit puts it out again.
+  const pickPanel = useCallback((id: string | null) => {
+    setPickedPanel((current) => (id !== null && current === id ? null : id));
+  }, []);
+  const pickLine = useCallback((update: (current: string | null) => string | null) => {
+    setPickedPanel(null);
+    setLitLine(update);
+  }, []);
   const [theme, setTheme] = useState<Theme>(storedTheme);
   /**
    * 3D is the default view. The wall is a physical object you hang things ON,
@@ -359,12 +374,20 @@ export function App() {
    * owner of that rule, so a click can never light a plate the line does not
    * count (a cut or bordered plate has left the stock line for a generated one).
    */
-  const shownLine = hoverLine ?? litLine;
+  // A clicked plate that has since gone (a new solve, an undo) lights nothing.
+  const picked = pickedPanel !== null && state.doc.panels.some((p) => p.id === pickedPanel)
+    ? pickedPanel : null;
+  const pickedLine = useMemo(
+    () => (picked === null ? null : panelLineKeys(state.doc).get(picked) ?? null),
+    [state.doc, picked],
+  );
+  const shownLine = hoverLine ?? pickedLine ?? litLine;
   const litPanelIds = useMemo(() => {
+    if (hoverLine === null && picked !== null) return new Set([picked]);
     if (shownLine === null) return undefined;
     const ids = panelsForLine(state.doc, shownLine);
     return ids.length > 0 ? new Set(ids) : undefined;
-  }, [state.doc, shownLine]);
+  }, [state.doc, shownLine, hoverLine, picked]);
 
   /**
    * The colour the wall would draw something in if nobody had chosen one.
@@ -671,7 +694,7 @@ export function App() {
         return;
       }
       if (e.key === 'Escape') {
-        cancelDrag(); store.select([]); setPickedFixing(null); setLitLine(null); return;
+        cancelDrag(); store.select([]); setPickedFixing(null); setLitLine(null); setPickedPanel(null); return;
       }
       if (e.key.toLowerCase() === 'r' && sel.length) {
         e.preventDefault();
@@ -1866,6 +1889,7 @@ export function App() {
                 store.select(additive ? [...state.selection, ...expanded] : expanded);
               }}
               litPanelIds={litPanelIds}
+              onPickPanel={pickPanel}
               pickedFixing={pickedFixing}
               onPickFixing={setPickedFixing}
               onMoveFixing={(from, to) => {
@@ -1883,6 +1907,7 @@ export function App() {
               dragRef={dragRef}
               invalidCells={dropCheck.ok ? undefined : dropCheck.blockedCells}
               litPanelIds={litPanelIds}
+              onPickPanel={pickPanel}
               placementValid={dropCheck.ok}
               onDragMove={onDragMove}
               onDrop={onDrop}
@@ -1956,7 +1981,7 @@ export function App() {
               // off, which is the only way back for a panel line: a plate is not
               // selectable, so Escape-the-selection does not cover it.
               store.select(state.doc.items.filter((i) => i.partId === partId).map((i) => i.id));
-              setLitLine((current) => (current === partId ? null : partId));
+              pickLine((current) => (current === partId ? null : partId));
               setPickedFixing(null);
             }}
             litLine={shownLine}
@@ -1987,7 +2012,7 @@ export function App() {
                   // either list must light the same copies and mark the same
                   // row (`bom.customLineKey` is what keeps the two agreeing).
                   onLightLine={(lineKey, toggle) =>
-                    setLitLine((current) => (toggle && current === lineKey ? null : lineKey))}
+                    pickLine((current) => (toggle && current === lineKey ? null : lineKey))}
                   onCopy={(text, what) => {
                     void navigator.clipboard?.writeText(text);
                     say(`${what} settings copied — paste them into the customiser`, 'ok');

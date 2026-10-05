@@ -531,13 +531,14 @@ describe('2 — FULL GARAGE WALL: 1200 x 2400, bed256, 64 panels + 30 accessorie
   });
 
   it('required inserts multiply N x M across 64 panels', () => {
-    // 22 and 54 are the fixing PLANNER's output, pinned so a change is visible.
+    // 22 and 49 are the fixing PLANNER's output, pinned so a change is visible.
+    // 54 until D129 stopped tying seam corners closer than half a spacing apart.
     // They shifted with the frame turn (D35) because the seams moved, not
     // because anything about the wall did: same 64 panels, same 5784 cells.
     expect(qty(bom, 'insert-countersunk')).toBe(0); // none: the edge takes the two-cell part (D125)
     expect(qty(bom, 'hexagon-countersung-and-hole')).toBe(22); // round the edge
     // ...the rest of the wall is held by four-cell inserts bridging the joins.
-    expect(qty(bom, 'insert-for-countersunk-hole-3')).toBe(54);
+    expect(qty(bom, 'insert-for-countersunk-hole-3')).toBe(49);
     expect(qty(bom, 'insert-empty')).toBe(40); // 3x10 + 2x5
     expect(qty(bom, 'insert-m4')).toBe(5); // 1 per box; box used to require none
 
@@ -557,8 +558,8 @@ describe('2 — FULL GARAGE WALL: 1200 x 2400, bed256, 64 panels + 30 accessorie
     // One screw and one plug per fixing, whether it is a single-cell insert or
     // a four-cell one bridging a junction. That is the invariant; the split
     // between the two kinds is the fixing plan's business.
-    expect(shop(bom, WALL_SCREW)).toBe(76);
-    expect(shop(bom, WALL_PLUG)).toBe(76);
+    expect(shop(bom, WALL_SCREW)).toBe(71);
+    expect(shop(bom, WALL_PLUG)).toBe(71);
     expect(shop(bom, WALL_SCREW)).toBe(
       qty(bom, 'insert-countersunk') + qty(bom, 'insert-for-countersunk-hole-3') + qty(bom, 'hexagon-countersung-and-hole'),
     );
@@ -576,25 +577,25 @@ describe('2 — FULL GARAGE WALL: 1200 x 2400, bed256, 64 panels + 30 accessorie
       // insert's bolt clamps the insert, the box's bolt clamps the box to it.
       { item: 'M4 bolt, 10-16 mm', count: 5 },
       { item: 'M4 nut', count: 5 },
-      { item: WALL_PLUG, count: 76 },
-      { item: WALL_SCREW, count: 76 },
+      { item: WALL_PLUG, count: 71 },
+      { item: WALL_SCREW, count: 71 },
     ]);
     expect(shop(bom, 'M4 nut')).toBe(qty(bom, 'insert-m4'));
   });
 
   it('totals match the hand arithmetic', () => {
-    expect(bom.totals.parts).toBe(215);
+    expect(bom.totals.parts).toBe(210);
     expect(bom.totals.distinctParts).toBe(11);
-    expect(bom.totals.grams).toBe(5855.9);
-    expect(bom.totals.metres).toBe(1963.48);
+    expect(bom.totals.grams).toBe(5814);
+    expect(bom.totals.metres).toBe(1949.45);
   });
 
   it('totals are summed UNROUNDED, not from the rounded lines', () => {
-    // Summing the rounded gram figures on the lines gives 5856.1; the honest
-    // answer is 5855.9. If these are ever equal the accumulator was rounded early.
+    // Summing the rounded gram figures on the lines gives 5814.2; the honest
+    // answer is 5814.0. If these are ever equal the accumulator was rounded early.
     const fromLines = [...bom.printed, ...bom.fasteners].reduce((a, l) => a + l.grams, 0);
-    expect(Number(fromLines.toFixed(1))).toBe(5856.1);
-    expect(bom.totals.grams).toBe(5855.9);
+    expect(Number(fromLines.toFixed(1))).toBe(5814.2);
+    expect(bom.totals.grams).toBe(5814);
 
     const expected = expectedTotals(
       new Map([
@@ -608,16 +609,16 @@ describe('2 — FULL GARAGE WALL: 1200 x 2400, bed256, 64 panels + 30 accessorie
         ['insert-m4', 5],
         ['insert-empty', 40],
         ['hexagon-countersung-and-hole', 22],
-        ['insert-for-countersunk-hole-3', 54],
+        ['insert-for-countersunk-hole-3', 49],
       ]),
     );
-    // Exact decimal sums for the fixing-planned wall: 38494.27 min, 5855.89 g,
-    // 1963.4802 m. Recomputed from src/catalog/catalog.json against the quantity
+    // Exact decimal sums for the fixing-planned wall: 38169.87 min, 5814.04 g,
+    // 1949.4497 m. Recomputed from src/catalog/catalog.json against the quantity
     // map above -- NOT read back off the BOM, which is the whole point of this
     // check. Verified to agree with computeBom to the last digit.
-    expect(expected.rawMinutesHundredths).toBe(3849427);
-    expect(expected.rawGramsHundredths).toBe(585589);
-    expect(expected.rawMetresTenThousandths).toBe(19634802);
+    expect(expected.rawMinutesHundredths).toBe(3816987);
+    expect(expected.rawGramsHundredths).toBe(581404);
+    expect(expected.rawMetresTenThousandths).toBe(19494497);
     expect(bom.totals.parts).toBe(expected.parts);
     expect(bom.totals.grams).toBe(expected.grams);
     expect(bom.totals.metres).toBe(expected.metres);

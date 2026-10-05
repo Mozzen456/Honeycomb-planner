@@ -28,6 +28,7 @@ import {
 import { buildHoneycombMesh } from '../core/honeycomb';
 import {
   borderCutCells,
+  plateAt,
   isGeneratedSize, panelGeometryKeysFor, panelIsBordered, panelModelSpecFor,
 } from '../core/panelModel';
 import { partCells } from '../core/store';
@@ -70,6 +71,11 @@ export interface WallView3DProps {
   onPickFixing?: (at: Hex | null) => void;
   /** Dragged from one cell to another. The store refuses what cannot land. */
   onMoveFixing?: (from: Hex, to: Hex) => void;
+  /**
+   * A plate clicked — the whole of it lights, border and all (D129) — or null
+   * when the click landed on anything else.
+   */
+  onPickPanel?: (panelId: string | null) => void;
   /**
    * Panel ids to light up — the plates a parts-list line is talking about.
    *
@@ -477,7 +483,7 @@ export function WallView3D(props: WallView3DProps) {
   const {
     doc, catalog, selection, drag, dragRef, placementValid,
     onDragMove, onDrop, onDragCancel, onSelect, onStartItemDrag,
-    pickedFixing = null, onPickFixing, onMoveFixing, litPanelIds,
+    pickedFixing = null, onPickFixing, onMoveFixing, litPanelIds, onPickPanel,
   } = props;
 
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -1616,11 +1622,7 @@ export function WallView3D(props: WallView3DProps) {
      * lit up at all. The cut ring is asked for by name; a cell a ZONE ate is
      * still nobody's, which is right, because that one really is a hole.
      */
-    const onBorder = borderCut.has(hexKey(hover));
-    const panel = doc.panels.find((p) =>
-      placedPanelCells(p).some((c) => c.q === hover.q && c.r === hover.r)
-      || (onBorder && panelCells(p.origin, p.columns, p.rows)
-        .some((c) => c.q === hover.q && c.r === hover.r)));
+    const panel = plateAt(doc.panels, borderCut, hover);
     if (!panel) return;
 
     const theme = readTheme();
@@ -1971,10 +1973,15 @@ export function WallView3D(props: WallView3DProps) {
           // mean whichever the handler looked at first.
           onSelect([], false);
           onPickFixing?.(press.fixing.at);
+          onPickPanel?.(null);
         } else {
           onSelect(press.itemId === undefined ? [] : [press.itemId],
             e.metaKey || e.ctrlKey);
           onPickFixing?.(null);
+          // Bare plate under the click: that whole plate lights (D129).
+          onPickPanel?.(press.itemId === undefined
+            ? plateAt(doc.panels, borderCut, press.cell)?.id ?? null
+            : null);
         }
       }
       pressRef.current = null;
@@ -2008,7 +2015,7 @@ export function WallView3D(props: WallView3DProps) {
     };
   }, [ready, cellAt, itemIndex, fixingIndex, doc.items, selection, dragRef,
       onDragMove, onDrop, onDragCancel, onSelect, onStartItemDrag,
-      onPickFixing, onMoveFixing]);
+      onPickFixing, onMoveFixing, onPickPanel, doc.panels, borderCut]);
 
   return (
     <div className="wall3d" ref={hostRef}>

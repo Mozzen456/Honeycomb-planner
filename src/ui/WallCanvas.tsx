@@ -45,7 +45,9 @@ import {
   type Snap,
 } from '../core/measure';
 import { simplifyPath, simplifyStroke } from '../core/zonePolygon';
-import { assemblyBlockCells, borderSpecFor, frameIsOn, NO_WALL_FRAME } from '../core/panelModel';
+import {
+  assemblyBlockCells, borderCutCells, borderSpecFor, frameIsOn, NO_WALL_FRAME, plateAt,
+} from '../core/panelModel';
 import {
   borderPolygons, DEFAULT_BORDER_MM, MAX_BORDER_MM, MIN_BORDER_MM, plateEdgeShapes,
 } from '../core/honeycomb';
@@ -126,6 +128,8 @@ export interface WallCanvasProps {
   onDragCancel: () => void;
   onSelect: (ids: string[], additive: boolean) => void;
   onStartItemDrag: (itemIds: string[], grabOffset: Hex) => void;
+  /** A plate clicked, so the whole of it lights (D129); null for anything else. */
+  onPickPanel?: (panelId: string | null) => void;
   placementValid: boolean;
   /**
    * Blocked zones after an edit — drawn, moved, resized or deleted.
@@ -174,6 +178,7 @@ export function WallCanvas(props: WallCanvasProps) {
     onDragCancel,
     onSelect,
     onStartItemDrag,
+    onPickPanel,
     placementValid,
     onObstaclesChange,
     onFrameChange,
@@ -1641,6 +1646,13 @@ export function WallCanvas(props: WallCanvasProps) {
       const hits = itemsInRect(doc, catalog, marquee.a, marquee.b);
       onSelect(hits, ev.shiftKey || ev.metaKey || ev.ctrlKey);
       setMarquee(null);
+      // A press on bare plate starts a marquee; one that never moved is a CLICK
+      // on that plate, and lights it whole (D129).
+      const p = pressRef.current;
+      const still = p !== null && Math.hypot(ev.clientX - p.x, ev.clientY - p.y) < 4;
+      onPickPanel?.(still && p
+        ? plateAt(doc.panels, borderCutCells(doc.panels, doc.frame), p.cell)?.id ?? null
+        : null);
       pressRef.current = null;
       return;
     }
@@ -1648,6 +1660,10 @@ export function WallCanvas(props: WallCanvasProps) {
     if (press) {
       const id = press.itemId;
       onSelect(id === undefined ? [] : [id], ev.shiftKey || ev.metaKey || ev.ctrlKey);
+      // The same rule the 3D view's hover and click use, border ring included.
+      onPickPanel?.(id === undefined
+        ? plateAt(doc.panels, borderCutCells(doc.panels, doc.frame), press.cell)?.id ?? null
+        : null);
     }
     pressRef.current = null;
   };

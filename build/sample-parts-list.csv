@@ -35,11 +35,11 @@ fastener,1,0,1,double-m4,double M4,insert,models/Fasteners and parts for attachi
 fastener,28,0,28,hexagon-countersung-and-hole,hexagon-countersung-and-hole,fastener,models/Parts for attaching honeycombs to the wall/hexagon-countersung-and-hole.stl,yes,no,no,no,0,#f07f1a,4.3,1.46,121.5,40.78
 fastener,3,0,3,insert-m4,insert M4,insert,models/Fasteners and parts for attaching hooks and objects/insert M4.stl,yes,no,no,no,0,#f07f1a,2.4,0.79,7.1,2.36
 fastener,42,0,42,insert-empty,insert-empty,insert,models/Fasteners and parts for attaching hooks and objects/insert-empty.stl,yes,no,no,no,0,#f07f1a,2,0.65,81.9,27.44
-fastener,45,0,45,insert-for-countersunk-hole-3,insert-for-countersunk-hole-3,fastener,models/Parts for attaching honeycombs to the wall/insert-for-countersunk-hole-3.stl,yes,no,no,no,0,#f07f1a,8.4,2.81,376.7,126.27
+fastener,43,0,43,insert-for-countersunk-hole-3,insert-for-countersunk-hole-3,fastener,models/Parts for attaching honeycombs to the wall/insert-for-countersunk-hole-3.stl,yes,no,no,no,0,#f07f1a,8.4,2.81,359.9,120.66
 fastener,3,0,3,insert-with-m3,insert-with-M3,insert,models/Fasteners and parts for attaching hooks and objects/insert-with-M3.stl,yes,no,no,no,0,#f07f1a,2.3,0.79,7,2.36
 shopping,3,,,,"M3 bolt, 10-16 mm",bought,,,,,,,,,,,
 shopping,3,,,,M3 nut,bought,,,,,,,,,,,
 shopping,5,,,,"M4 bolt, 10-16 mm",bought,,,,,,,,,,,
 shopping,5,,,,M4 nut,bought,,,,,,,,,,,
-shopping,73,,,,"Wall plug, 6 mm",bought,,,,,,,,,,,
-shopping,73,,,,"Wall screw, 3.5 x 35 mm countersunk",bought,,,,,,,,,,,
+shopping,71,,,,"Wall plug, 6 mm",bought,,,,,,,,,,,
+shopping,71,,,,"Wall screw, 3.5 x 35 mm countersunk",bought,,,,,,,,,,,

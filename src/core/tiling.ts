@@ -645,10 +645,17 @@ export function solveTiling(req: TilingRequest): TilingResult {
     const remainingColumns = qMax - q0 + 1;
     let best: BandPlan | null = null;
 
-    // The shipped widths first; the fill-in widths only for a strip none of
-    // them fits, so a wall the shipped plates CAN cross is still made of them.
-    const shippedFits = columnCounts.length > 0 && columnCounts[0]! <= remainingColumns;
-    for (const columns of shippedFits ? columnCounts : fillerCounts) {
+    // The shipped widths across the wall; at the right-hand strip — narrower
+    // than the widest shipped plate — the fill-in widths compete as well, and
+    // `isBetterBand` takes the plan of fewest pieces. Shipped widths alone
+    // filled a 7-column strip with twenty 4 × 4 plates and a 3-wide band of
+    // fill-ins beside them, and every corner where those met took a fixing:
+    // 42 down one edge of a 2 m wall (D129).
+    const widestShipped = columnCounts.length > 0 ? columnCounts[columnCounts.length - 1]! : 0;
+    const candidates = remainingColumns >= widestShipped
+      ? columnCounts
+      : [...new Set([...columnCounts, ...fillerCounts])].sort((a, b) => a - b);
+    for (const columns of candidates) {
       if (columns > remainingColumns) break; // ascending, so nothing later fits either
       const band = fillBand(q0, columns, byColumns, wallHeightMm, Infinity, fillers);
       if (band.length === 0) continue;

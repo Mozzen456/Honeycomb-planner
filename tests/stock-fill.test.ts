@@ -113,3 +113,16 @@ describe('a wall made smaller after it was solved (D128)', () => {
     expect(validate(s.getState().doc, catalog).filter((i) => i.code === 'panel-off-wall')).toEqual([]);
   });
 });
+
+describe('the strip at the right-hand edge (D129)', () => {
+  it('is filled in the fewest pieces, not with the smallest shipped plate', () => {
+    // 2000 mm on a 256 bed leaves 7 columns past the last 10-wide band. The
+    // shipped widths alone made that twenty 4 x 4 plates and a 3-wide band of
+    // fill-ins beside them, and every corner between them took a fixing.
+    const res = solve('bed256', 2000, 2000);
+    const lastQ = Math.max(...res.panels.map((p) => p.origin.q));
+    const strip = res.panels.filter((p) => p.origin.q >= lastQ - 6 && p.origin.q > 80);
+    expect(strip.length).toBeLessThanOrEqual(10);
+    expect(new Set(strip.map((p) => p.origin.q)).size).toBe(1);
+  });
+});

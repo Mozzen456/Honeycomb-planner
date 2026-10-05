@@ -21,7 +21,7 @@ better guide to where the work actually got to.
 
 ```bash
 npm run dev          # Vite dev server
-npm test             # vitest run — 64 files, 1349 tests
+npm test             # vitest run — 64 files, 1351 tests
 npm run typecheck    # tsc --noEmit
 npm run build        # typecheck + vite build (also copies models/ into dist/)
 npm run build:standalone  # one self-contained HTML file in dist-standalone/ (D122)
@@ -592,6 +592,18 @@ fits. The COUNT is the spacing's and must not move. Every multi-cell fixing carr
 reading `plan.junctions` must not assume the four-cell part or three-plus plates. Only a fixing tying
 3+ plates at a corner is immovable; others move through `fixingEdits.placed`. And only SEAM junctions
 cover grid points — a grid-placed multi-cell fixing counting as one starves small walls.
+
+**Seam ties are SPACED, not one per corner** (D129). Plates of two heights side by side put a corner
+on each side of the seam every ~110 mm; tying each put pairs 47 mm apart down the whole seam. A
+three-plate tie within half a spacing of another is skipped (four-plate crossings never are), and
+`fixing-parts.test.ts` holds every wall to no two fixings closer than 40 % of the spacing. The
+right-hand strip is likewise filled in the fewest pieces: fill-in widths compete with the shipped
+ones once the strip is narrower than the widest shipped plate.
+
+**Which plate a cell belongs to is `panelModel.plateAt`** — surviving cells plus the border-cut ring.
+The 3D hover, the 3D click and the plan's click all ask it; a clicked plate (`pickedPanel` in `App`)
+lights alone, never its whole line. In the plan a bare-wall press is a marquee, so a click is a
+marquee that never moved.
 
 **`fixingPlanFor` is cached per document** (D126) — never mutate a plan you were handed.
 

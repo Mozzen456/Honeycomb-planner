@@ -4,12 +4,12 @@ Wall 2400 × 1200 mm · bed `256 × 256 (Bambu X1/P1)`
 
 | Total | Value |
 | --- | ---: |
-| Still to print | 212 |
+| Still to print | 210 |
 | Already printed | 0 |
-| Parts in all | 212 |
+| Parts in all | 210 |
 | Distinct parts | 38 |
-| Filament | 5761.1 g |
-| Filament length | 1931.7 m |
+| Filament | 5744.4 g |
+| Filament length | 1926.1 m |
 
 ## Panels
 
@@ -55,7 +55,7 @@ Wall 2400 × 1200 mm · bed `256 × 256 (Bambu X1/P1)`
 - [ ] **28 ×** hexagon-countersung-and-hole — in #f07f1a, 121.5 g, needs supports `models/Parts for attaching honeycombs to the wall/hexagon-countersung-and-hole.stl`
 - [ ] **3 ×** insert M4 — in #f07f1a, 7.1 g, needs supports `models/Fasteners and parts for attaching hooks and objects/insert M4.stl`
 - [ ] **42 ×** insert-empty — in #f07f1a, 81.9 g, needs supports `models/Fasteners and parts for attaching hooks and objects/insert-empty.stl`
-- [ ] **45 ×** insert-for-countersunk-hole-3 — in #f07f1a, 376.7 g, needs supports `models/Parts for attaching honeycombs to the wall/insert-for-countersunk-hole-3.stl`
+- [ ] **43 ×** insert-for-countersunk-hole-3 — in #f07f1a, 359.9 g, needs supports `models/Parts for attaching honeycombs to the wall/insert-for-countersunk-hole-3.stl`
 - [ ] **3 ×** insert-with-M3 — in #f07f1a, 7 g, needs supports `models/Fasteners and parts for attaching hooks and objects/insert-with-M3.stl`
 
 ## Shopping list
@@ -64,8 +64,8 @@ Wall 2400 × 1200 mm · bed `256 × 256 (Bambu X1/P1)`
 - [ ] **3 ×** M3 nut
 - [ ] **5 ×** M4 bolt, 10-16 mm
 - [ ] **5 ×** M4 nut
-- [ ] **73 ×** Wall plug, 6 mm
-- [ ] **73 ×** Wall screw, 3.5 x 35 mm countersunk
+- [ ] **71 ×** Wall plug, 6 mm
+- [ ] **71 ×** Wall screw, 3.5 x 35 mm countersunk
 
 ## Problems to fix first
 

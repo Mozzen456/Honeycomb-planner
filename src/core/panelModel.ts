@@ -284,6 +284,24 @@ function ownedBorder(
 }
 
 /**
+ * The plate a cell belongs to, for pointing at one: its surviving cells, plus
+ * the ring a border cut, which is printed but has left `placedPanelCells`
+ * through `omit` (D87). A cell a ZONE ate is nobody's — that one is a hole.
+ * The one rule the 3D hover, the 3D click and the plan's click all ask.
+ */
+export function plateAt(
+  panels: readonly PlacedPanel[],
+  borderCut: ReadonlySet<string>,
+  cell: Hex,
+): PlacedPanel | undefined {
+  const onBorder = borderCut.has(hexKey(cell));
+  return panels.find((p) =>
+    placedPanelCells(p).some((c) => c.q === cell.q && c.r === cell.r)
+    || (onBorder && panelCells(p.origin, p.columns, p.rows)
+      .some((c) => c.q === cell.q && c.r === cell.r)));
+}
+
+/**
  * The cells the plate's own EDGE cuts through (D86).
  *
  * The border is not added beyond the honeycomb any more — the honeycomb is cut

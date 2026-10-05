@@ -18,9 +18,9 @@ import { describe, expect, it } from 'vitest';
 import catalogJson from '../src/catalog/catalog.json';
 import { fixingPlanFor } from '../src/core/bom';
 import { EDGE_FIXING_ID, EDGE_FOOTPRINT, JUNCTION_FIXING_ID } from '../src/core/fixings';
-import { hexKey, hexToMm, placedPanelCells } from '../src/core/hex';
+import { cellsCentreMm, hexKey, hexToMm, placedPanelCells } from '../src/core/hex';
 import { emptyDoc, Store } from '../src/core/store';
-import { solveTiling, type PanelSize } from '../src/core/tiling';
+import { generatedPlateSizes, solveTiling, type PanelSize } from '../src/core/tiling';
 import type { Catalog, LayoutDoc, PlacedPanel, WallFrame } from '../src/core/types';
 
 const catalog = catalogJson as unknown as Catalog;
@@ -93,7 +93,34 @@ describe('the parts the planner fixes the wall with', () => {
   it('keeps the number of fixings the spacing asks for', () => {
     // 2400 x 1200 on a 256 bed planned 75 fixings as 24 single + 51 four-cell
     // before D125, and the count is the spacing's business, not the parts'.
+    // 72 since D129: three seam corners within half a spacing of another tie.
     const plan = fixingPlanFor(wall(2400, 1200, 'bed256'), catalog);
-    expect(plan.cells.length + plan.junctions.length).toBe(75);
+    expect(plan.cells.length + plan.junctions.length).toBe(72);
+  });
+
+  it('never crowds two fixings together (D129)', () => {
+    // Plates of two heights side by side put a seam corner on each side every
+    // ~110 mm, and each took a tie: pairs 47 mm apart down a whole seam, read
+    // as "it looks really weird". Nothing closer than 40 % of the spacing.
+    for (const bed of ['mini', 'mk3s', 'bed256', 'bed300', 'bed400']) {
+      for (const [w, h] of [[2000, 2000], [2400, 1200], [1234, 2000]] as const) {
+        const panels = solveTiling({
+          wall: { widthMm: w, heightMm: h }, bedId: bed, available: sizes,
+          fillers: generatedPlateSizes(bed), allowRotation: false,
+        }).panels.map((p, i): PlacedPanel => ({ id: `p${i}`, ...p }));
+        const doc: LayoutDoc = { ...emptyDoc(), wall: { widthMm: w, heightMm: h }, bedId: bed, panels };
+        const plan = fixingPlanFor(doc, catalog);
+        const pts = [...plan.cells.map(hexToMm), ...plan.junctions.map((j) => cellsCentreMm(j.cells))];
+        let min = Infinity;
+        for (let i = 0; i < pts.length; i++) {
+          for (let k = i + 1; k < pts.length; k++) {
+            min = Math.min(min, Math.hypot(pts[i]!.x - pts[k]!.x, pts[i]!.y - pts[k]!.y));
+          }
+        }
+        expect(min, `${bed} ${w}x${h}`).toBeGreaterThanOrEqual(plan.spacingMm * 0.4);
+        const held = new Set([...plan.panelIds, ...plan.junctions.flatMap((j) => j.panelIds)]);
+        for (const p of panels) expect(held.has(p.id), `${bed} ${w}x${h} ${p.id}`).toBe(true);
+      }
+    }
   });
 });

@@ -347,12 +347,44 @@ export function planFixings(
     }
   }
 
+  /*
+   * Where the seam's corners crowd, one fixing per corner is too many (D129).
+   * Two runs of plates of different heights put a T at every corner on BOTH
+   * sides — 236 mm plates against 212 mm ones meet about every 110 mm, so the
+   * seam carried twice the spacing's fixings, in pairs. A three-plate tie is
+   * therefore skipped when another tie already sits within half a spacing; a
+   * four-plate crossing still always gets one, and a plate left with nothing
+   * is picked up by the grid or by the every-plate pass below.
+   */
+  const tieGap2 = (spacing * 0.5) ** 2;
+  const tieAt = new Map<string, { x: number; y: number }[]>();
+  const tieKey = (x: number, y: number): string =>
+    `${Math.floor(x / (spacing * 0.5))},${Math.floor(y / (spacing * 0.5))}`;
+  const centreOf = (cells: readonly Hex[]): { x: number; y: number } => {
+    let x = 0, y = 0;
+    for (const c of cells) { const p = hexToMm(c); x += p.x; y += p.y; }
+    return { x: x / cells.length, y: y / cells.length };
+  };
+  const tieNear = (p: { x: number; y: number }): boolean => {
+    const bx = Math.floor(p.x / (spacing * 0.5)), by = Math.floor(p.y / (spacing * 0.5));
+    for (let i = -1; i <= 1; i++) {
+      for (let j = -1; j <= 1; j++) {
+        for (const o of tieAt.get(`${bx + i},${by + j}`) ?? []) {
+          if ((o.x - p.x) ** 2 + (o.y - p.y) ** 2 < tieGap2) return true;
+        }
+      }
+    }
+    return false;
+  };
+
   for (const want of [4, 3]) {
     for (const mine of candidates) {
       for (const { anchor, rot, placed, keys, spans } of mine) {
         // Two plates is an ordinary seam, which the interlocking edge already
         // handles; this pass wants exactly `want`.
         if (spans !== want) continue;
+        const at = centreOf(placed);
+        if (want === 3 && tieNear(at)) continue;
         /*
          * Every cell must be on a panel, free, and not already spoken for —
          * where "free" means free of anything that is not plugged INTO this
@@ -380,6 +412,10 @@ export function planFixings(
           usedByJunction.add(k);
           chosen.set(k, owner.get(k)!);
         }
+        const tk = tieKey(at.x, at.y);
+        const list = tieAt.get(tk);
+        if (list) list.push(at);
+        else tieAt.set(tk, [at]);
         break; // one per anchor per pass, as before
       }
     }
@@ -572,6 +608,22 @@ export function planFixings(
     }
     cx /= cells.length;
     cy /= cells.length;
+    // A multi-cell fixing here too, as on the grid (D125), as long as it
+    // holds THIS plate; a single cell only where neither fits.
+    const multi = [
+      placeNear(JUNCTION_FOOTPRINT, shared.junctionSockets, JUNCTION_FIXING_ID, cx, cy),
+      placeNear(EDGE_FOOTPRINT, [], EDGE_FIXING_ID, cx, cy),
+    ].find((m) => m !== null && m.panelIds.includes(id));
+    if (multi) {
+      junctions.push(multi);
+      for (const c of multi.cells) {
+        const k = hexKey(c);
+        usedByJunction.add(k);
+        chosen.set(k, owner.get(k)!);
+      }
+      for (const pid of multi.panelIds) covered.add(pid);
+      continue;
+    }
     let best: Hex | null = null;
     let bestD = Infinity;
     for (const c of cells) {
