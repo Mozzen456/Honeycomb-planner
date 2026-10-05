@@ -226,9 +226,29 @@ export function loadRawMesh(part: CatalogPart): Promise<MeshData | null> {
   return pending;
 }
 
+/**
+ * The single-file build (`npm run build:standalone`, D113) carries every
+ * shipped mesh inside the page, because a page opened from disk cannot fetch.
+ * `window.__HSW_MODELS__` maps a catalogue `file` to its gzipped bytes in
+ * base64; absent everywhere else, so the served app fetches as it always did.
+ */
+function embeddedModel(file: string): Promise<ArrayBuffer> | null {
+  const models = (globalThis as { __HSW_MODELS__?: Record<string, string> }).__HSW_MODELS__;
+  const packed = models?.[file];
+  if (packed === undefined || typeof DecompressionStream !== 'function') return null;
+  const raw = atob(packed);
+  const gz = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i += 1) gz[i] = raw.charCodeAt(i);
+  const stream = new Blob([gz]).stream().pipeThrough(new DecompressionStream('gzip'));
+  return new Response(stream).arrayBuffer();
+}
+
 async function bytesFor(part: CatalogPart): Promise<ArrayBuffer | null> {
   if (isImported(part)) return getModelBytes(part.id);
-  if (typeof fetch !== 'function' || !part.file) return null;
+  if (!part.file) return null;
+  const embedded = embeddedModel(part.file);
+  if (embedded !== null) return embedded;
+  if (typeof fetch !== 'function') return null;
   const response = await fetch(encodeURI(part.file));
   if (!response.ok) return null;
   return response.arrayBuffer();

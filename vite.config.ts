@@ -1,7 +1,8 @@
 // defineConfig comes from vitest/config, not vite: the `test` key below is a
 // vitest type augmentation and vite's own defineConfig rejects it.
-import { cpSync, existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { cpSync, existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { join, relative, resolve } from 'node:path';
+import { gzipSync } from 'node:zlib';
 
 import { defineConfig, type Plugin } from 'vitest/config';
 import react from '@vitejs/plugin-react';
@@ -65,14 +66,78 @@ function classicScripts(): Plugin {
   };
 }
 
-export default defineConfig({
-  plugins: [react(), copyModels(), classicScripts()],
+/** Every file under `dir`, as paths relative to the repo root with `/`. */
+function filesUnder(dir: string): string[] {
+  return readdirSync(dir).flatMap((name) => {
+    const path = join(dir, name);
+    return statSync(path).isDirectory() ? filesUnder(path) : [relative(__dirname, path).split('\\').join('/')];
+  });
+}
+
+/**
+ * The single-file build: `npm run build:standalone` (D113).
+ *
+ * One HTML file holding the bundle, its pictures and every shipped mesh, so
+ * it works double-clicked from anywhere — including straight out of a zip,
+ * where a viewer extracts only the file that was opened and a page that
+ * needs `assets/` beside it starts with nothing. The meshes go in gzipped,
+ * as `window.__HSW_MODELS__`, which `meshLibrary` reads before it tries to
+ * fetch. The script is moved to the end of `<body>`: inline, it runs as soon
+ * as it is parsed, and in `<head>` there is no `#root` yet.
+ */
+function standalone(): Plugin {
+  return {
+    name: 'hsw-standalone',
+    apply: 'build',
+    enforce: 'post',
+    transformIndexHtml: {
+      order: 'post',
+      handler: (html, ctx) => {
+        const bundle = ctx.bundle;
+        if (!bundle) return html;
+        let scripts = '';
+        for (const [name, output] of Object.entries(bundle)) {
+          if (output.type !== 'chunk') continue;
+          const tag = new RegExp(`<script[^>]*src="\\./${name}"[^>]*></script>\\s*`);
+          if (!tag.test(html)) continue;
+          html = html.replace(tag, '');
+          scripts += `<script>${output.code.replace(/<\/script/gi, '<\\/script')}</script>\n`;
+          delete bundle[name];
+        }
+        const models: Record<string, string> = {};
+        for (const file of filesUnder(resolve(__dirname, 'models'))) {
+          if (!/\.stl$/i.test(file)) continue;
+          models[file] = gzipSync(readFileSync(resolve(__dirname, file)), { level: 9 }).toString('base64');
+        }
+        const favicon = readFileSync(resolve(__dirname, 'public/favicon.svg')).toString('base64');
+        return html
+          .replace('href="./favicon.svg"', `href="data:image/svg+xml;base64,${favicon}"`)
+          // A function, not a string: a replacement string reads `$&` and
+          // `$'` in the minified bundle as patterns.
+          .replace(
+            '</body>',
+            () => `<script>window.__HSW_MODELS__=${JSON.stringify(models)};</script>\n${scripts}</body>`,
+          );
+      },
+    },
+  };
+}
+
+export default defineConfig(({ mode }) => ({
+  plugins: [
+    react(),
+    ...(mode === 'standalone' ? [classicScripts(), standalone()] : [copyModels(), classicScripts()]),
+  ],
   base: './',
+  // The single file carries nothing beside it: no public/ copy, every
+  // picture inlined.
+  publicDir: mode === 'standalone' ? false : 'public',
   build: {
     // One chunk, no module syntax: see `classicScripts`. There is no dynamic
     // import in the app, so `inlineDynamicImports` changes nothing but stops a
     // future one from silently splitting a bundle an IIFE cannot load.
     modulePreload: false,
+    ...(mode === 'standalone' ? { outDir: 'dist-standalone', assetsInlineLimit: Number.MAX_SAFE_INTEGER } : {}),
     rollupOptions: {
       output: { format: 'iife', inlineDynamicImports: true },
     },
@@ -82,4 +147,4 @@ export default defineConfig({
     environment: 'node',
     include: ['tests/**/*.test.ts', 'tests/**/*.test.tsx'],
   },
-});
+}));

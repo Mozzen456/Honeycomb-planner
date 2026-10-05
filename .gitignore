@@ -5,6 +5,7 @@
 # running. Reinstall instead of syncing it.
 node_modules/
 dist/
+dist-standalone/
 
 # Vite / vitest
 .vite/

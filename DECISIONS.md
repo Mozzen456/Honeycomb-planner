@@ -4288,3 +4288,22 @@ with the CSS carried in the bundle. Served over http nothing changes. What a
 fall back to their measured boxes; plates are generated in the page and are
 unaffected. Checked in a browser from disk and over http, fresh and with a wall
 saved by the previous version.
+
+## D113 — One file that runs from anywhere, and no more silent black pages
+
+D112 was not enough for the person it was for: the page was still black. Two
+ways to get there that D112 cannot reach. The `index.html` at the repo root —
+the one in the source zip and GitHub's "Download ZIP" — is Vite's dev entry and
+loads `/src/main.tsx`, which only `npm run dev` can serve. And a zip viewer that
+opens `index.html` without extracting copies out only that one file, so
+`assets/` is not beside it.
+
+So there is now `npm run build:standalone`: ONE html file holding the bundle,
+its pictures (inlined by `assetsInlineLimit`) and every shipped mesh, gzipped,
+as `window.__HSW_MODELS__`, which `meshLibrary` reads before it tries to fetch.
+3.3 MB, and from disk it draws the real meshes, which D112's build cannot.
+
+And the page can no longer be blank without saying why. `#root` holds a
+message in system colours until React replaces it, naming which file to open;
+and a plain script in `<head>` writes the error into the page when one leaves
+`#root` empty — tested by refusing WebGL, which takes the whole app down.

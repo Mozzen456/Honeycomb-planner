@@ -23,6 +23,7 @@ npm run dev          # Vite dev server
 npm test             # vitest run — 55 files, 1198 tests
 npm run typecheck    # tsc --noEmit
 npm run build        # typecheck + vite build (also copies models/ into dist/)
+npm run build:standalone  # one self-contained HTML file in dist-standalone/ (D113)
 
 npx vitest run tests/hex.test.ts                    # one file
 npx vitest run tests/store.test.ts -t "six times"   # one test by name
@@ -877,6 +878,10 @@ an empty page in the browser's background colour — black in dark mode — with
 console. `classicScripts` in `vite.config.ts` rewrites the tag to a classic `defer` script over an
 IIFE bundle. A dynamic `import()` would split the bundle and break that; `inlineDynamicImports`
 stops it. From disk the part meshes cannot be fetched and draw as boxes; plates are unaffected.
+`npm run build:standalone` (D113) is the version to hand somebody: one `dist-standalone/index.html`
+with the bundle, pictures and every mesh inside it (`window.__HSW_MODELS__`, read by `meshLibrary`
+before any fetch). The repo-root `index.html` is the DEV entry and is blank opened directly — it says
+so on the page now, as does any start-up crash, instead of leaving the browser's black background.
 
 **A scrolling panel inside the `100dvh` shell must `contain: layout paint`.** Without it the panel's
 overflow propagates to the viewport, `documentElement.scrollHeight` grows past the window, and
