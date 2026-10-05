@@ -4088,3 +4088,106 @@ measured without them, so the first cut and every later one give the same wall.
 `tests/zone-covered.test.ts` moves a zone off, drags one across the wall a frame
 at a time, round-trips through a save, and re-solves; all six cases fail on the
 old cutter.
+
+## D109 — A blocked zone can be drawn, and the plate is cut along it
+
+Asked for as "freedraw a blocked area, so I can do a slanted roof". A roof is
+not a rectangle and not a union of them: an L of rectangles cuts a slope as a
+staircase, and the staircase is what you would print.
+
+### The representation: an outline, cut as convex pieces
+
+`Obstacle.outline` is a list of corners in wall millimetres, the area itself
+before clearance. The generator still has no polygon boolean — that is D59's
+line and it holds — so the outline is handed over as the one thing the cutter
+can use: CONVEX pieces, each a short list of straight edges at any angle
+(`zonePolygon.convexParts`: ear clipping, then Hertel–Mehlhorn to merge the
+triangles back; a roof is one piece). Clearance moves every edge out and caps a
+sharp corner with a bevel, because a mitre on a 20° tip reaches 29 mm past it
+for 5 mm of clearance. `obstacles.obstacleRegions` is the one reader.
+
+**A rectangle is the special case, through the same code.** `clipPlanesFor`
+asked which SIDE of a rectangle a cell's material was on, per axis. It now asks
+which EDGES a cell has material outside of: the deepest, then the deepest that
+shares a corner with it. For a rectangle's four sides — listed left, bottom,
+right, top so a tie goes to the low side, as it always did — that is exactly the
+old rule, and it was checked rather than assumed: 603 plates over the 3-zone
+fixture and a 25-wall sweep of random rectangles came out BIT-IDENTICAL before
+the two fixes below were added. Every rectangle test in the suite is therefore
+also a test of the slanted cutter.
+
+A rectangle and an outline differ in one place on purpose: which cells a zone
+takes from the planner. A rectangle uses the cell's bounding box, which
+over-selects at its four empty corners and is harmless there (the cutter splits
+such a cell into pieces whose union is the cell). A slanted edge can pass a box
+corner without touching the hexagon, the cutter then finds nothing to cut, and a
+cut cell with nothing to cut it by is not drawn — a hole. An outline is tested
+against the real hexagon.
+
+### Two things that only went wrong once edges could slant
+
+**Bore rings starting on different corners.** The inner skin joins one bore
+level to the next corner k to corner k whenever they have the same number of
+corners, assuming both start at the same one. `clipConvex` starts wherever its
+first surviving input corner is, and a slanted line through a zone corner keeps
+different corners first at different depths. The strip was built twisted and
+the plate had 8 unmatched edges. Each level is now rotated to line up with the
+one above before the skin is built; rotation moves no point.
+
+**Flecks joined to nothing.** Every cutting rule is local to one cell and
+cannot see whether what it keeps still touches anything. Over random outlines
+about one wall in fifteen kept a fleck of 25–30 mm³ touching nothing at all.
+`dropShards` checks the plate as a whole once every piece is known: groups of
+pieces joined by a shared stretch of edge; the largest is the plate; any other
+under two cells' worth of plastic goes — unless it lies flush against a whole
+cell of ANOTHER plate. That exception is load-bearing: the top row of a plate
+whose lower rows a zone has eaten is loose within its own plate and is still
+part of the aperture's wall, held by the plate above. Without the exception
+`zone-apron.test.ts` measured an 11.8 mm notch exactly there.
+
+### The plan
+
+**Draw zone** (`D`) in the plan's toolbar: click the corners, or drag
+freehand; one stroke from nothing is a lasso and closes on release. Enter, a
+double-click or a click on the first corner finishes; Backspace takes a corner
+back. Corners snap like every other plan point; freehand does not, because a
+hand-drawn line is meant where the hand went. A stroke is reduced to its corners
+(Ramer–Douglas–Peucker at three screen pixels). A shape that crosses itself is
+refused with a sentence rather than guessed at.
+
+The strip says what the border does to it: with the border off nothing is ever
+cut, so the cells the line crosses are left out whole and the edge steps.
+
+Resize handles and typed sizes go through `refitZone`, which scales the outline
+— or an L's rectangles — into the new box. Writing the box alone was a latent
+defect for L-shapes: the tag and handles moved and the blocked area did not.
+
+The plan also drew the wall's edge-cut cells clipped by the edge alone, so under
+a roof running off the top of the wall it showed a row of half-hexagons inside
+the zone that the file does not have. `plateEdgeShapes` now skips a cell any zone
+reaches, as the plan does every other zone-cut cell.
+
+`tests/zone-outline.test.ts`; the watertightness, notch and fleck cases were each
+confirmed to fail with their fix taken out.
+
+## D110 — A set-aside plate's stranded edge is printed by its neighbour
+
+Measured on the first sloping roof: the cut edge ran straight along the line
+except at two places, where it fell 6.9 and 14.6 mm short. Each was a plate whose
+every cell the zone touched — so the whole plate was set aside (D108) — while its
+bottom row sat mostly BELOW the line. "Touches" is not "covers", and along a
+slope it is common for a plate to be all one and none of the other.
+
+Those cells now go to the standing plate whose block holds most of their
+neighbours (`panelModel.adoptedCells`, ties to the smallest neighbouring cell as
+at the edge, D60), into its `clipped` list. The generator cuts them as it cuts
+that plate's own: whatever lies outside the zone is printed, and a cell with
+nothing worth printing is dropped by the one rule that decides that. The planner
+does not see them — they are in no plate's `cells` — so nothing mounts in a
+sliver, which is D56 again.
+
+The roof now runs flush along its whole 2.4 m to within `WALL_AT_MOUTH` (1.6 mm),
+which is the floor every cut has: less than one wall of plate is not printed.
+`panelGeometryKeys` takes `covered` as a REQUIRED argument, because a plate's
+geometry now includes what it adopts and a key computed without it called two
+different plates the same — which the grouping test caught.

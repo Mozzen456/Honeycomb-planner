@@ -16,12 +16,13 @@ import { BEDS, clampBedMm, CUSTOM_BED_ID, MAX_BED_MM, MIN_BED_MM } from './const
 import { hasColors, readColors } from './colors';
 import { DEFAULT_BORDER_MM, MAX_BORDER_MM } from './honeycomb';
 import { MAX_PROJECT_PARTS } from './projectParts';
+import { MAX_OUTLINE_POINTS, normaliseOutline, outlineProblem } from './zonePolygon';
 import {
   clampMmPerPixel, clampPhotoOpacity, clampPhotoRotation, DEFAULT_PHOTO_OPACITY, photoRotation,
 } from './wallPhoto';
 import type {
   FixingEdits, Group, Hex, LayoutDoc, Obstacle, PlacedItem, PlacedPanel, Rotation, WallColors,
-  WallFrame, WallPhoto, WallSpec, ZoneRect,
+  WallFrame, WallPhoto, WallSpec, ZonePoint, ZoneRect,
 } from './types';
 
 /** Schema version this build writes. Bumped whenever the document shape changes. */
@@ -219,7 +220,11 @@ function canonicalDoc(doc: LayoutDoc): Record<string, unknown> {
             };
             // Same absent-key rule as everywhere else: a plain rectangular zone
             // must serialise to the bytes it always did.
-            if (o.shape && o.shape.length > 0) {
+            // A drawn outline wins over a shape and is written INSTEAD of one,
+            // so a reader never has to decide between two (D109).
+            if (o.outline && o.outline.length >= 3) {
+              out['outline'] = o.outline.map((p) => ({ xMm: p.xMm, yMm: p.yMm }));
+            } else if (o.shape && o.shape.length > 0) {
               out['shape'] = o.shape.map((r) => ({
                 xMm: r.xMm, yMm: r.yMm, widthMm: r.widthMm, heightMm: r.heightMm,
               }));
@@ -854,15 +859,61 @@ export function migrate(raw: unknown): LoadResult {
           shape.push({ xMm: px, yMm: py, widthMm: pw, heightMm: ph });
         }
       }
+      /*
+       * A drawn outline (D109). Every corner is a measurement out of user
+       * input, so each goes through the coordinate reader, and the whole is held
+       * to `outlineProblem` — a self-crossing or oversized outline would reach
+       * the cutter otherwise. One that fails keeps its zone as the bounding
+       * box: more honeycomb cut than was drawn, which shows on the plan, rather
+       * than the thing it was drawn round losing its zone altogether.
+       */
+      let outline: ZonePoint[] | undefined;
+      if (o['outline'] !== undefined) {
+        const raw = Array.isArray(o['outline']) ? (o['outline'] as unknown[]) : null;
+        const pts: ZonePoint[] = [];
+        const local: string[] = [];
+        if (raw === null) local.push(`${where}.outline is ${describe(o['outline'])}, not a list of corners.`);
+        else if (raw.length > MAX_OUTLINE_POINTS) {
+          local.push(`${where}.outline has ${raw.length} corners, more than ${MAX_OUTLINE_POINTS}.`);
+        } else {
+          for (let k = 0; k < raw.length; k++) {
+            const c = raw[k];
+            const cx = isPlainObject(c) ? readCoordMm(c['xMm'], `${where}.outline[${k}].xMm`, local) : null;
+            const cy = isPlainObject(c) ? readCoordMm(c['yMm'], `${where}.outline[${k}].yMm`, local) : null;
+            if (cx === null || cy === null) {
+              local.push(`${where}.outline[${k}] is not a usable corner.`);
+              break;
+            }
+            pts.push({ xMm: cx, yMm: cy });
+          }
+        }
+        const problem = local.length === 0
+          ? outlineProblem(pts.map((p) => ({ x: p.xMm, y: p.yMm })))
+          : null;
+        if (local.length > 0 || problem !== null) {
+          errors.push(...local);
+          errors.push(`${where}.outline was dropped${problem ? ` (${problem})` : ''}; the zone blocks its bounding box instead.`);
+        } else {
+          outline = normaliseOutline(pts.map((p) => ({ x: p.xMm, y: p.yMm })))
+            .map((p) => ({ xMm: p.x, yMm: p.y }));
+        }
+      }
+      // The outline is the truth and the box follows it, so a hand-edited file
+      // cannot leave the tag and the handles somewhere the zone is not.
+      const box = outline
+        ? {
+            xMm: Math.min(...outline.map((p) => p.xMm)),
+            yMm: Math.min(...outline.map((p) => p.yMm)),
+            widthMm: Math.max(...outline.map((p) => p.xMm)) - Math.min(...outline.map((p) => p.xMm)),
+            heightMm: Math.max(...outline.map((p) => p.yMm)) - Math.min(...outline.map((p) => p.yMm)),
+          }
+        : { xMm: x, yMm: y, widthMm: w, heightMm: h };
       obstacles.push({
         id: typeof o['id'] === 'string' && o['id'] !== '' ? (o['id'] as string) : `obstacle-${i}`,
         label: typeof o['label'] === 'string' ? (o['label'] as string) : 'Obstacle',
-        xMm: x,
-        yMm: y,
-        widthMm: w,
-        heightMm: h,
+        ...box,
         clearanceMm: Math.max(0, clearance),
-        ...(shape.length > 0 ? { shape } : {}),
+        ...(outline ? { outline } : shape.length > 0 ? { shape } : {}),
       });
     }
   }

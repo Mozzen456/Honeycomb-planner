@@ -164,17 +164,33 @@ export interface Obstacle {
    * A zone made of more than one rectangle — an L round a consumer unit, a run
    * of pipe with a spur off it.
    *
-   * A UNION OF RECTANGLES rather than a polygon, and that is a geometry
-   * decision, not a UI one: the border generator clips convex pieces with
-   * half-planes and has no polygon boolean anywhere by design (D59). A
-   * rectangle gives four half-planes directly; an arbitrary polygon would have
-   * to be decomposed before it could be clipped against, and a concave one
-   * cannot be clipped against at all in one piece.
+   * A UNION OF RECTANGLES, because that is what a person drags out: the
+   * generator clips convex pieces with half-planes and has no polygon boolean
+   * anywhere by design (D59), and a rectangle gives four half-planes directly.
+   * A zone that is not made of rectangles at all is `outline` below, which is
+   * decomposed into convex pieces for the same cutter (D109).
    *
    * Absent means the zone is just the rectangle above, which is what every zone
    * drawn before this existed is — and what it must still serialise as.
    */
   shape?: ZoneRect[];
+  /**
+   * A zone drawn as a POLYGON — the slope of a roof, a stair, a pipe at an
+   * angle (D109). Counter-clockwise corners in wall millimetres, the blocked
+   * area itself before clearance.
+   *
+   * Takes precedence over `shape`, and the two are never both written. The
+   * cutter receives it as convex pieces with straight edges at any angle
+   * (`obstacles.obstacleRegions`), so the honeycomb is cut along the drawn
+   * line rather than stepped round it. Absent means a rectangle or a union of
+   * rectangles, which is what every zone drawn before this existed is.
+   */
+  outline?: ZonePoint[];
+}
+
+export interface ZonePoint {
+  xMm: number;
+  yMm: number;
 }
 
 export interface PlacedItem {

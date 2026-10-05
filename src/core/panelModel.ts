@@ -29,7 +29,7 @@ import {
   type FrameSide,
 } from './honeycomb';
 import { hexKey, hexToMm, panelCells, placedPanelCells } from './hex';
-import { obstacleRects } from './obstacles';
+import { obstacleRegions, obstructedCells } from './obstacles';
 import type { Hex, LayoutDoc, Obstacle, PlacedPanel, WallFrame } from './types';
 
 export const NO_WALL_FRAME: WallFrame = {
@@ -340,7 +340,9 @@ export function borderSpecFor(
   // against exactly the rectangles the cells were cut against. An L clipped
   // against its bounding box would wall off the inside of the L, which is
   // honeycomb the user kept.
-  const keepClear = (obstacles ?? []).flatMap(obstacleRects);
+  // ...and a drawn outline as its convex pieces, edges and all, so the plate is
+  // cut along the line that was drawn rather than stepped round it (D109).
+  const keepClear = (obstacles ?? []).flatMap(obstacleRegions);
   return {
     thicknessMm: frame.thicknessMm > 0 ? frame.thicknessMm : DEFAULT_BORDER_MM,
     occupied: index.occupied,
@@ -363,6 +365,8 @@ export function panelModelSpec(
   panels: readonly PlacedPanel[],
   frame: WallFrame | undefined,
   obstacles?: readonly Obstacle[],
+  /** The plates a zone set aside (`LayoutDoc.covered`), for their stranded edge. */
+  covered?: readonly PlacedPanel[],
 ): { cells: Hex[]; clipped: Hex[]; border: BorderSpec | undefined } {
   const cells = placedPanelCells(panel);
   /*
@@ -383,6 +387,8 @@ export function panelModelSpec(
   const kept = new Set(cells.map(hexKey));
   const clipped = panelCells(panel.origin, panel.columns, panel.rows)
     .filter((c) => !kept.has(hexKey(c)));
+  // ...and the stranded edge of any plate the zone set aside next to it (D110).
+  if (frameIsOn(frame)) clipped.push(...(adoptedCells(panels, covered, obstacles).get(panel.id) ?? []));
   return {
     cells,
     clipped,
@@ -392,8 +398,93 @@ export function panelModelSpec(
 
 /** The same thing, straight from a document. */
 export function panelModelSpecFor(panel: PlacedPanel, doc: LayoutDoc) {
-  return panelModelSpec(panel, doc.panels, doc.frame, doc.obstacles);
+  return panelModelSpec(panel, doc.panels, doc.frame, doc.obstacles, doc.covered);
 }
+
+/**
+ * The cut cells a SET-ASIDE plate leaves stranded, each handed to the standing
+ * plate it touches most (D110).
+ *
+ * A plate whose every cell a zone touches is set aside whole (D108) — nothing
+ * of it can take a part. But "touches" is not "covers": along a sloping zone a
+ * plate's bottom row can sit mostly below the line, and setting the plate aside
+ * took that strip with it. Measured on a 2400 × 1200 wall under a roof sloping
+ * 450 mm: the cut edge, which should run straight along the line, fell short of
+ * it by up to 14.6 mm wherever such a plate sat — a notch one cell deep.
+ *
+ * Every cell of such a plate that a zone cuts, and that no standing plate
+ * holds, goes to the standing plate whose block holds the most of its six
+ * neighbours (ties to the smallest neighbouring cell, as with the edge, D60).
+ * It joins that plate's `clipped` list, so the generator cuts it exactly as it
+ * cuts that plate's own: whatever is outside the zone is printed, and a cell
+ * with nothing worth printing is dropped there, by the one rule that decides it.
+ * A cell touching no standing plate stays stranded — printed on its own it
+ * would be a loose shard.
+ *
+ * Planner-side nothing changes: the cell is in no plate's `cells`, so nothing
+ * mounts in it, counts it or fixes into it, which is the D56 split again.
+ */
+export function adoptedCells(
+  panels: readonly PlacedPanel[],
+  covered: readonly PlacedPanel[] | undefined,
+  obstacles: readonly Obstacle[] | undefined,
+): ReadonlyMap<string, Hex[]> {
+  const none = new Map<string, Hex[]>();
+  if (!covered || covered.length === 0 || !obstacles || obstacles.length === 0) return none;
+  const hit = adoptCache.get(panels);
+  if (hit && hit.covered === covered && hit.obstacles === obstacles) return hit.adopted;
+
+  const blockOwner = new Map<string, string>();
+  for (const p of panels) {
+    for (const c of panelCells(p.origin, p.columns, p.rows)) blockOwner.set(hexKey(c), p.id);
+  }
+  const adopted = new Map<string, Hex[]>();
+  const seen = new Set<string>();
+  for (const plate of covered) {
+    const block = panelCells(plate.origin, plate.columns, plate.rows);
+    const cut = obstructedCells(obstacles, block);
+    for (const c of block) {
+      const k = hexKey(c);
+      if (!cut.has(k) || blockOwner.has(k) || seen.has(k)) continue;
+      seen.add(k);
+      const votes = new Map<string, { n: number; best: string }>();
+      for (const d of RING) {
+        const nk = hexKey({ q: c.q + d.q, r: c.r + d.r });
+        const owner = blockOwner.get(nk);
+        if (owner === undefined) continue;
+        const v = votes.get(owner);
+        if (v === undefined) votes.set(owner, { n: 1, best: nk });
+        else {
+          v.n++;
+          if (nk < v.best) v.best = nk;
+        }
+      }
+      let winner: string | undefined;
+      let winning: { n: number; best: string } | undefined;
+      for (const [owner, v] of votes) {
+        if (winning === undefined || v.n > winning.n || (v.n === winning.n && v.best < winning.best)) {
+          winner = owner;
+          winning = v;
+        }
+      }
+      if (winner === undefined) continue;
+      const list = adopted.get(winner);
+      if (list) list.push(c);
+      else adopted.set(winner, [c]);
+    }
+  }
+  adoptCache.set(panels, { covered, obstacles, adopted });
+  return adopted;
+}
+
+const adoptCache = new WeakMap<
+  readonly PlacedPanel[],
+  {
+    covered: readonly PlacedPanel[];
+    obstacles: readonly Obstacle[];
+    adopted: ReadonlyMap<string, Hex[]>;
+  }
+>();
 
 /**
  * Which plates are the SAME plate, by what the generator would build (D107).
@@ -415,12 +506,20 @@ export function panelGeometryKeys(
   panels: readonly PlacedPanel[],
   frame: WallFrame | undefined,
   obstacles: readonly Obstacle[] | undefined,
+  /**
+   * Required, even when undefined: a plate's geometry includes the stranded
+   * cells it adopts from these (D110), and a key computed without them says two
+   * plates are the same when one of them is not.
+   */
+  covered: readonly PlacedPanel[] | undefined,
 ): ReadonlyMap<string, string> {
   const hit = geometryKeyCache.get(panels);
-  if (hit && hit.frame === frame && hit.obstacles === obstacles) return hit.keys;
+  if (hit && hit.frame === frame && hit.obstacles === obstacles && hit.covered === covered) {
+    return hit.keys;
+  }
   const keys = new Map<string, string>();
   for (const p of panels) {
-    const spec = panelModelSpec(p, panels, frame, obstacles);
+    const spec = panelModelSpec(p, panels, frame, obstacles, covered);
     if (spec.border === undefined) {
       const rel = spec.cells
         .map((c) => hexKey({ q: c.q - p.origin.q, r: c.r - p.origin.r }))
@@ -437,7 +536,7 @@ export function panelGeometryKeys(
       keys.set(p.id, `refused:${p.id}`);
     }
   }
-  geometryKeyCache.set(panels, { frame, obstacles, keys });
+  geometryKeyCache.set(panels, { frame, obstacles, covered, keys });
   return keys;
 }
 
@@ -446,13 +545,14 @@ const geometryKeyCache = new WeakMap<
   {
     frame: WallFrame | undefined;
     obstacles: readonly Obstacle[] | undefined;
+    covered: readonly PlacedPanel[] | undefined;
     keys: ReadonlyMap<string, string>;
   }
 >();
 
 /** `panelGeometryKeys` straight from a document. */
 export function panelGeometryKeysFor(doc: LayoutDoc): ReadonlyMap<string, string> {
-  return panelGeometryKeys(doc.panels, doc.frame, doc.obstacles);
+  return panelGeometryKeys(doc.panels, doc.frame, doc.obstacles, doc.covered);
 }
 
 /**

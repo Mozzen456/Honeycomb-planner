@@ -56,8 +56,9 @@ import {
   CELL, MARGIN_X, MARGIN_Y, PANEL_DEPTH, PITCH, ROW_STEP,
   WALL_AT_MOUTH, WALL_AT_THROAT,
 } from './constants';
-import { hexCorners, hexKey, hexToMm, type Point } from './hex';
+import { hexCorners, hexKey, hexToMm, keyToHex, type Point } from './hex';
 import type { Hex } from './types';
+import type { ZoneEdge } from './zonePolygon';
 
 // ---------------------------------------------------------------------------
 // The bore
@@ -207,7 +208,7 @@ export interface BorderSpec {
    *
    * Absent means no zones, which is the standalone and the plain-wall case.
    */
-  keepClear?: readonly { minX: number; maxX: number; minY: number; maxY: number }[];
+  keepClear?: readonly KeepClear[];
   /**
    * Does the plate being generated own this piece of edge?
    *
@@ -217,6 +218,59 @@ export interface BorderSpec {
    * all of it", which is the standalone case.
    */
   owns?: (cell: Hex) => boolean;
+}
+
+/**
+ * One convex piece of a blocked zone: its bounding box, and — when it is not
+ * simply that box — the straight edges that bound it (D109).
+ *
+ * A bare box is a rectangle and is cut by its four sides; `edges` is a convex
+ * piece of a drawn outline, cut by every one of its sides at whatever angle it
+ * runs. Both go through `zoneEdges`, so there is one cutter, and every
+ * rectangle the tests have ever measured is a measurement of it.
+ */
+export interface KeepClear {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+  edges?: readonly ZoneEdge[];
+}
+
+/**
+ * A zone piece's edges, outward normals, inside `nx·x + ny·y <= d`.
+ *
+ * A rectangle's four are listed counter-clockwise from the LEFT — left,
+ * bottom, right, top — and the order is load-bearing: the cutter breaks a tie
+ * between two equally deep sides on the earlier one, and this order makes that
+ * the low side on both axes, which is the tie-break the rectangle-only cutter
+ * always had.
+ */
+function zoneEdges(z: KeepClear): readonly ZoneEdge[] {
+  return z.edges ?? [
+    { nx: -1, ny: 0, d: -z.minX },
+    { nx: 0, ny: -1, d: -z.minY },
+    { nx: 1, ny: 0, d: z.maxX },
+    { nx: 0, ny: 1, d: z.maxY },
+  ];
+}
+
+/** The half-plane that KEEPS what lies outside a zone edge, moved out by `by`. */
+function outsideOf(e: ZoneEdge, by = 0): HalfPlane {
+  return { nx: -e.nx || 0, ny: -e.ny || 0, d: -(e.d + by) || 0 };
+}
+
+/**
+ * How far a cell's hexagon reaches from its centre along a unit direction.
+ *
+ * Flat-top, corners at (±MARGIN_X, 0) and (±MARGIN_X/2, ±MARGIN_Y). Along an
+ * axis this is exactly `MARGIN_X` or `MARGIN_Y`, the numbers the
+ * rectangle-only cutter used.
+ */
+function hexReach(nx: number, ny: number): number {
+  const ax = Math.abs(nx);
+  const ay = Math.abs(ny);
+  return Math.max(ax * MARGIN_X, ax * (MARGIN_X / 2) + ay * MARGIN_Y);
 }
 
 export const FRAME_SIDES = ['left', 'right', 'bottom', 'top'] as const;
@@ -572,10 +626,22 @@ function borderPieces(cells: readonly Hex[], border: BorderSpec): BorderPiece[] 
       if (centre.x + reachMm <= z.minX || centre.x - reachMm >= z.maxX ||
           centre.y + reachMm <= z.minY || centre.y - reachMm >= z.maxY) continue;
       let sides = 0;
-      if (centre.x <= z.minX) { piece.planes.push({ nx: 1, ny: 0, d: z.minX }); sides++; }
-      else if (centre.x >= z.maxX) { piece.planes.push({ nx: -1, ny: 0, d: -z.maxX }); sides++; }
-      if (centre.y <= z.minY) { piece.planes.push({ nx: 0, ny: 1, d: z.minY }); sides++; }
-      else if (centre.y >= z.maxY) { piece.planes.push({ nx: 0, ny: -1, d: -z.maxY }); sides++; }
+      if (z.edges === undefined) {
+        if (centre.x <= z.minX) { piece.planes.push({ nx: 1, ny: 0, d: z.minX }); sides++; }
+        else if (centre.x >= z.maxX) { piece.planes.push({ nx: -1, ny: 0, d: -z.maxX }); sides++; }
+        if (centre.y <= z.minY) { piece.planes.push({ nx: 0, ny: 1, d: z.minY }); sides++; }
+        else if (centre.y >= z.maxY) { piece.planes.push({ nx: 0, ny: -1, d: -z.maxY }); sides++; }
+      } else {
+        // A drawn piece: keep outside every edge the centre is past. More than
+        // one only ever removes more, and a convex piece is left behind by
+        // being outside any one of its edges.
+        for (const e of z.edges) {
+          if (e.nx * centre.x + e.ny * centre.y >= e.d) {
+            piece.planes.push(outsideOf(e));
+            sides++;
+          }
+        }
+      }
       // Its centre is inside the zone, so there is no side of the zone to push
       // it to: the rail is IN the aperture and goes. Happens where a zone
       // overruns the plate's own edge.
@@ -682,7 +748,20 @@ export function plateEdgeShapes(
   const borePlanes = plateEdgePlanes(border, Math.max(0, border.thicknessMm));
   const corners = cornerPositions();
   const out: { outline: Point[]; bore: Point[] }[] = [];
+  /*
+   * A cell a ZONE reaches is cut by the zone as well, and the plan draws no
+   * zone-cut cell — so it draws none of these either. Drawn on the edge planes
+   * alone, the top row under a roof that runs off the wall showed as a line of
+   * half-hexagons inside the zone, plate the file does not have (D109).
+   */
+  const zones = border.keepClear ?? [];
+  const inZone = (c: Hex): boolean => {
+    const m = hexToMm(c);
+    return zones.some((z) =>
+      !zoneEdges(z).some((e) => e.nx * m.x + e.ny * m.y - hexReach(e.nx, e.ny) >= e.d - SAME));
+  };
   for (const c of dedupe(cells)) {
+    if (zones.length > 0 && inZone(c)) continue;
     const full = corners.ringOf(c);
     // Only the cells the lines actually pass through: everything inside is an
     // ordinary cell and the plan already draws it.
@@ -842,10 +921,7 @@ function plateRings(spec: HoneycombSpec): PlateRings {
    */
   const zoneRects = spec.border?.keepClear ?? [];
   const railMm = Math.max(0, spec.border?.thicknessMm ?? 0);
-  const zones = zoneRects.map((z) => ({
-    minX: z.minX - railMm, maxX: z.maxX + railMm,
-    minY: z.minY - railMm, maxY: z.maxY + railMm,
-  }));
+  const zoneEdgeLists = zoneRects.map(zoneEdges);
 
   /*
    * The plate's EDGE, cut the way `inner box.jpeg` shows it (D86).
@@ -951,137 +1027,152 @@ function plateRings(spec: HoneycombSpec): PlateRings {
     let corner: CellClip['corner'] = null;
     for (let i = 0; i < zoneRects.length; i++) {
       const z = zoneRects[i]!;
-      const g = zones[i]!;
       if (m.x + PITCH <= z.minX || m.x - PITCH >= z.maxX ||
           m.y + PITCH <= z.minY || m.y - PITCH >= z.maxY) continue;
+      const edges = zoneEdgeLists[i]!;
+
       /*
-       * Which side of the zone this cell has MATERIAL outside on — never which
-       * side its CENTRE is.
+       * A plane that removes NOTHING means the zone removes nothing.
+       *
+       * What the cell keeps is `ring ∩ (outside a ∪ outside b)`, so if the
+       * whole hexagon lies outside any one edge of a convex piece, the piece
+       * does not reach this cell at all. Going through the corner path anyway,
+       * one cell came out as an L split on two lines whose union was the
+       * hexagon it started as, and the pieces then drew their bore walls
+       * against each other along both split lines — a membrane of zero
+       * thickness standing across an open bore, which reads as a stripe running
+       * down through the cell (D106).
+       *
+       * It bit at a zone's far corners as soon as the side test started
+       * answering about the cell's REACH (D105): a cell wholly past a zone's
+       * edge has material outside on that axis — all of it — so it got a plane
+       * where the centre test gave it none, and a second plane it does not need
+       * turned one whole cell into three pieces.
+       *
+       * Every plane here has a unit normal, so the hexagon's far point along it
+       * is the centre plus `hexReach`: the corner radius across x, the flat
+       * across y, and in between for a slanted edge.
+       */
+      const removesNothing = (p: HalfPlane) =>
+        p.nx * m.x + p.ny * m.y + hexReach(p.nx, p.ny) <= p.d + SAME;
+      if (edges.some((e) => removesNothing(outsideOf(e)))) continue;
+
+      /*
+       * Which edges this cell has MATERIAL outside of — never which side its
+       * CENTRE is on.
        *
        * The centre is a proxy that fails at a corner, and it failed measurably.
-       * A cell whose centre sits 0.04 mm INSIDE the zone's x range but outside
-       * it in y got no x plane at all, so it was cut on y alone and the 13.6 mm
-       * of plate it still had past the zone's x edge was thrown away — a whole
+       * A cell whose centre sat 0.04 mm INSIDE a zone's x range but outside it
+       * in y got no x plane at all, so it was cut on y alone and the 13.6 mm of
+       * plate it still had past the zone's x edge was thrown away — a whole
        * quadrant, leaving a hexagonal hole in the aperture wall. Measured on a
        * three-zone wall: one side of every zone stepped back by up to 13.45 mm
        * (`tests/zone-apron.test.ts`), which is what "the honeycomb is cut
        * straight here and steps out there" was.
        *
-       * A hexagon is 27.25 across and a zone edge lands wherever it was drawn,
-       * so the centre being a hair inside an edge says nothing about whether
-       * the cell reaches past it. Ask about the reach instead.
+       * The floor is `WALL_AT_MOUTH`: what survives outside an edge is `over`
+       * deep, and below one wall's thickness there is no plate worth expressing
+       * — a zone edge landing a few tenths inside a cell used to leave a
+       * 14.78 x 1.00 mm shard, detached, so the plate came off the generator as
+       * two closed shells.
        *
-       * The floor is `WALL_AT_MOUTH`, and it is the same floor, for the same
-       * reason, as the sliver rule below: what survives on that side is
-       * `reach - over` deep, and below one wall's thickness there is no plate
-       * worth expressing — a zone edge landing a few tenths inside a cell used
-       * to leave a 14.78 x 1.00 mm shard, detached, so the plate came off the
-       * generator as two closed shells. Ties go to the deeper side, which is
-       * what the centre test did wherever it had an opinion at all.
+       * The DEEPEST edge is taken first, and then the deepest edge that shares
+       * a corner with it; a tie goes to the earlier edge. For a rectangle that
+       * is exactly the old rule — the deeper side on each axis, the low side on
+       * a tie — because `zoneEdges` lists a rectangle's sides in the order that
+       * makes it so. For a drawn outline it is the corner of the piece nearest
+       * the cell. More than two edges reaching out of one cell means a piece
+       * smaller than a cell, and keeping outside two of them is still outside
+       * the piece — convexity guarantees it — so the worst that can happen is
+       * losing plate, never leaving any inside the zone.
+       *
+       * A DIAGONAL the decomposition introduced is used only when no real edge
+       * qualifies. Cutting on one keeps plate that lies inside the next piece,
+       * which that piece then cuts from its own side — never wrong, but each
+       * diagonal cut it can avoid is plate the zone did not ask for.
        */
-      const side = (c: number, reach: number, lo: number, hi: number): -1 | 0 | 1 => {
-        const below = lo - (c - reach);
-        const above = (c + reach) - hi;
-        if (below >= WALL_AT_MOUTH && below >= above) return -1;
-        if (above >= WALL_AT_MOUTH) return 1;
-        return 0;
-      };
-      const sx = side(m.x, MARGIN_X, z.minX, z.maxX);
-      const sy = side(m.y, MARGIN_Y, z.minY, z.maxY);
-
-      const px = sx < 0
-        ? { nx: 1, ny: 0, d: z.minX }
-        : sx > 0 ? { nx: -1, ny: 0, d: -z.maxX } : null;
-      const bx = sx < 0
-        ? { nx: 1, ny: 0, d: g.minX }
-        : sx > 0 ? { nx: -1, ny: 0, d: -g.maxX } : null;
-      const py = sy < 0
-        ? { nx: 0, ny: 1, d: z.minY }
-        : sy > 0 ? { nx: 0, ny: -1, d: -z.maxY } : null;
-      const by = sy < 0
-        ? { nx: 0, ny: 1, d: g.minY }
-        : sy > 0 ? { nx: 0, ny: -1, d: -g.maxY } : null;
+      const over = edges.map((e) => e.nx * m.x + e.ny * m.y + hexReach(e.nx, e.ny) - e.d);
+      const qualifies = (k: number) => over[k]! >= WALL_AT_MOUTH;
+      let pool = edges.map((_, k) => k).filter((k) => qualifies(k) && !edges[k]!.internal);
+      if (pool.length === 0) pool = edges.map((_, k) => k).filter(qualifies);
 
       /*
-       * A plane that removes NOTHING means the zone removes nothing.
-       *
-       * What the cell keeps is `ring ∩ (px ∪ py)`, so if either plane holds
-       * over the whole hexagon the union is the whole hexagon and there is
-       * nothing to cut — the zone does not reach this cell at all. Skipping the
-       * zone here is not a shortcut, it is the difference between one piece and
-       * three: taken through the corner path anyway, the cell comes out as an
-       * L split on two lines whose union is the hexagon it started as, and the
-       * pieces then draw their bore walls against each other along both split
-       * lines — a membrane of zero thickness standing across an open bore,
-       * which reads as a stripe running down through the cell.
-       *
-       * It bit at a zone's far corners as soon as `sx`/`sy` started answering
-       * about the cell's REACH (D105): a cell wholly past a zone's edge has
-       * material outside on that axis — all of it — so it now gets a plane
-       * where the centre test gave it none, and a second plane it does not
-       * need turns one whole cell into three pieces.
-       *
-       * Every plane here is axis-aligned with a unit normal, so the hexagon's
-       * far point along it is the centre plus the reach on that axis: the
-       * corner radius across x, the flat across y.
-       */
-      const removesNothing = (p: { nx: number; ny: number; d: number } | null) =>
-        p !== null &&
-        p.nx * m.x + p.ny * m.y +
-          Math.abs(p.nx) * MARGIN_X + Math.abs(p.ny) * MARGIN_Y <= p.d + SAME;
-      if (removesNothing(px) || removesNothing(py)) continue;
-
-      /*
-       * Neither axis reaches out of the zone by a wall's worth: wholly inside
-       * it, or poking out by less than plate. Nothing of this cell survives
-       * that is worth printing.
+       * No edge reaches out of the zone by a wall's worth: wholly inside it, or
+       * poking out by less than plate. Nothing of this cell survives that is
+       * worth printing.
        *
        * This is NOT a return to D81's apron, where cells were dropped whole
        * whenever their CENTRE fell inside the zone and the aperture lost up to
        * a corner-to-flat — measured 6.2 mm on one side of an 86 × 120 switch
-       * and 10.0 mm on the other. A cell that pokes out at all now keeps what
-       * it has, on both axes if it reaches out of both; what is dropped here is
-       * at most `WALL_AT_MOUTH` deep on every side, which is thinner than the
-       * web between two mouths and so is not a wall the plate was designed to
-       * have. Kept, it arrives as a detached shard — a zone edge falling 1.00 mm
-       * inside a plate's own edge left a 14.78 x 1.00 mm one, sharing no exact
-       * edge with its neighbours, so the plate came off the generator as two
-       * closed shells. That is the "border bugs out when I put a blocked zone
-       * here" report.
+       * and 10.0 mm on the other. A cell that pokes out at all keeps what it
+       * has, past two edges if it reaches past two; what is dropped here is at
+       * most `WALL_AT_MOUTH` deep on every side, which is thinner than the web
+       * between two mouths and so is not a wall the plate was designed to have.
        */
-      if (px === null && py === null) return null;
-      if (px !== null && py !== null && corner === null) {
+      if (pool.length === 0) return null;
+
+      let a = pool[0]!;
+      for (const k of pool) if (over[k]! > over[a]!) a = k;
+      const n = edges.length;
+      const nextTo = (k: number) => {
+        // Sharing a corner: neighbours in a polygon's own order, or — for a
+        // rectangle, whose list is not a walk round it — any side that is not
+        // parallel.
+        if (z.edges) return k === (a + 1) % n || k === (a + n - 1) % n;
+        const e = edges[k]!, f = edges[a]!;
+        return Math.abs(e.nx * f.ny - e.ny * f.nx) > 1e-9;
+      };
+      let b = -1;
+      for (const k of pool) {
+        if (k === a || !nextTo(k)) continue;
+        if (b < 0 || over[k]! > over[b]!) b = k;
+      }
+
+      if (b < 0) {
+        planes.push(outsideOf(edges[a]!));
+        bore.push(outsideOf(edges[a]!, railMm));
+        continue;
+      }
+
+      /*
+       * The pair is ordered by how ACROSS each runs — the more vertical edge
+       * plays x — because the corner split below is not symmetric, and for a
+       * rectangle this keeps every piece exactly where it always was.
+       */
+      const [ex, ey] = Math.abs(edges[b]!.nx) > Math.abs(edges[a]!.nx)
+        ? [edges[b]!, edges[a]!]
+        : [edges[a]!, edges[b]!];
+      const px = outsideOf(ex);
+      const py = outsideOf(ey);
+      const bx = outsideOf(ex, railMm);
+      const by = outsideOf(ey, railMm);
+
+      if (corner === null) {
         /*
          * Diagonally outside the zone's corner: the cell wants
-         * hexagon-minus-quadrant, which is an L. Handed over whole — the caller
+         * hexagon-minus-corner, which is an L. Handed over whole — the caller
          * splits it, because the split has to be the SAME for the outline and
          * the bore or the hole grows a membrane (see the note there).
          *
-         * ...unless the arm of that L is too thin to be plate. The arm reaches
-         * from the zone's x edge out to the cell's own edge, so it is
-         * `MARGIN_X − |centre − edge|` wide, and a zone edge lands wherever it
-         * was drawn: measured 2.89, 0.89 and 0.59 mm across the sweep, each
-         * arriving as a detached shard. Below one wall's thickness there is no L
-         * worth expressing and the cell is simply cut on x — the same floor, and
-         * for the same reason, as the sliver rule above.
+         * ...unless the arm of that L is too thin to be plate. The arm is the
+         * part of the cell INSIDE the x edge's line and outside the y edge, so
+         * it is as deep as the cell reaches past the x edge inward, and a zone
+         * edge lands wherever it was drawn: measured 2.89, 0.89 and 0.59 mm
+         * across the sweep, each arriving as a detached shard. Below one wall's
+         * thickness there is no L worth expressing and the cell is simply cut on
+         * x — the same floor, and for the same reason, as the rule above.
          */
-        // Off `sx`, not off the centre again: the side the cell is KEPT on is
-        // the side the arm runs from, and since the centre no longer chooses
-        // that side the two can disagree on a zone thinner than a cell.
-        const overhangX = sx < 0
-          ? m.x + MARGIN_X - z.minX
-          : z.maxX - (m.x - MARGIN_X);
-        if (overhangX >= WALL_AT_MOUTH) {
-          corner = { px, py, bx: bx!, by: by! };
+        const arm = ex.d - (ex.nx * m.x + ex.ny * m.y) + hexReach(ex.nx, ex.ny);
+        if (arm >= WALL_AT_MOUTH) {
+          corner = { px, py, bx, by };
           continue;
         }
         planes.push(px);
-        bore.push(bx!);
+        bore.push(bx);
         continue;
       }
-      if (px !== null && py !== null) { planes.push(px, py); bore.push(bx!, by!); continue; }
-      planes.push((px ?? py)!);
-      bore.push((bx ?? by)!);
+      planes.push(px, py);
+      bore.push(bx, by);
     }
     return { planes, bore, corner };
   };
@@ -1221,7 +1312,161 @@ function plateRings(spec: HoneycombSpec): PlateRings {
   }
   for (const [key, rings] of clippedInner) innerRings.set(key, rings);
 
+  /*
+   * A piece may be loose within THIS plate and still be held: a cut cell in a
+   * plate's top row, whose own plate below it a zone has eaten, sits flush in
+   * the interlock with the plate above. That is part of the aperture's wall,
+   * and the plate above is what it leans on. The neighbours that count are the
+   * cells the next plate prints whole.
+   */
+  const own = new Set(cells.map(hexKey));
+  const occupied = spec.border?.occupied;
+  dropShards(outerRings, innerRings, (key) => {
+    if (occupied === undefined) return [];
+    const at = keyToHex(key.split('#')[0]!);
+    const out: Point[][] = [];
+    for (const d of DIRS) {
+      const n = { q: at.q + d.q, r: at.r + d.r };
+      const nk = hexKey(n);
+      if (occupied.has(nk) && !own.has(nk)) out.push(corners.ringOf(n));
+    }
+    return out;
+  });
   return { levels, outerRings, innerRings };
+}
+
+/**
+ * Below this much plastic, a piece joined to nothing else is a SHARD (mm²,
+ * measured across the plate face): about two cells' worth of web.
+ */
+const SHARD_AREA_MM2 = 300;
+
+function ringArea(r: readonly Point[]): number {
+  let a = 0;
+  for (let i = 0; i < r.length; i++) {
+    const p = r[i]!, q = r[(i + 1) % r.length]!;
+    a += p.x * q.y - q.x * p.y;
+  }
+  return Math.abs(a) / 2;
+}
+
+/**
+ * Take out every small piece that is joined to the rest of the plate by no
+ * edge at all (D109).
+ *
+ * A cut can leave a sliver of a cell, or a few, connected to the plate only at
+ * a point or not at all: past a zone's sharp corner, between two zones, where a
+ * zone edge grazes the plate's own. Each rule that cuts a cell is local to that
+ * cell and cannot see whether what it keeps still touches anything. Measured
+ * over random zones — rectangles as well as drawn outlines — about one plate in
+ * thirty came out with one: 24 to 1168 mm³ of plastic that a slicer prints as a
+ * loose fleck, and that would rattle out of a mounted wall.
+ *
+ * So the plate is checked as a whole, once every piece is known. Two pieces
+ * are joined when their outlines share a stretch of edge — the same test the
+ * outer skin uses to cancel the wall between them, made tolerant of the
+ * T-junctions the weld has not split yet. The largest group is the plate and
+ * always stays. Any other group with less than `SHARD_AREA_MM2` of plastic
+ * goes; a bigger one is a real second part of a plate a zone has cut in two,
+ * and stays.
+ *
+ * A group is a closed solid of its own — its boundary is shared with nothing —
+ * so removing it leaves what remains exactly as closed as it was.
+ */
+function dropShards(
+  outer: Map<string, Point[]>,
+  inner: Map<string, Point[][]>,
+  /** Whole cells of OTHER plates beside a piece, which hold it in the interlock. */
+  neighbours: (pieceKey: string) => Point[][],
+): void {
+  if (outer.size < 2) return;
+  const keys = [...outer.keys()];
+  const index = new Map(keys.map((k, i) => [k, i]));
+  const parent = keys.map((_, i) => i);
+  const find = (i: number): number => {
+    while (parent[i] !== i) { parent[i] = parent[parent[i]!]!; i = parent[i]!; }
+    return i;
+  };
+  const join = (a: number, b: number): void => { parent[find(a)] = find(b); };
+
+  // Every edge, bucketed by the grid cells its box touches.
+  interface Edge { piece: number; a: Point; b: Point }
+  const bucket = (v: number) => Math.floor(v / PITCH);
+  const grid = new Map<string, Edge[]>();
+  for (const [k, ring] of outer) {
+    const piece = index.get(k)!;
+    for (let i = 0; i < ring.length; i++) {
+      const e: Edge = { piece, a: ring[i]!, b: ring[(i + 1) % ring.length]! };
+      for (let gx = bucket(Math.min(e.a.x, e.b.x)); gx <= bucket(Math.max(e.a.x, e.b.x)); gx++) {
+        for (let gy = bucket(Math.min(e.a.y, e.b.y)); gy <= bucket(Math.max(e.a.y, e.b.y)); gy++) {
+          const g = `${gx},${gy}`;
+          const at = grid.get(g);
+          if (at) at.push(e); else grid.set(g, [e]);
+        }
+      }
+    }
+  }
+  const TOL = 1e-6;
+  const shareStretch = (e: Edge, f: Edge): boolean => {
+    const dx = e.b.x - e.a.x, dy = e.b.y - e.a.y;
+    const len = Math.hypot(dx, dy);
+    if (len < TOL) return false;
+    // Both ends of f on e's line...
+    const off = (p: Point) => Math.abs((p.x - e.a.x) * dy - (p.y - e.a.y) * dx) / len;
+    if (off(f.a) > TOL || off(f.b) > TOL) return false;
+    // ...and overlapping it by more than a point.
+    const along = (p: Point) => ((p.x - e.a.x) * dx + (p.y - e.a.y) * dy) / len;
+    const lo = Math.max(0, Math.min(along(f.a), along(f.b)));
+    const hi = Math.min(len, Math.max(along(f.a), along(f.b)));
+    return hi - lo > TOL;
+  };
+  for (const edges of grid.values()) {
+    for (let i = 0; i < edges.length; i++) {
+      for (let j = i + 1; j < edges.length; j++) {
+        const e = edges[i]!, f = edges[j]!;
+        if (e.piece === f.piece || find(e.piece) === find(f.piece)) continue;
+        if (shareStretch(e, f)) join(e.piece, f.piece);
+      }
+    }
+  }
+
+  const plastic = new Map<number, number>();
+  keys.forEach((k, i) => {
+    const bores = inner.get(k);
+    const throat = bores && bores.length > 0 ? bores[bores.length - 1]! : [];
+    const area = ringArea(outer.get(k)!) - (throat.length >= 3 ? ringArea(throat) : 0);
+    const root = find(i);
+    plastic.set(root, (plastic.get(root) ?? 0) + area);
+  });
+  let main = -1;
+  for (const [root, area] of plastic) if (main < 0 || area > plastic.get(main)!) main = root;
+
+  // Held by the next plate: any piece of the group sharing a stretch of edge
+  // with a cell that plate prints whole.
+  const held = new Set<number>();
+  keys.forEach((k, i) => {
+    const root = find(i);
+    if (root === main || held.has(root) || plastic.get(root)! >= SHARD_AREA_MM2) return;
+    const ring = outer.get(k)!;
+    for (const other of neighbours(k)) {
+      for (let a = 0; a < ring.length && !held.has(root); a++) {
+        const e: Edge = { piece: i, a: ring[a]!, b: ring[(a + 1) % ring.length]! };
+        for (let b = 0; b < other.length; b++) {
+          if (shareStretch(e, { piece: -1, a: other[b]!, b: other[(b + 1) % other.length]! })) {
+            held.add(root);
+            break;
+          }
+        }
+      }
+    }
+  });
+
+  keys.forEach((k, i) => {
+    const root = find(i);
+    if (root === main || held.has(root) || plastic.get(root)! >= SHARD_AREA_MM2) return;
+    outer.delete(k);
+    inner.delete(k);
+  });
 }
 
 /**
@@ -1308,6 +1553,41 @@ export function buildHoneycombMesh(spec: HoneycombSpec): SolidMesh {
     if (at.size === 0) continue;
     weldTJunctions(at);
     for (const [key, welded] of at) innerRings.get(key)![lv] = welded;
+  }
+
+  /*
+   * Line each bore level's corners up with the level above before the inner
+   * skin pairs them BY INDEX (D109).
+   *
+   * Two levels with the same number of corners are joined corner k to corner k,
+   * which assumes both rings START at the same corner. `clipConvex` starts its
+   * output wherever the first surviving input corner is, and two concentric
+   * hexagons cut by the same line can keep different corners first — the
+   * smaller one has a corner inside the line that the larger has outside. With
+   * a rectangle's axis lines that happened not to bite; with a slanted edge at a
+   * zone corner it did, and the band between the mouth and the lead-in was
+   * built joining each corner to its NEIGHBOUR's partner — a twisted strip whose
+   * edges then failed to cancel against the next piece's, leaving 8 unmatched
+   * edges in the plate. Rotating a ring moves no point and drops no edge; it
+   * only decides which corners face each other.
+   */
+  for (const rings of innerRings.values()) {
+    for (let j = 1; j < rings.length; j++) {
+      const a = rings[j - 1]!;
+      const b = rings[j]!;
+      if (a.length < 3 || a.length !== b.length) continue;
+      let best = 0;
+      let bestCost = Infinity;
+      for (let shift = 0; shift < b.length; shift++) {
+        let cost = 0;
+        for (let k = 0; k < a.length; k++) {
+          const q = b[(k + shift) % b.length]!;
+          cost += (a[k]!.x - q.x) ** 2 + (a[k]!.y - q.y) ** 2;
+        }
+        if (cost < bestCost - 1e-12) { bestCost = cost; best = shift; }
+      }
+      if (best !== 0) rings[j] = [...b.slice(best), ...b.slice(0, best)];
+    }
   }
 
   /*
@@ -1593,7 +1873,8 @@ export function clipConvex(poly: readonly Point[], planes: readonly HalfPlane[])
       /*
        * ON the plane counts as INSIDE, to within `SAME` (D84).
        *
-       * Every plane here is axis-aligned with a unit normal, so `d` is a signed
+       * Every plane here has a unit normal — axis-aligned for a rectangle and the
+       * plate's edge, at the drawn angle for an outline (D109) — so `d` is a signed
        * distance in millimetres and the tolerance is a real one. It is not
        * fussiness: a rail's line is `cellCentre ± MARGIN`, recomputed, while the
        * corners it lands on come from `cornerPositions`, which averages three

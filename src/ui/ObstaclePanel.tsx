@@ -28,7 +28,7 @@ import { toCustomiserCells } from '../core/customiser';
 import {
   buildHoneycombMesh, MAX_BORDER_MM, MIN_BORDER_MM, meshBoundsMm, meshVolumeMm3,
 } from '../core/honeycomb';
-import { MIN_ZONE_MM } from '../core/measure';
+import { editZone, MIN_ZONE_MM } from '../core/measure';
 import { OBSTACLE_PRESETS } from '../core/obstacles';
 import { MAX_WALL_MM } from '../core/store';
 import {
@@ -63,14 +63,14 @@ export function ObstaclePanel({ doc, onChange, onFrameChange, onCopy, onDownload
     () => {
       // The same split the parts list makes (D107): plates cut differently are
       // different downloads, whatever their omitted cells say.
-      const shapes = panelGeometryKeys(doc.panels, doc.frame, doc.obstacles);
+      const shapes = panelGeometryKeys(doc.panels, doc.frame, doc.obstacles, doc.covered);
       return customPanelGroups(
         doc.panels,
         (p) => panelFrameKey(p, doc.panels, doc.frame),
         (p) => shapes.get(p.id) ?? '',
       );
     },
-    [doc.panels, doc.frame, doc.obstacles],
+    [doc.panels, doc.frame, doc.obstacles, doc.covered],
   );
 
   /**
@@ -89,7 +89,7 @@ export function ObstaclePanel({ doc, onChange, onFrameChange, onCopy, onDownload
         try {
           // The download's own spec — zones and cut cells included — or this
           // measures a plate nobody prints.
-          const spec = panelModelSpec(first, doc.panels, doc.frame, doc.obstacles);
+          const spec = panelModelSpec(first, doc.panels, doc.frame, doc.obstacles, doc.covered);
           const mesh = buildHoneycombMesh({
             cells: spec.cells, clipped: spec.clipped, border: spec.border,
           });
@@ -109,7 +109,7 @@ export function ObstaclePanel({ doc, onChange, onFrameChange, onCopy, onDownload
           };
         }
       }),
-    [groups, doc.panels, doc.frame, doc.obstacles],
+    [groups, doc.panels, doc.frame, doc.obstacles, doc.covered],
   );
 
   const bed = bedFor(doc.bedId, doc.customBed);
@@ -130,8 +130,10 @@ export function ObstaclePanel({ doc, onChange, onFrameChange, onCopy, onDownload
     onChange([...obstacles, next]);
   };
 
+  // Through `editZone`, so a typed size stretches a drawn outline or an L
+  // with its box instead of moving the box off the area it blocks.
   const edit = (id: string, patch: Partial<Obstacle>): void => {
-    onChange(obstacles.map((o) => (o.id === id ? { ...o, ...patch } : o)));
+    onChange(obstacles.map((o) => (o.id === id ? editZone(o, patch) : o)));
   };
 
   const setSide = (key: keyof WallFrame, on: boolean): void => {

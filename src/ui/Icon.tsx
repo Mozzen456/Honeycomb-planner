@@ -55,6 +55,7 @@ export type IconName =
   | 'info'
   | 'photo'
   | 'zone'
+  | 'shape'
   | 'palette'
   | 'chevronDown'
   | 'chevronRight'
@@ -210,6 +211,17 @@ const PATHS: Record<IconName, JSX.Element> = {
     <>
       <path d="M3 6.5V5a2 2 0 0 1 2-2h1.5M17.5 3H19a2 2 0 0 1 2 2v1.5M21 17.5V19a2 2 0 0 1-2 2h-1.5M6.5 21H5a2 2 0 0 1-2-2v-1.5" />
       <path d="M10 3h4M3 10v4M21 10v4M10 21h4" />
+    </>
+  ),
+  /*
+   * A blocked zone DRAWN rather than dragged: a slanted top, the roof it is
+   * usually for, with its corners marked because corners are what you place.
+   */
+  shape: (
+    <>
+      <path d="M4 20V10.5L20 5v15Z" strokeDasharray="3.2 2.4" />
+      <circle cx="4" cy="10.5" r="1.7" />
+      <circle cx="20" cy="5" r="1.7" />
     </>
   ),
   palette: (

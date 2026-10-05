@@ -20,7 +20,7 @@ import { describe, expect, it } from 'vitest';
 import { panelLineKeys } from '../src/core/bom';
 import { hexToMm } from '../src/core/hex';
 import { buildHoneycombMesh, meshVolumeMm3 } from '../src/core/honeycomb';
-import { panelGeometryKeys, panelModelSpecFor } from '../src/core/panelModel';
+import { panelGeometryKeysFor, panelModelSpecFor } from '../src/core/panelModel';
 import { emptyDoc, Store } from '../src/core/store';
 import { solveTiling, type PanelSize } from '../src/core/tiling';
 import type { Catalog, LayoutDoc, Obstacle, PlacedPanel, WallFrame } from '../src/core/types';
@@ -111,7 +111,7 @@ describe('one parts-list line is one plate', () => {
 
   it('the geometry key tells apart exactly the plates that differ', () => {
     const doc = wallWith(ZONES[0]!, FRAME);
-    const keys = panelGeometryKeys(doc.panels, doc.frame, doc.obstacles);
+    const keys = panelGeometryKeysFor(doc);
     const solids = new Map(doc.panels.map((p) => [p.id, solid(p, doc)]));
     let pairs = 0;
     for (let i = 0; i < doc.panels.length; i++) {
@@ -131,8 +131,8 @@ describe('one parts-list line is one plate', () => {
     // zone kept lighting the plate as it was before the drag.
     const a = wallWith(ZONES[0]!, FRAME);
     const b = wallWith({ ...ZONES[0]!, yMm: ZONES[0]!.yMm + 2 }, FRAME);
-    const ka = panelGeometryKeys(a.panels, a.frame, a.obstacles);
-    const kb = panelGeometryKeys(b.panels, b.frame, b.obstacles);
+    const ka = panelGeometryKeysFor(a);
+    const kb = panelGeometryKeysFor(b);
     const moved = a.panels.filter((p) => {
       const q = b.panels.find((x) => x.id === p.id);
       return q && JSON.stringify(q.omit ?? []) === JSON.stringify(p.omit ?? [])

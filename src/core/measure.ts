@@ -18,8 +18,9 @@
 
 import { PITCH, ROW_STEP } from './constants';
 import { hexToMm, mmToHex, type Point } from './hex';
-import { obstacleBounds } from './obstacles';
-import type { Hex, LayoutDoc, Obstacle, ZoneRect } from './types';
+import { hasOutline, obstacleBounds } from './obstacles';
+import type { Hex, LayoutDoc, Obstacle, ZonePoint, ZoneRect } from './types';
+import { normaliseOutline, outlineProblem, pointInOutline, type Pt } from './zonePolygon';
 
 /** What a snapped point latched onto. Drives the readout and the marker. */
 export type SnapKind = 'cell' | 'wall' | 'zone' | 'free';
@@ -252,13 +253,111 @@ export function resizeZone(o: Obstacle, hx: number, hy: number, to: Point): Obst
   if (hx > 0) x2 = to.x;
   if (hy < 0) y1 = to.y;
   if (hy > 0) y2 = to.y;
-  return {
-    ...o,
+  return refitZone(o, {
     xMm: Math.min(x1, x2),
     yMm: Math.min(y1, y2),
     widthMm: Math.max(MIN_ZONE_MM, Math.abs(x2 - x1)),
     heightMm: Math.max(MIN_ZONE_MM, Math.abs(y2 - y1)),
+  }, x2 < x1, y2 < y1);
+}
+
+/**
+ * A zone moved and stretched into a new bounding box, ITS SHAPE WITH IT.
+ *
+ * The box is the zone's tag and handles; the blocked area is the rectangles of
+ * a `shape` or the corners of an `outline`. Writing the box alone — which is
+ * what a resize handle and a typed width both did — moved the tag and left the
+ * blocked area where it was: an L dragged wider drew wider and blocked exactly
+ * what it had before. Every edit of the box goes through here, so the shape is
+ * scaled into it on both axes, flipped if a handle was dragged past the far
+ * side.
+ */
+export function refitZone(
+  o: Obstacle,
+  box: { xMm: number; yMm: number; widthMm: number; heightMm: number },
+  flipX = false,
+  flipY = false,
+): Obstacle {
+  const sx = o.widthMm > 0 ? box.widthMm / o.widthMm : 1;
+  const sy = o.heightMm > 0 ? box.heightMm / o.heightMm : 1;
+  const mapX = (x: number) => flipX
+    ? box.xMm + box.widthMm - (x - o.xMm) * sx
+    : box.xMm + (x - o.xMm) * sx;
+  const mapY = (y: number) => flipY
+    ? box.yMm + box.heightMm - (y - o.yMm) * sy
+    : box.yMm + (y - o.yMm) * sy;
+  const out: Obstacle = { ...o, ...box };
+  if (hasOutline(o)) {
+    // A flip reverses the winding; `normaliseOutline` puts it back.
+    out.outline = normaliseOutline(o.outline!.map((p) => ({ x: mapX(p.xMm), y: mapY(p.yMm) })))
+      .map((p) => ({ xMm: p.x, yMm: p.y }));
+  } else if (o.shape && o.shape.length > 0) {
+    out.shape = o.shape.map((r) => {
+      const xa = mapX(r.xMm), xb = mapX(r.xMm + r.widthMm);
+      const ya = mapY(r.yMm), yb = mapY(r.yMm + r.heightMm);
+      return {
+        xMm: Math.min(xa, xb), yMm: Math.min(ya, yb),
+        widthMm: Math.abs(xb - xa), heightMm: Math.abs(yb - ya),
+      };
+    });
+  }
+  return out;
+}
+
+/**
+ * A typed edit to a zone: its box through `refitZone`, anything else as is.
+ *
+ * The one front door for the obstacle panel's fields and the plan's size tag,
+ * so neither can move a drawn zone's tag without its outline.
+ */
+export function editZone(o: Obstacle, patch: Partial<Obstacle>): Obstacle {
+  const { xMm, yMm, widthMm, heightMm, ...rest } = patch;
+  const boxed = xMm !== undefined || yMm !== undefined || widthMm !== undefined || heightMm !== undefined
+    ? refitZone(o, {
+        xMm: xMm ?? o.xMm,
+        yMm: yMm ?? o.yMm,
+        widthMm: widthMm ?? o.widthMm,
+        heightMm: heightMm ?? o.heightMm,
+      })
+    : o;
+  return { ...boxed, ...rest };
+}
+
+/**
+ * A zone from a drawn outline, or the reason it cannot be one.
+ *
+ * Its box is the outline's bounding box, which is all the tag and the handles
+ * read. Clearance defaults to none for the same reason a dragged rectangle's
+ * does: what was drawn is what was meant.
+ */
+export function zoneFromOutline(
+  points: readonly Point[],
+  id: string,
+  label = 'Blocked zone',
+  clearanceMm = 0,
+): { zone: Obstacle } | { problem: string } {
+  const problem = outlineProblem(points);
+  if (problem !== null) return { problem };
+  const pts = normaliseOutline(points);
+  const outline: ZonePoint[] = pts.map((p) => ({ xMm: p.x, yMm: p.y }));
+  const xs = pts.map((p) => p.x);
+  const ys = pts.map((p) => p.y);
+  const xMm = Math.min(...xs);
+  const yMm = Math.min(...ys);
+  return {
+    zone: {
+      id, label, xMm, yMm,
+      widthMm: Math.max(...xs) - xMm,
+      heightMm: Math.max(...ys) - yMm,
+      clearanceMm,
+      outline,
+    },
   };
+}
+
+/** A drawn zone's corners as points, or null for a rectangle zone. */
+export function zoneOutlinePoints(o: Obstacle): Pt[] | null {
+  return hasOutline(o) ? o.outline!.map((p) => ({ x: p.xMm, y: p.yMm })) : null;
 }
 
 /**
@@ -269,6 +368,8 @@ export function resizeZone(o: Obstacle, hx: number, hy: number, to: Point): Obst
  * which is still there and still takes parts.
  */
 export function zoneHit(o: Obstacle, p: Point): boolean {
+  const outline = zoneOutlinePoints(o);
+  if (outline) return pointInOutline(outline, p);
   return zoneParts(o).some(
     (r) => p.x >= r.xMm && p.x <= r.xMm + r.widthMm &&
            p.y >= r.yMm && p.y <= r.yMm + r.heightMm,
@@ -315,7 +416,9 @@ export function withZonePart(o: Obstacle, part: ZoneRect): Obstacle {
  */
 export function moveZone(o: Obstacle, dx: number, dy: number): Obstacle {
   const moved: Obstacle = { ...o, xMm: o.xMm + dx, yMm: o.yMm + dy };
-  if (o.shape && o.shape.length > 0) {
+  if (hasOutline(o)) {
+    moved.outline = o.outline!.map((p) => ({ xMm: p.xMm + dx, yMm: p.yMm + dy }));
+  } else if (o.shape && o.shape.length > 0) {
     moved.shape = o.shape.map((r) => ({ ...r, xMm: r.xMm + dx, yMm: r.yMm + dy }));
   }
   return moved;

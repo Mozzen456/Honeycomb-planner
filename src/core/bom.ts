@@ -319,7 +319,7 @@ export function panelLineKeys(doc: LayoutDoc | undefined): ReadonlyMap<string, s
   // The generated plates first, since a plate on one of those lines is exactly
   // a plate that is NOT on its own stock one.
   // By what the plate IS, not only by what it was made from (D107).
-  const shapes = panelGeometryKeys(panels, doc?.frame, doc?.obstacles);
+  const shapes = panelGeometryKeys(panels, doc?.frame, doc?.obstacles, doc?.covered);
   for (const group of customPanelGroups(panels, frameKeyOf, (p) => shapes.get(p.id) ?? '')) {
     for (const panel of group.panels) out.set(panel.id, `custom/${group.key}`);
   }
@@ -1051,7 +1051,7 @@ export function computeBom(doc: LayoutDoc, catalog: Catalog): Bom {
   // Split by the generated geometry as well, or one line can stand for plates
   // that are cut differently and the download prints the first of them for all
   // (D107). `panelLineKeys` groups the same way, so a colour finds its plates.
-  const shapes = panelGeometryKeys(panels, frame, doc?.obstacles);
+  const shapes = panelGeometryKeys(panels, frame, doc?.obstacles, doc?.covered);
   const groups = customPanelGroups(panels, frameKeyOf, (p) => shapes.get(p.id) ?? '');
   // The reference a generated plate is costed against: the biggest shipped
   // plate, per cell. A plate the app sized itself has no catalogue entry to

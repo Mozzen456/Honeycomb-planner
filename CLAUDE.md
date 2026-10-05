@@ -20,7 +20,7 @@ better guide to where the work actually got to.
 
 ```bash
 npm run dev          # Vite dev server
-npm test             # vitest run — 54 files, 1177 tests
+npm test             # vitest run — 55 files, 1195 tests
 npm run typecheck    # tsc --noEmit
 npm run build        # typecheck + vite build (also copies models/ into dist/)
 
@@ -305,13 +305,35 @@ cells it draws. `plateEdgeShapes` returns them and what is left of their mouths,
 `plateEdgePlanes` the mesh is built from. Feed it the whole BLOCK (`assemblyBlockCells`), not the
 surviving cells.
 
-**A blocked zone is a UNION OF RECTANGLES** (`Obstacle.shape`, D80), and the reason is convexity:
-the border clips convex pieces with half-planes and there is no polygon boolean here by design. A
-rectangle gives four half-planes; a concave polygon cannot be clipped against in one piece.
-`obstacleRects` is the ONLY reader of `shape` — `cellClashes`, the border's `keepClear` and the
-plan's drawing all go through it. The bounding box is kept for the tag and the handles and is NOT
-what gets blocked: blocking by it would eat the hollow of an L. Move one with `moveZone`, or the
-parts stay behind while the box moves.
+**A blocked zone is a UNION OF RECTANGLES** (`Obstacle.shape`, D80) **or a drawn OUTLINE**
+(`Obstacle.outline`, D109), and the reason for both is convexity: the border clips convex pieces
+with half-planes and there is no polygon boolean here by design. An outline reaches the cutter as
+convex pieces with straight edges at any angle (`obstacleRegions`, the ONE reader of both fields —
+`cellClashes`, the border's `keepClear` and the plan's drawing all go through it); a rectangle is the
+case with four axis-aligned edges and goes through the SAME `clipPlanesFor`, bit-identically to the
+rectangle-only cutter it replaced. The bounding box is kept for the tag and the handles and is NOT
+what gets blocked: blocking by it would eat the hollow of an L. Move one with `moveZone` and change
+its box with `refitZone` / `editZone`, or the shape stays behind while the box moves.
+
+**An outline's cells are tested against the HEXAGON; a rectangle's against the cell's box** (D109).
+A slanted edge can cross a box's empty corner without touching the cell; the cutter then has nothing
+to cut, and a cut cell with nothing to cut it by is NOT DRAWN — a hole where the zone never reached.
+
+**Bore rings at different depths must start on the same corner** (D109). The inner skin pairs two
+levels index by index; `clipConvex` starts wherever its first surviving corner is, and a slanted cut
+can keep different corners first at different depths. The strip twists and the plate opens. Every
+level is rotated to match the one above before the skin is built.
+
+**A piece joined to nothing is dropped, unless another plate holds it** (D109). `dropShards` keeps a
+plate's largest group of edge-joined pieces and any group over two cells of plastic; a small group
+goes unless it lies flush against another plate's whole cell. That exception is the top row of a
+plate a zone ate from below — part of the aperture's wall — and without it `zone-apron` notches.
+
+**A plate set aside under a slope keeps its edge: the neighbour prints it** (D110). Every cell
+touched is not every cell covered; `adoptedCells` hands a set-aside plate's cut cells to the
+standing plate holding most of their neighbours. Anything computing a plate's geometry needs
+`doc.covered` for this — `panelModelSpecFor` and `panelGeometryKeysFor` pass it; `panelGeometryKeys`
+takes it as a required argument because leaving it out once made two different plates share a key.
 
 **The aperture wall is the CUT CELL's, and it takes two cut lines** (D83, superseding D82). The
 outline is cut at the zone rectangle — so the aperture is that rectangle exactly — and the four bore
@@ -892,7 +914,10 @@ The UI is a thin shell.
 - **`src/core/fixings.ts`** — where the wall fixings go, across the assembly; and `fastenerCells`,
   which of a part's own cells carry the insert it hangs on. Both the wall and the alignment tool
   place inserts through that one function.
-- **`src/core/obstacles.ts`** — switches, sockets and pipes, as cells the wall must avoid.
+- **`src/core/obstacles.ts`** — switches, sockets and pipes, as cells the wall must avoid; and
+  `obstacleRegions`, every zone as the convex pieces the cutter takes.
+- **`src/core/zonePolygon.ts`** — a drawn outline: canonical form, the reason one is refused,
+  convex decomposition, growth by clearance, and reducing a freehand trail to corners. Pure.
 - **`src/core/honeycomb.ts`** — the parametric model maker: cells (and an optional frame) become a
   printable, watertight plate, plus a binary STL writer. Built from the measured bore profile, and
   checked against all seven shipped plates. No polygon boolean anywhere — a border is two half-planes
@@ -1163,7 +1188,7 @@ by putting `modal-scrim` on its backdrop — do not write the properties again.
 
 ### The plan section's tools
 
-Four modal tools in `WallCanvas`, switched by the toolbar or by `V` / `M` / `B` / `P`, with Escape
+Five modal tools in `WallCanvas`, switched by the toolbar or by `V` / `M` / `B` / `D` / `P`, with Escape
 always returning to Select. Modal rather than modifier-based because most of them are drags on empty
 wall, and a marquee, a measurement, a new zone and a photograph being slid about cannot all be that
 at once.
@@ -1176,6 +1201,10 @@ at once.
   Select so it can be nudged straight away.
 - **Select** — as before, plus moving and resizing zones by their handles. Zone hit-testing comes
   first and cannot steal a click from a part: a zone's cells are cut, so nothing can be placed there.
+- **Draw zone** (`D`) — click the corners of a zone, or drag round it freehand (one stroke from
+  nothing is a lasso and closes on release). Enter, a double-click or a click on the first corner
+  finishes; Backspace takes a corner back. The draft lives in `shapeRef` for the D58 reason, and a
+  shape that crosses itself is refused in words rather than repaired (D109).
 - **Photo** — bring a photograph in, slide it, and set its scale. Three steps for the scale and not
   two: **Set scale** arms the gesture, the drag leaves its two marks ON the picture where they can
   be checked against the thing that was measured, and the distance is typed afterwards with both

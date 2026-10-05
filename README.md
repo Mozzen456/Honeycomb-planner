@@ -151,6 +151,15 @@ are listed separately and each comes with a block of parameters for the OpenSCAD
 customiser in `Customiser/`, which generates the plate. It runs on the same 23.6 mm lattice, so what
 it prints drops straight into the wall.
 
+### A sloping ceiling, a stair, anything that is not a rectangle
+
+Press `D` for **Draw zone** and click the corners of the area the honeycomb has to keep out of — for
+a roof, the two ends of the slope and the corners above it — or drag round it in one stroke. With
+the **border** on, every plate is cut along the line you drew, at whatever angle it runs, with the
+same thin wall a rectangular cut-out gets; with it off, the cells the line crosses are left out
+whole and the edge steps. The zone's handles stretch the whole shape, and typing a width or a height
+scales it.
+
 ## A photograph of your wall
 
 A switch is not "about 1200 up" — it is where it is, and the way you find out is to stand in front
@@ -267,6 +276,7 @@ returns to Select.
 | `V` | select — move parts, and zones by their handles |
 | `M` | measure between two points, snapping (`Shift` turns snapping off) |
 | `B` | drag a blocked zone (`Shift` adds a rectangle to the selected one, making an L) |
+| `D` | draw a blocked zone of any shape — click its corners, or drag round it freehand; `Enter`, a double-click or a click on the first corner finishes, `Backspace` takes a corner back |
 | `P` | the wall photograph — drag it, set its scale, `Delete` takes it off |
 | `E` | border on or off, all four sides |
 
