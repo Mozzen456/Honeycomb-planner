@@ -32,7 +32,7 @@ import { MIN_ZONE_MM } from '../core/measure';
 import { OBSTACLE_PRESETS } from '../core/obstacles';
 import { MAX_WALL_MM } from '../core/store';
 import {
-  frameIsOn, NO_WALL_FRAME, panelFrameKey, panelFrameSides, panelModelSpec,
+  frameIsOn, NO_WALL_FRAME, panelFrameKey, panelFrameSides, panelGeometryKeys, panelModelSpec,
 } from '../core/panelModel';
 import type { LayoutDoc, Obstacle, PlacedPanel, WallFrame } from '../core/types';
 import { NumberField } from './NumberField';
@@ -60,8 +60,17 @@ export function ObstaclePanel({ doc, onChange, onFrameChange, onCopy, onDownload
   const frame = doc.frame ?? NO_WALL_FRAME;
 
   const groups = useMemo(
-    () => customPanelGroups(doc.panels, (p) => panelFrameKey(p, doc.panels, doc.frame)),
-    [doc.panels, doc.frame],
+    () => {
+      // The same split the parts list makes (D107): plates cut differently are
+      // different downloads, whatever their omitted cells say.
+      const shapes = panelGeometryKeys(doc.panels, doc.frame, doc.obstacles);
+      return customPanelGroups(
+        doc.panels,
+        (p) => panelFrameKey(p, doc.panels, doc.frame),
+        (p) => shapes.get(p.id) ?? '',
+      );
+    },
+    [doc.panels, doc.frame, doc.obstacles],
   );
 
   /**
@@ -78,8 +87,12 @@ export function ObstaclePanel({ doc, onChange, onFrameChange, onCopy, onDownload
         const first = g.panels[0];
         if (!first) return null;
         try {
-          const spec = panelModelSpec(first, doc.panels, doc.frame);
-          const mesh = buildHoneycombMesh({ cells: spec.cells, border: spec.border });
+          // The download's own spec — zones and cut cells included — or this
+          // measures a plate nobody prints.
+          const spec = panelModelSpec(first, doc.panels, doc.frame, doc.obstacles);
+          const mesh = buildHoneycombMesh({
+            cells: spec.cells, clipped: spec.clipped, border: spec.border,
+          });
           const size = meshBoundsMm(mesh).size;
           return {
             widthMm: size[0],
@@ -96,7 +109,7 @@ export function ObstaclePanel({ doc, onChange, onFrameChange, onCopy, onDownload
           };
         }
       }),
-    [groups, doc.panels, doc.frame],
+    [groups, doc.panels, doc.frame, doc.obstacles],
   );
 
   const bed = bedFor(doc.bedId, doc.customBed);

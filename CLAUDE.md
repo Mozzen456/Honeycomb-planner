@@ -20,7 +20,7 @@ better guide to where the work actually got to.
 
 ```bash
 npm run dev          # Vite dev server
-npm test             # vitest run — 52 files, 1161 tests
+npm test             # vitest run — 53 files, 1171 tests
 npm run typecheck    # tsc --noEmit
 npm run build        # typecheck + vite build (also copies models/ into dist/)
 
@@ -441,6 +441,15 @@ bordered wall plans plates to exactly the bed and then several do not fit.
 opposite sides is a MIRROR IMAGE, and grouping the two prints one twice and the other never. It
 returns `''` for a plate with no edge; append anything unconditionally and every plate on a bordered
 wall looks edged, including the ones in the middle.
+
+**"The same plate" is decided by the GEOMETRY, never by a description of the inputs** (D107).
+Part, block, `omit` and the edge letters agree for every plate along a zone's edge, while the plate
+under the zone's corner keeps a column of cut cells up the zone's side — because where a zone edge
+lands INSIDE a plate is recorded nowhere on the plate. Grouped on the description, the 3D view
+stamped that column onto every plate in the row (hooked fins along the aperture, one per plate) and
+the parts list downloaded one file for a line whose plates needed two. `panelGeometryKeys` hashes the
+rings `plateRings` would triangulate, relative to the plate's origin; `customPanelGroups`, the 3D
+instancing key and the hover cache all go through it. Anything new that groups plates must too.
 
 **Three things stop a plate being the shipped file, and EVERY gate must check all three** (D66):
 cells cut out (`omit`), a size the app chose (`isGeneratedSize`), and an EDGE (`panelIsBordered`).

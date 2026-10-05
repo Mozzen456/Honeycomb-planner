@@ -3978,3 +3978,74 @@ A section through the mouth band, counting runs of ZERO length: two crossings at
 one x is a surface with no thickness, which no real plate can produce. It is the
 same slice the aperture is measured on, and it responds — 476, 706, 402, 0 across
 the four states of the code — which is how it was checked rather than assumed.
+
+## D107 — "The same plate" means the same GEOMETRY
+
+Reported as a screenshot of the 3D view: a blocked zone drawn on the Plan, and
+along the edge of the aperture a row of little hooked fins standing up out of
+the plate, one per plate, each at the same place on its plate.
+
+Every one of them was real geometry — belonging to ONE plate. The 3D view draws
+one generated mesh per group of identical plates and instances it across the
+group, and "identical" was decided by a description of what a plate was MADE
+from: part, block size, which cells are omitted, which sides carry an edge. The
+parts list (`customPanelGroups`), its STL download and the hover cache all used
+the same description.
+
+With a border on, the description is not the plate. A zone's edge lands wherever
+it was drawn, so where exactly it cuts each plate is a property of the zone and
+the plate together, and no field of the plate records it. The plate under the
+zone's CORNER keeps a column of cut cells running up the zone's side; the plates
+along the zone's bottom edge do not; and all of them omit the same cells and
+carry the same edge letters. Whichever came first in the list was the group's
+sample, so when that was the corner plate its column was stamped onto every
+plate in the row. Swept over random zones on a freshly solved 2400 × 1200 wall,
+about one zone in three produced a group like that.
+
+The parts list had the same defect with a worse outcome: one line, one
+download, two different plates — print the file seven times and six of them do
+not fit the wall.
+
+### The fix: ask the generator
+
+`buildHoneycombMesh` is now two halves. `plateRings` makes every decision —
+which cells are cut, by which zone and which edge, which border pieces grow —
+and returns the flat rings; the rest welds and triangulates them, a pure
+function of those rings. `plateGeometryKey` hashes the rings relative to the
+plate's origin, rounded to a micron and sorted, so two plates have one key
+exactly when they build one solid. Rounding can at worst split a group that is
+really one plate (two lines for identical plates); it cannot merge two that
+differ, which is the direction that prints the wrong thing.
+
+`panelModel.panelGeometryKeys` computes it for every plate, memoised on the
+panels, frame and zones by identity. Without a border the plate is its cells and
+nothing else, so the relative cell set is the key and nothing is generated.
+
+Three readers use it:
+
+- **`customPanelGroups`** splits a group whose geometry disagrees. The biggest
+  part keeps the plain key, so a printed count or a colour recorded against the
+  line stays with the plates it was most likely about; the rest get a `|v…`
+  suffix from their own geometry.
+- **The 3D instancing key** is the geometry key plus lit and colour.
+- **The hover cache**, which is never cleared, is keyed on it too. Keyed on the
+  description, a zone dragged a couple of millimetres re-cut a plate without
+  changing its omitted cells, and the highlight went on drawing the old plate.
+
+### Paid for by memoising the assembly index
+
+Every per-plate border question — the spec, the edge letters, now the key —
+asked `assemblyIndex` for the whole wall, so a 53-plate wall indexed itself 53
+times per question: 241 ms of specs on the reported wall. Memoised on the
+panels and frame it is 14 ms, which more than pays for the ~100 ms of keys.
+
+### Also
+
+The obstacle panel measured each generated plate's size and weight from a spec
+built WITHOUT the zones and the cut cells — not the plate the download beside it
+produces. It now uses the download's own spec.
+
+`tests/plate-grouping.test.ts` builds every plate on each line and compares the
+solids. It was confirmed to fail with the split disabled (4 of the bordered
+cases) — the first version of it passed either way, because the zones it used
+did not happen to produce a disagreeing group.

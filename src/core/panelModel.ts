@@ -24,6 +24,7 @@ import {
   DEFAULT_BORDER_MM,
   hasFrame,
   NO_FRAME,
+  plateGeometryKey,
   type BorderSpec,
   type FrameSide,
 } from './honeycomb';
@@ -72,7 +73,32 @@ export function assemblyBlockCells(panels: readonly PlacedPanel[]): Hex[] {
  *
  * Built by every border question, so it is built in one place.
  */
-function assemblyIndex(panels: readonly PlacedPanel[], frame?: WallFrame) {
+function assemblyIndex(panels: readonly PlacedPanel[], frame?: WallFrame): AssemblyIndex {
+  /*
+   * Memoised on the panels and frame by identity. Every per-plate question —
+   * its border spec, its edge letters, its geometry key — asks for the whole
+   * assembly, so unmemoised a 53-plate wall indexed the whole wall 53 times per
+   * question: a quarter of a second, on every edit that re-cut a plate.
+   */
+  const hit = indexCache.get(panels);
+  if (hit && hit.frame === frame) return hit.index;
+  const index = buildAssemblyIndex(panels, frame);
+  indexCache.set(panels, { frame, index });
+  return index;
+}
+
+interface AssemblyIndex {
+  occupied: ReadonlySet<string>;
+  ownerOf: ReadonlyMap<string, string>;
+  bounds: { minX: number; maxX: number; minY: number; maxY: number };
+}
+
+const indexCache = new WeakMap<
+  readonly PlacedPanel[],
+  { frame: WallFrame | undefined; index: AssemblyIndex }
+>();
+
+function buildAssemblyIndex(panels: readonly PlacedPanel[], frame?: WallFrame): AssemblyIndex {
   const occupied = new Set<string>();
   const ownerOf = new Map<string, string>();
   /*
@@ -141,7 +167,7 @@ function assemblyIndex(panels: readonly PlacedPanel[], frame?: WallFrame) {
  */
 function ownerOfPosition(
   p: Hex,
-  index: ReturnType<typeof assemblyIndex>,
+  index: AssemblyIndex,
 ): string | undefined {
   const votes = new Map<string, { n: number; best: string }>();
   const vote = (k: string): void => {
@@ -367,6 +393,66 @@ export function panelModelSpec(
 /** The same thing, straight from a document. */
 export function panelModelSpecFor(panel: PlacedPanel, doc: LayoutDoc) {
   return panelModelSpec(panel, doc.panels, doc.frame, doc.obstacles);
+}
+
+/**
+ * Which plates are the SAME plate, by what the generator would build (D107).
+ *
+ * Every place that counts, draws or downloads "n of these" has to agree on what
+ * "these" are, and the only honest answer is the geometry. Part, block, `omit`
+ * and the edge letters are not enough once a border is on: the zone cuts a
+ * plate where its edge happens to land INSIDE the plate, and the plate under a
+ * zone's corner carries a sliver up the zone's side that its neighbours along
+ * the same edge do not. Same omitted cells, same letters, different plate.
+ *
+ * With no border the plate is its cells and nothing else — the eaten cells are
+ * dropped whole and there is no edge to cut — so the relative cell set IS the
+ * key and nothing is generated to find it. With one, `plateGeometryKey` asks the
+ * generator. Memoised on the panels, frame and zones by identity: the document
+ * is immutable, so an edit that does not touch them reuses the answer.
+ */
+export function panelGeometryKeys(
+  panels: readonly PlacedPanel[],
+  frame: WallFrame | undefined,
+  obstacles: readonly Obstacle[] | undefined,
+): ReadonlyMap<string, string> {
+  const hit = geometryKeyCache.get(panels);
+  if (hit && hit.frame === frame && hit.obstacles === obstacles) return hit.keys;
+  const keys = new Map<string, string>();
+  for (const p of panels) {
+    const spec = panelModelSpec(p, panels, frame, obstacles);
+    if (spec.border === undefined) {
+      const rel = spec.cells
+        .map((c) => hexKey({ q: c.q - p.origin.q, r: c.r - p.origin.r }))
+        .sort()
+        .join(' ');
+      keys.set(p.id, `cells:${rel}`);
+      continue;
+    }
+    try {
+      keys.set(p.id, spec.cells.length === 0 ? 'empty' : plateGeometryKey(spec, hexToMm(p.origin)));
+    } catch {
+      // The generator refused it; it is drawn from the fallback and is its own
+      // plate rather than a member of somebody else's group.
+      keys.set(p.id, `refused:${p.id}`);
+    }
+  }
+  geometryKeyCache.set(panels, { frame, obstacles, keys });
+  return keys;
+}
+
+const geometryKeyCache = new WeakMap<
+  readonly PlacedPanel[],
+  {
+    frame: WallFrame | undefined;
+    obstacles: readonly Obstacle[] | undefined;
+    keys: ReadonlyMap<string, string>;
+  }
+>();
+
+/** `panelGeometryKeys` straight from a document. */
+export function panelGeometryKeysFor(doc: LayoutDoc): ReadonlyMap<string, string> {
+  return panelGeometryKeys(doc.panels, doc.frame, doc.obstacles);
 }
 
 /**

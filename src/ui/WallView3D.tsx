@@ -28,7 +28,7 @@ import {
 import { buildHoneycombMesh } from '../core/honeycomb';
 import {
   borderCutCells,
-  isGeneratedSize, panelFrameKey, panelIsBordered, panelModelSpecFor,
+  isGeneratedSize, panelGeometryKeysFor, panelIsBordered, panelModelSpecFor,
 } from '../core/panelModel';
 import { partCells } from '../core/store';
 import { photoCentreMm, photoRectMm, photoRotation } from '../core/wallPhoto';
@@ -388,12 +388,18 @@ function generatedPanelGeometry(
  */
 const hoverPlates = new Map<string, THREE.BufferGeometry | null>();
 
+/*
+ * The plate's GEOMETRY, not a description of its inputs (D107).
+ *
+ * This used to be part, block, `omit` and the edge letters — and the cache is
+ * never cleared, so a zone dragged a few millimetres, re-cutting a plate
+ * without changing which cells it omits, kept lighting the plate as it was
+ * before the drag. Keyed on what the generator builds, a changed plate is a
+ * new key and an unchanged one is a hit.
+ */
 function plateShapeKey(p: PlacedPanel, doc: LayoutDoc): string {
-  const cut = (p.omit ?? [])
-    .map((c) => hexKey({ q: c.q - p.origin.q, r: c.r - p.origin.r }))
-    .sort()
-    .join(' ');
-  return `${p.partId}|${p.columns}x${p.rows}|${cut}|${panelFrameKey(p, doc.panels, doc.frame)}`;
+  const shape = panelGeometryKeysFor(doc).get(p.id) ?? '';
+  return `${p.partId}|${p.columns}x${p.rows}|${shape}`;
 }
 
 function hoverPlateGeometry(p: PlacedPanel, doc: LayoutDoc): THREE.BufferGeometry | null {
@@ -730,7 +736,16 @@ export function WallView3D(props: WallView3DProps) {
       // material. Two plates of a shape printed in different filament are two
       // draws.
       const colour = colorOfPanel(doc.colors, panelLines.get(p.id));
-      const k = `${p.partId}|${p.columns}x${p.rows}|${cut}|${panelFrameKey(p, doc.panels, doc.frame)}|${lit ? 'lit' : ''}|${colour ?? ''}`;
+      /*
+       * ...and the SHAPE is what the generator builds, never a description of
+       * what it was built from (D107). Part, block, cut and edge letters agree
+       * for every plate along a zone's edge, while the one under the zone's
+       * corner keeps a sliver up the zone's side the others do not — keyed on
+       * the description, that plate was the group's sample and its sliver was
+       * stamped onto every plate in the row: spikes standing up out of the
+       * aperture's edge, one per plate.
+       */
+      const k = `${plateShapeKey(p, doc)}|${cut}|${lit ? 'lit' : ''}|${colour ?? ''}`;
       const e = bySize.get(k) ?? {
         lit,
         colour,

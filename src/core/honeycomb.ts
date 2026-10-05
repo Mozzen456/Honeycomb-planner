@@ -768,12 +768,23 @@ export interface HoneycombSpec {
 export class HoneycombModelError extends Error {}
 
 /**
- * Build the plate.
+ * Every piece of the plate as flat rings: its outline, and its bore at each
+ * level of the profile — before the T-junction weld and before a single
+ * triangle.
  *
- * Returns triangles wound counter-clockwise seen from outside, which is what
- * every slicer and `measureMesh`'s signed-tetrahedron volume assume.
+ * Everything `buildHoneycombMesh` decides is decided HERE: which cells are cut,
+ * by which zone and which edge, which border pieces grow. What follows is
+ * welding and triangulating, both a pure function of these rings. That is what
+ * lets `plateGeometryKey` say whether two plates are the same plate without
+ * building either of them (D107).
  */
-export function buildHoneycombMesh(spec: HoneycombSpec): SolidMesh {
+interface PlateRings {
+  levels: { z: number; acrossFlats: number }[];
+  outerRings: Map<string, Point[]>;
+  innerRings: Map<string, Point[][]>;
+}
+
+function plateRings(spec: HoneycombSpec): PlateRings {
   assertProfile();
   const depth = spec.depthMm ?? PANEL_DEPTH;
   const cells = dedupe(spec.cells);
@@ -785,7 +796,6 @@ export function buildHoneycombMesh(spec: HoneycombSpec): SolidMesh {
   }));
 
   const corners = cornerPositions();
-  const tris = new TriangleSink();
 
   /*
    * The cells a zone ate, kept as PARTIAL cells.
@@ -1192,8 +1202,6 @@ export function buildHoneycombMesh(spec: HoneycombSpec): SolidMesh {
     if (ring.length >= 3) outerRings.set(`${hexKey(b.cell)}#b${i}`, ring);
   });
 
-  weldTJunctions(outerRings);
-
   /**
    * Inner rings per CELL per bore level. Border pieces have none: they are the
    * edge, not a cell, and a hole in them would be a hole nothing can mount in.
@@ -1212,6 +1220,70 @@ export function buildHoneycombMesh(spec: HoneycombSpec): SolidMesh {
       : levels.map(() => [] as Point[]));
   }
   for (const [key, rings] of clippedInner) innerRings.set(key, rings);
+
+  return { levels, outerRings, innerRings };
+}
+
+/**
+ * What this plate IS, as a short string: equal for two specs exactly when they
+ * build the same plate, moved by `origin` (D107).
+ *
+ * Grouping plates by a description of their inputs — part, block, which cells
+ * are omitted, which sides carry an edge — is a proxy, and it failed: with a
+ * border on, the plate under a zone's CORNER keeps a sliver up the zone's side
+ * that its neighbours along the same edge do not, and every input that key
+ * looked at was the same for all of them. The 3D view built one of them and
+ * stamped it on the rest (spikes standing up along the aperture, one per plate),
+ * and the parts list printed the wrong plate for every one but the first.
+ *
+ * So this asks the generator itself: the rings it would triangulate, relative
+ * to the plate's origin, rounded to a micron so a translation's last bits do not
+ * matter, sorted so piece order does not either. Rounding can at worst SPLIT a
+ * group that is really one plate — two lines for identical plates — and can
+ * never merge two that differ by more than a micron, which is the direction
+ * that prints the wrong thing.
+ */
+export function plateGeometryKey(spec: HoneycombSpec, origin: Point): string {
+  const { outerRings, innerRings } = plateRings(spec);
+  const f = (v: number) => {
+    const n = Math.round(v * 1000);
+    return n === 0 ? '0' : String(n);
+  };
+  const ring = (r: readonly Point[]) =>
+    r.map((p) => `${f(p.x - origin.x)},${f(p.y - origin.y)}`).join(' ');
+  const pieces: string[] = [];
+  for (const [key, outer] of outerRings) {
+    const inner = innerRings.get(key) ?? [];
+    pieces.push(`${ring(outer)}|${inner.map(ring).join('/')}`);
+  }
+  pieces.sort();
+  return hashString(pieces.join(';'));
+}
+
+/** FNV-1a, twice with different offsets: 64 bits, as 16 hex digits. */
+function hashString(s: string): string {
+  let a = 0x811c9dc5;
+  let b = 0x01000193 ^ 0x5bd1e995;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    a = Math.imul(a ^ c, 0x01000193);
+    b = Math.imul(b ^ c, 0x01000193) ^ (b >>> 15);
+  }
+  const hex = (n: number) => (n >>> 0).toString(16).padStart(8, '0');
+  return hex(a) + hex(b);
+}
+
+/**
+ * Build the plate.
+ *
+ * Returns triangles wound counter-clockwise seen from outside, which is what
+ * every slicer and `measureMesh`'s signed-tetrahedron volume assume.
+ */
+export function buildHoneycombMesh(spec: HoneycombSpec): SolidMesh {
+  const { levels, outerRings, innerRings } = plateRings(spec);
+  const tris = new TriangleSink();
+
+  weldTJunctions(outerRings);
 
   /*
    * The bores need the same T-junction weld the outlines get, LEVEL BY LEVEL.
