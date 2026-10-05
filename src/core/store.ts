@@ -12,13 +12,13 @@
  */
 
 import { computeBom, fixingPlanFor, itemCells, itemSocketCells, validate } from './bom';
-import { bedFor, clampBedMm, CUSTOM_BED_ID } from './constants';
+import { bedFor, clampBedMm, CUSTOM_BED_ID, MARGIN_X, MARGIN_Y } from './constants';
 import { hasColors, normaliseColor } from './colors';
-import { hexKey, hexRotate, panelCells, placedPanelCells, placeFootprint } from './hex';
-import { obstructedCells } from './obstacles';
+import { hexKey, hexRotate, hexToMm, panelCells, placedPanelCells, placeFootprint } from './hex';
+import { cellRemainderBox, obstructedCells } from './obstacles';
 import { borderCutCells, frameIsOn } from './panelModel';
 import { placementsOf, withPartAdded, withPartRemoved, withPartsAdded } from './projectParts';
-import { crossesSeam } from './tiling';
+import { crossesSeam, generatedSizeId } from './tiling';
 import { multiFootprint, type FixingPlan } from './fixings';
 import type {
   Bom,
@@ -26,6 +26,7 @@ import type {
   CatalogPart,
   FixingEdits,
   Hex,
+  JoinedPlate,
   Issue,
   LayoutDoc,
   PlacedItem,
@@ -1378,13 +1379,22 @@ export function recutPanels(
    * resized.
    */
   frame?: WallFrame,
+  /**
+   * The printer bed. With it, a plate a zone leaves as a sliver is joined to
+   * its neighbour, or shares rows with it (D130) — only ever as far as the bed
+   * allows. Without it nothing is joined.
+   */
+  bed?: { width: number; depth: number },
 ): { panels: PlacedPanel[]; covered: PlacedPanel[] } {
   const strip = (p: PlacedPanel): PlacedPanel => {
     if (p.omit === undefined) return p;
     const { omit: _drop, ...rest } = p;
     return rest;
   };
-  const all = [...panels, ...(covered ?? [])].map(strip);
+  // Back to the solver's own plates before anything is cut: a plate joined
+  // round a sliver last time is its originals again, so a zone moved away
+  // leaves the wall exactly as it was solved (D130).
+  const all = unjoin([...panels, ...(covered ?? [])]).map(strip);
   const gone: PlacedPanel[] = [];
   /*
    * The plates a ZONE takes whole are decided first, and the edge is measured
@@ -1419,7 +1429,162 @@ export function recutPanels(
     }
     out.push({ ...panel, omit: cut });
   }
-  return { panels: out, covered: gone };
+  if (bed === undefined || (obstacles ?? []).length === 0) return { panels: out, covered: gone };
+  const cutAt = (block: readonly Hex[]): Hex[] => {
+    const blocked = obstructedCells(obstacles, block);
+    return block.filter((c) => blocked.has(hexKey(c)) || edge.has(hexKey(c)));
+  };
+  return { panels: joinSlivers(out, cutAt, obstacles, bed), covered: gone };
+}
+
+/** Fewer mountable cells than this after a cut, and a plate is a sliver (D130). */
+export const MIN_PLATE_CELLS = 12;
+
+/** The solver's plates again, from any that were joined. */
+function unjoin(panels: readonly PlacedPanel[]): PlacedPanel[] {
+  const out: PlacedPanel[] = [];
+  const seen = new Set<string>();
+  for (const p of panels) {
+    if (p.joined === undefined || p.joined.length === 0) {
+      if (!seen.has(p.id)) { seen.add(p.id); out.push(p); }
+      continue;
+    }
+    for (const j of p.joined) {
+      if (seen.has(j.id)) continue;
+      seen.add(j.id);
+      out.push({ id: j.id, partId: j.partId, origin: { ...j.origin }, columns: j.columns, rows: j.rows });
+    }
+  }
+  return out;
+}
+
+/**
+ * Join a sliver to the plate above or below it, or share rows with it (D130).
+ *
+ * A zone can leave a plate two cells — 87 × 44 mm of honeycomb, a file of its
+ * own to print and a plate of its own to fix to the wall. Asked for directly:
+ * "combine them if they fit the printer, or make two smaller ones so that one
+ * does not get that small". So a plate with fewer than `MIN_PLATE_CELLS` that
+ * can still take a part is first JOINED to a neighbour in its own column of
+ * plates — same columns, rows that meet — when the joined plate's PRINTED size
+ * (what is left after the zone, `cellRemainderBox`) fits the bed. Failing that
+ * the boundary between the two moves so that the smaller keeps as many cells
+ * as it can, both still fitting. Same column only: across columns the blocks
+ * would not make a rectangle on the lattice.
+ *
+ * The union of the two blocks never changes, so neither does anything the
+ * edge or the zones decided — only which plate prints which cells. The result
+ * carries the originals in `joined`, which is what lets the next cut undo it.
+ */
+function joinSlivers(
+  panels: PlacedPanel[],
+  cutAt: (block: readonly Hex[]) => Hex[],
+  obstacles: LayoutDoc['obstacles'],
+  bed: { width: number; depth: number },
+): PlacedPanel[] {
+  const live = (p: PlacedPanel): number => placedPanelCells(p).length;
+  const fits = (p: PlacedPanel): boolean => {
+    const cut = new Set((p.omit ?? []).map(hexKey));
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const c of panelCells(p.origin, p.columns, p.rows)) {
+      const box = cut.has(hexKey(c)) ? cellRemainderBox(c, obstacles) : hexBox(c);
+      // A cell lying ON a zone's edge — a zone run off the wall puts its edge
+      // exactly on the outermost cells' corners — "keeps" a line of zero
+      // width there. Nothing prints from that.
+      if (box === null || box.maxX - box.minX < 0.5 || box.maxY - box.minY < 0.5) continue;
+      minX = Math.min(minX, box.minX); maxX = Math.max(maxX, box.maxX);
+      minY = Math.min(minY, box.minY); maxY = Math.max(maxY, box.maxY);
+    }
+    if (!Number.isFinite(minX)) return true;
+    const w = maxX - minX, h = maxY - minY, e = 1e-6;
+    return (w <= bed.width + e && h <= bed.depth + e) || (w <= bed.depth + e && h <= bed.width + e);
+  };
+  const remade = (from: PlacedPanel, origin: Hex, rows: number, id: string): PlacedPanel => {
+    const block = panelCells(origin, from.columns, rows);
+    const omit = cutAt(block);
+    const p: PlacedPanel = { id, partId: generatedSizeId(from.columns, rows), origin, columns: from.columns, rows };
+    return omit.length > 0 ? { ...p, omit } : p;
+  };
+  const originals = (p: PlacedPanel): JoinedPlate[] => p.joined ?? [
+    { id: p.id, partId: p.partId, origin: { ...p.origin }, columns: p.columns, rows: p.rows },
+  ];
+  /*
+   * Every plate it makes must be ONE piece: a block that meets its neighbour
+   * can still have a zone between the two plates' surviving cells, and a join
+   * across that is two loose bits in one file — which the generator then drops
+   * as shards (D118), taking cells the planner thinks are there.
+   */
+  const connected = (p: PlacedPanel): boolean => {
+    const cells = placedPanelCells(p);
+    if (cells.length <= 1) return true;
+    const left = new Set(cells.map(hexKey));
+    const queue = [cells[0]!];
+    left.delete(hexKey(cells[0]!));
+    while (queue.length > 0) {
+      const c = queue.pop()!;
+      for (const [dq, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, -1], [-1, 1]] as const) {
+        const k = hexKey({ q: c.q + dq, r: c.r + dr });
+        if (left.delete(k)) queue.push({ q: c.q + dq, r: c.r + dr });
+      }
+    }
+    return left.size === 0;
+  };
+  const ok = (p: PlacedPanel): boolean => fits(p) && connected(p);
+
+  let out = [...panels];
+  // A few rounds, because a plate joined once may still be the best home for
+  // the next sliver along. Each round only ever makes the smallest plate it
+  // touches bigger, so it stops.
+  for (let round = 0; round < 4; round++) {
+    let changed = false;
+    const slivers = out
+      .filter((p) => live(p) > 0 && live(p) < MIN_PLATE_CELLS)
+      .sort((a, b) => live(a) - live(b) || (a.id < b.id ? -1 : 1));
+    const touched = new Set<string>();
+    for (const sliver of slivers) {
+      const t = out.find((p) => p.id === sliver.id);
+      if (!t || touched.has(t.id)) continue;
+      const neighbours = out.filter((n) => n.id !== t.id && !touched.has(n.id) &&
+        n.origin.q === t.origin.q && n.columns === t.columns &&
+        (n.origin.r + n.rows === t.origin.r || t.origin.r + t.rows === n.origin.r));
+      let choice: { gone: string[]; made: PlacedPanel[] } | null = null;
+      let best = -1; // one plate beats any split; among splits, the larger smaller one
+      for (const n of neighbours) {
+        const lower = n.origin.r < t.origin.r ? n : t;
+        const upper = lower === n ? t : n;
+        const total = lower.rows + upper.rows;
+        const from = [...originals(lower), ...originals(upper)];
+        const one = remade(n, lower.origin, total, n.id);
+        if (ok(one)) {
+          const score = Number.MAX_SAFE_INTEGER - live(one); // tighter joins first
+          if (score > best) { best = score; choice = { gone: [t.id, n.id], made: [{ ...one, joined: from }] }; }
+          continue;
+        }
+        for (let k = 1; k < total; k++) {
+          const a = remade(lower, lower.origin, k, lower.id);
+          const b = remade(upper, { q: lower.origin.q, r: lower.origin.r + k }, total - k, upper.id);
+          const worst = Math.min(live(a), live(b));
+          if (worst <= live(t) || worst <= best || live(a) === 0 || live(b) === 0 || !ok(a) || !ok(b)) continue;
+          best = worst;
+          choice = { gone: [t.id, n.id], made: [{ ...a, joined: from }, { ...b, joined: from }] };
+        }
+      }
+      if (!choice) continue;
+      const gone = new Set(choice.gone);
+      out = out.filter((p) => !gone.has(p.id)).concat(choice.made);
+      for (const id of choice.gone) touched.add(id);
+      for (const m of choice.made) touched.add(m.id);
+      changed = true;
+    }
+    if (!changed) break;
+  }
+  return out;
+}
+
+/** The box round one whole cell, in wall millimetres. */
+function hexBox(c: Hex): { minX: number; minY: number; maxX: number; maxY: number } {
+  const m = hexToMm(c);
+  return { minX: m.x - MARGIN_X, maxX: m.x + MARGIN_X, minY: m.y - MARGIN_Y, maxY: m.y + MARGIN_Y };
 }
 
 /** `recutPanels` for a caller with no plates set aside: the panels it keeps. */
@@ -1437,7 +1602,7 @@ export function cutAroundObstacles(
  * plate on serialises exactly as it always did.
  */
 function withRecut(doc: LayoutDoc, panels: readonly PlacedPanel[], covered: readonly PlacedPanel[] | undefined): LayoutDoc {
-  const cut = recutPanels(panels, covered, doc.obstacles, doc.frame);
+  const cut = recutPanels(panels, covered, doc.obstacles, doc.frame, bedFor(doc.bedId, doc.customBed));
   const { covered: _drop, ...rest } = doc;
   return cut.covered.length > 0
     ? { ...rest, panels: cut.panels, covered: cut.covered }

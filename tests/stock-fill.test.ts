@@ -13,7 +13,7 @@ import { describe, expect, it } from 'vitest';
 
 import { BEDS, MARGIN_X, MARGIN_Y, PITCH, ROW_STEP } from '../src/core/constants';
 import { cellsBoundsMm, hexKey, hexToMm, panelCells } from '../src/core/hex';
-import { generatedPlateSizes, solveTiling, type PanelSize } from '../src/core/tiling';
+import { generatedPlateSizes, maxPlateForBed, solveTiling, type PanelSize } from '../src/core/tiling';
 import type { Catalog } from '../src/core/types';
 
 import catalogJson from '../src/catalog/catalog.json';
@@ -124,5 +124,32 @@ describe('the strip at the right-hand edge (D129)', () => {
     const strip = res.panels.filter((p) => p.origin.q >= lastQ - 6 && p.origin.q > 80);
     expect(strip.length).toBeLessThanOrEqual(10);
     expect(new Set(strip.map((p) => p.origin.q)).size).toBe(1);
+  });
+});
+
+describe('no stack or wall ends on a sliver (D130)', () => {
+  it('never leaves a plate under a third of the bed in either direction', () => {
+    // Measured before: 74 of 128 printer x wall pairs ended a column of plates
+    // on a 10 x 1 or a wall on a strip of 1 x 10s; asked for directly — "make 2
+    // smaller ones so that one does not get that small".
+    const odd: string[] = [];
+    for (const bed of BEDS) {
+      for (const fit of [false, true]) {
+        for (const [w, h] of [[300, 300], [500, 400], [1234, 567], [2000, 2000], [2400, 1200], [800, 2600], [4000, 2500], [1600, 777]] as const) {
+          const gen = generatedPlateSizes(bed.id);
+          const res = solveTiling({
+            wall: { widthMm: w, heightMm: h }, bedId: bed.id,
+            available: fit ? gen : shipped, ...(fit ? {} : { fillers: gen }), allowRotation: false,
+          });
+          const max = maxPlateForBed(bed);
+          for (const p of res.panels) {
+            // Against the plate's OWN neighbourhood, not the bed's maximum: a
+            // 10 x 4 is the even half of a 9-row remainder, and fine.
+            if (p.rows < 3 || p.columns < 3) odd.push(`${bed.id} ${fit ? 'fit' : 'stock'} ${w}x${h} ${p.columns}x${p.rows} (max ${max.columns}x${max.rows})`);
+          }
+        }
+      }
+    }
+    expect(odd).toEqual([]);
   });
 });

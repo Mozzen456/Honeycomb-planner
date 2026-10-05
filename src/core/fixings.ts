@@ -352,9 +352,9 @@ export function planFixings(
    * Two runs of plates of different heights put a T at every corner on BOTH
    * sides — 236 mm plates against 212 mm ones meet about every 110 mm, so the
    * seam carried twice the spacing's fixings, in pairs. A three-plate tie is
-   * therefore skipped when another tie already sits within half a spacing; a
-   * four-plate crossing still always gets one, and a plate left with nothing
-   * is picked up by the grid or by the every-plate pass below.
+   * therefore skipped when another tie already sits within half a spacing, a
+   * four-plate crossing within 40 % of one, and a plate left with nothing is
+   * picked up by the grid or by the every-plate pass below.
    */
   const tieGap2 = (spacing * 0.5) ** 2;
   const tieAt = new Map<string, { x: number; y: number }[]>();
@@ -365,12 +365,12 @@ export function planFixings(
     for (const c of cells) { const p = hexToMm(c); x += p.x; y += p.y; }
     return { x: x / cells.length, y: y / cells.length };
   };
-  const tieNear = (p: { x: number; y: number }): boolean => {
+  const tieNear = (p: { x: number; y: number }, gap2 = tieGap2): boolean => {
     const bx = Math.floor(p.x / (spacing * 0.5)), by = Math.floor(p.y / (spacing * 0.5));
     for (let i = -1; i <= 1; i++) {
       for (let j = -1; j <= 1; j++) {
         for (const o of tieAt.get(`${bx + i},${by + j}`) ?? []) {
-          if ((o.x - p.x) ** 2 + (o.y - p.y) ** 2 < tieGap2) return true;
+          if ((o.x - p.x) ** 2 + (o.y - p.y) ** 2 < gap2) return true;
         }
       }
     }
@@ -384,7 +384,9 @@ export function planFixings(
         // handles; this pass wants exactly `want`.
         if (spans !== want) continue;
         const at = centreOf(placed);
-        if (want === 3 && tieNear(at)) continue;
+        // A four-plate crossing gets a shorter gap, not none: two narrow runs
+        // of plates side by side put crossings 82 mm apart (D130).
+        if (want === 3 ? tieNear(at) : tieNear(at, (spacing * 0.4) ** 2)) continue;
         /*
          * Every cell must be on a panel, free, and not already spoken for —
          * where "free" means free of anything that is not plugged INTO this

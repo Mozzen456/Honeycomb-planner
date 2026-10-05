@@ -127,6 +127,22 @@ export interface PlacedPanel {
    * OpenSCAD honeycomb customiser, which works on this exact lattice.
    */
   omit?: Hex[];
+  /**
+   * The solver's plates this one was JOINED from (D130), when a zone left one
+   * of them a sliver. Every re-cut starts again from these, so moving or
+   * removing the zone gives the original plates back; absent on every plate
+   * nothing was joined into.
+   */
+  joined?: JoinedPlate[];
+}
+
+/** One of the solver's plates, as it was before a sliver was joined away. */
+export interface JoinedPlate {
+  id: string;
+  partId: string;
+  origin: Hex;
+  columns: number;
+  rows: number;
 }
 
 /**

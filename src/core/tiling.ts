@@ -396,7 +396,48 @@ function fillBand(
     });
     row += pick.rows;
   }
-  return out;
+  return balanceTail(out, [...usable, ...extra]);
+}
+
+/**
+ * A stack must not END on a sliver (D130).
+ *
+ * Filled tallest-first, a band's last plate is whatever height was left over —
+ * one row of ten cells on top of nine full plates, measured on half the walls
+ * a sweep of printers and sizes produced. A plate one row tall is 35 mm of
+ * honeycomb that bends in the hand, and it is the plate a person would never
+ * have chosen. So a last plate under half the tallest one this width comes in
+ * shares its height with the plate below it: 10 + 1 becomes 6 + 5. Only the
+ * last two move, so every other plate in the band stays one identical file.
+ * Heights the band cannot make are left alone — a shipped-only plate set may
+ * have no sizes to balance with.
+ */
+function balanceTail(out: TiledPanel[], options: readonly Variant[]): TiledPanel[] {
+  if (out.length < 2 || options.length === 0) return out;
+  const last = out[out.length - 1]!;
+  const prev = out[out.length - 2]!;
+  if (prev.columns !== last.columns) return out;
+  const byRows = new Map<number, Variant>();
+  for (const v of options) if (v.columns === last.columns && !byRows.has(v.rows)) byRows.set(v.rows, v);
+  const tallest = Math.max(...byRows.keys());
+  if (last.rows * 2 >= tallest) return out;
+  const total = prev.rows + last.rows;
+  let best: [number, number] | null = null;
+  for (const [a] of byRows) {
+    const b = total - a;
+    if (b < 1 || !byRows.has(b) || Math.min(a, b) <= last.rows) continue;
+    if (best === null || Math.abs(a - b) < Math.abs(best[0] - best[1]) ||
+        (Math.abs(a - b) === Math.abs(best[0] - best[1]) && a > best[0])) best = [a, b];
+  }
+  if (best === null) return out;
+  const [a, b] = best;
+  const lower = byRows.get(a)!;
+  const upper = byRows.get(b)!;
+  return [
+    ...out.slice(0, -2),
+    { partId: lower.partId, origin: prev.origin, columns: prev.columns, rows: a },
+    { partId: upper.partId, origin: { q: prev.origin.q, r: prev.origin.r + a }, columns: prev.columns, rows: b },
+  ];
 }
 
 interface BandPlan {
@@ -496,6 +537,67 @@ function levelBands(
     const refilled = fillBand(band.q0, band.columns, byColumns, wallHeightMm, cap, fillers);
     return refilled.length > 0 ? { ...band, panels: refilled } : band;
   });
+}
+
+/**
+ * The wall must not END on a sliver either (D130) — the same rule across.
+ *
+ * Bands are taken widest-first, so the last is whatever columns were left: one
+ * column of plates 27 mm wide down the whole right-hand side of a 2 m wall on
+ * a 256 bed. A last band under half the widest is shared with the band before
+ * it — one band if the two together are a width the bed makes, otherwise two
+ * of nearly equal width, the first EVEN so the second still starts in phase
+ * (D96). Only taken when it covers at least as much wall as before.
+ */
+function balanceLastBand(
+  bands: Band[],
+  byColumns: ReadonlyMap<number, readonly Variant[]>,
+  fillers: ReadonlyMap<number, readonly Variant[]> | undefined,
+  wallHeightMm: number,
+): void {
+  if (bands.length < 2) return;
+  const last = bands[bands.length - 1]!;
+  const prev = bands[bands.length - 2]!;
+  const widths = new Set([...byColumns.keys(), ...(fillers?.keys() ?? [])]);
+  const widest = Math.max(...widths);
+  if (last.columns * 2 >= widest || prev.q0 % 2 !== 0) return;
+  const total = prev.columns + last.columns;
+  const cellsOf = (ps: readonly TiledPanel[]) => ps.reduce((n, p) => n + p.columns * p.rows, 0);
+  const before = cellsOf(prev.panels) + cellsOf(last.panels);
+  const plans: Band[][] = [];
+  if (widths.has(total)) {
+    plans.push([{ q0: prev.q0, columns: total, panels: fillBand(prev.q0, total, byColumns, wallHeightMm, Infinity, fillers) }]);
+  }
+  // The most even split whose first band is an even width (so the second
+  // starts in phase) and whose narrower band is wider than the sliver was.
+  let split: number | null = null;
+  for (let a = 2; a < total; a += 2) {
+    const b = total - a;
+    if (!widths.has(a) || !widths.has(b) || Math.min(a, b) <= last.columns) continue;
+    if (split === null || Math.abs(a - b) < Math.abs(split - (total - split))) split = a;
+  }
+  if (split !== null) {
+    const a = split, b = total - split;
+    plans.push([
+      { q0: prev.q0, columns: a, panels: fillBand(prev.q0, a, byColumns, wallHeightMm, Infinity, fillers) },
+      { q0: prev.q0 + a, columns: b, panels: fillBand(prev.q0 + a, b, byColumns, wallHeightMm, Infinity, fillers) },
+    ]);
+  }
+  const others = bands.slice(0, -2);
+  for (const plan of plans) {
+    if (plan.some((b) => b.panels.length === 0)) continue;
+    if (cellsOf(plan.flatMap((b) => b.panels)) < before) continue;
+    // Nor a step: judged AFTER levelling, because shipped plates alone stack
+    // only to certain heights and a band brought down to the wall's top can
+    // land short of it (D124).
+    const leveled = levelBands([...others, ...plan], byColumns, wallHeightMm, fillers);
+    const ref = others.length > 0
+      ? Math.min(...leveled.slice(0, others.length).map(bandTopMm))
+      : bandTopMm(prev);
+    if (leveled.slice(others.length).some((b) => bandTopMm(b) < ref - EPS)) continue;
+    bands.splice(bands.length - 2, 2, ...plan);
+    return;
+  }
 }
 
 /** Is cell `c` inside `p`? The arithmetic inverse of `panelCells`, allocation-free. */
@@ -677,6 +779,7 @@ export function solveTiling(req: TilingRequest): TilingResult {
     bands.push({ q0, columns: best.columns, panels: best.panels });
     q0 += best.columns;
   }
+  balanceLastBand(bands, byColumns, fillers, wallHeightMm);
   for (const band of levelBands(bands, byColumns, wallHeightMm, fillers)) {
     for (const p of band.panels) panels.push(p);
   }

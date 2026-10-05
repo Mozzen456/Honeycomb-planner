@@ -21,7 +21,7 @@ import {
   clampMmPerPixel, clampPhotoOpacity, clampPhotoRotation, DEFAULT_PHOTO_OPACITY, photoRotation,
 } from './wallPhoto';
 import type {
-  FixingEdits, Group, PlacedFixing, Hex, LayoutDoc, Obstacle, PlacedItem, PlacedPanel, Rotation, WallColors,
+  FixingEdits, Group, PlacedFixing, Hex, JoinedPlate, LayoutDoc, Obstacle, PlacedItem, PlacedPanel, Rotation, WallColors,
   WallFrame, WallPhoto, WallSpec, ZonePoint, ZoneRect,
 } from './types';
 
@@ -278,6 +278,13 @@ function panelOut(p: PlacedPanel): Record<string, unknown> {
   // same bytes it always did.
   if (p.omit && p.omit.length > 0) {
     out['omit'] = p.omit.map((c) => ({ q: c.q, r: c.r }));
+  }
+  // The solver's plates a sliver was joined from (D130), so a re-cut after
+  // loading can still give them back.
+  if (p.joined && p.joined.length > 0) {
+    out['joined'] = p.joined.map((j) => ({
+      id: j.id, partId: j.partId, origin: { q: j.origin.q, r: j.origin.r }, columns: j.columns, rows: j.rows,
+    }));
   }
   return out;
 }
@@ -741,6 +748,29 @@ export function migrate(raw: unknown): LoadResult {
           if (cell !== null) omit.push(cell);
         }
         if (omit.length > 0) panel.omit = omit;
+      }
+      // The plates it was joined from. One that cannot be read is dropped: the
+      // worst case is a join the next cut cannot undo, not a lost plate.
+      const rawJoined = p['joined'];
+      if (Array.isArray(rawJoined)) {
+        const joined: JoinedPlate[] = [];
+        for (let k = 0; k < rawJoined.length; k++) {
+          const j = rawJoined[k];
+          const at = `${where}.joined[${k}]`;
+          if (!isPlainObject(j) || typeof j['id'] !== 'string' || typeof j['partId'] !== 'string') {
+            errors.push(`${at} is not a plate; dropped.`);
+            continue;
+          }
+          const o = readHex(j['origin'], `${at}.origin`, errors);
+          const c = j['columns'], r = j['rows'];
+          if (o === null || !Number.isInteger(c) || !Number.isInteger(r) ||
+              (c as number) < 1 || (r as number) < 1 || (c as number) * (r as number) > MAX_PANEL_CELLS) {
+            errors.push(`${at} has no usable size or origin; dropped.`);
+            continue;
+          }
+          joined.push({ id: j['id'] as string, partId: j['partId'] as string, origin: o, columns: c as number, rows: r as number });
+        }
+        if (joined.length > 0) panel.joined = joined;
       }
       panels.push(panel);
     }

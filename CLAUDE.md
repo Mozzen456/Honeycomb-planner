@@ -21,7 +21,7 @@ better guide to where the work actually got to.
 
 ```bash
 npm run dev          # Vite dev server
-npm test             # vitest run — 64 files, 1351 tests
+npm test             # vitest run — 64 files, 1353 tests
 npm run typecheck    # tsc --noEmit
 npm run build        # typecheck + vite build (also copies models/ into dist/)
 npm run build:standalone  # one self-contained HTML file in dist-standalone/ (D122)
@@ -183,6 +183,10 @@ to every height, so with "Fit to printer" off a band came out short and the top 
 printer and wall pairs. `solveTiling`'s `fillers` are used only where no `available` size reaches:
 the top of a band, and a strip too narrow for any shipped width. Pass the bed's generated sizes
 there whenever you tile with the shipped plates, or the step comes back.
+
+**A stack and a wall must not END on a sliver** (D130). `balanceTail` shares a short last plate's
+rows with the plate below; `balanceLastBand` shares a narrow last band's columns with the band
+before (first half even, for phase). A split is judged AFTER `levelBands`, or shipped-only walls step.
 
 **A fudge factor in an assertion is a defect report.** `tiling.test.ts` added `MARGIN_X` to the
 bounds before checking panels were inside the wall, under a comment stating the anchor as if it
@@ -485,6 +489,13 @@ cannot reach, and both were measured as "plate inside the switch" — 369 mm² i
 the right metric and was not the reason either of them failed. **Measure a hole's rim as an AREA
 inside the rectangle, never as a distance to its edge**: a legitimate rail lying along the boundary
 scores 19.79 mm on the distance metric and means nothing.
+
+**A plate a zone leaves a sliver is JOINED, and `joined` is what undoes it** (D130). Under
+`MIN_PLATE_CELLS` mountable cells, `joinSlivers` merges it with the plate above or below if the
+printed size fits the bed, or moves the boundary between them. The result carries the solver's
+originals in `PlacedPanel.joined` and `recutPanels` `unjoin`s before every cut, so a moved zone gives
+the plates back. Every plate it makes must be ONE connected piece, and the bed check must skip the
+zero-width remainder of a cell lying exactly on a zone edge, or every join at a wall corner fails.
 
 **A plate a zone covers COMPLETELY goes to `doc.covered`, never just out of the document** (D117).
 `recutPanels` takes `panels` and `covered` together on every cut and sorts them again, so moving or

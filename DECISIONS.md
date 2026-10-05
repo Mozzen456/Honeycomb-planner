@@ -5296,3 +5296,48 @@ clicking anything else, picking a line or Escape puts it out. Which plate a
 cell belongs to is `panelModel.plateAt`, the rule the 3D hover already used,
 now shared by all three. In the plan a press on bare wall starts a marquee, so
 the click is a marquee that never moved.
+
+## D130 — No plate is left a sliver: joined if the printer takes it, shared if not
+
+Asked for directly, after a screenshot listing "Custom plate H — 2 cells,
+87 × 44 mm": "instead of making one that small, combine them (if they fit the
+printer) or make two smaller ones so that one does not get that small".
+
+Two sources, two places.
+
+**The solver.** Bands are filled tallest-first and taken widest-first, so the
+LAST plate of a column and the LAST column of the wall were whatever was left:
+10 × 1 plates on top of 10 × 10s, and a strip of 1 × 10 plates 27 mm wide down
+the right of a 2 m wall. 74 of 128 printer × wall pairs had one. Now a band's
+last plate under half the tallest its width comes in shares its rows with the
+plate below (`balanceTail`: 10 + 1 → 6 + 5), and a last band under half the
+widest shares its columns with the band before (`balanceLastBand`: one band if
+the bed makes that width, else the most even split whose first half is an even
+width, so the next band starts in phase, D96). Only the last two move, so every
+other plate stays one identical file. A split is judged AFTER levelling: with
+the shipped plates alone a band brought down to the wall's top can land short
+of it, and that is D124's step again. No plate is now under three rows or three
+columns on any of 128 pairs (`stock-fill.test.ts`).
+
+**The zones.** A zone can leave a plate a few cells. The re-cut now joins a
+plate with fewer than `MIN_PLATE_CELLS` (12) mountable cells to its neighbour in
+the same column of plates when the joined plate's printed size fits the bed,
+and otherwise moves the boundary between the two to give the smaller as many
+cells as it can. Rules that make it safe:
+
+- **Reversible.** The result carries the solver's plates in `joined`, and every
+  re-cut starts from those. Move or delete the zone and the wall is exactly as
+  solved. Persisted, so a saved wall can still be undone the same way.
+- **One piece.** Every plate it makes must be one connected piece: blocks that
+  meet can still have a zone between their surviving cells, and a join across
+  it is two loose bits in one file that the generator drops as shards (D118).
+- **Measured as printed.** The bed check uses what survives the zones
+  (`cellRemainderBox`), ignoring the zero-width remainder a cell lying exactly
+  on a zone's edge reports — a zone run to the wall's corner puts its edge on
+  every outermost cell's vertex, and counting that line refused every join.
+- **Same column only.** Across columns two blocks are not a rectangle on the
+  lattice, so a strip one cell wide beside a zone that takes the rest of a
+  column of plates stays a strip. So does a plate on a bed with no room.
+
+Swept over 80 random zones on five printers: 28 slivers → 14, none under six
+cells (`sliver-join.test.ts`). What is left is those strips and the Prusa Mini.
